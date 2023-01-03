@@ -1,18 +1,28 @@
+import { motion } from "framer-motion";
 type Props = {};
 
 const About = (props: Props) => {
   return (
     <section
       id="about"
-      className="min-h-screen w-full bg-gradient-to-b from-gray-800 to-black pt-20 text-white"
+      className="min-h-screen w-full bg-gradient-to-b from-gray-800 to-black text-white"
     >
-      <div className="mx-auto flex h-full w-full max-w-screen-lg flex-col justify-center p-4">
+      <div className="mx-auto flex h-full w-full max-w-screen-lg flex-col justify-center p-4 pt-20 md:pt-32">
         <div className="pb-8">
           <p className="inline border-b-4 border-gray-500 text-4xl font-bold">
             About
           </p>
         </div>
-        <div>
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.5 }}
+          transition={{ duration: 0.75 }}
+          variants={{
+            hidden: { opacity: 0, x: -50 },
+            visible: { opacity: 1, x: 0 },
+          }}
+        >
           <p className="text-xl text-gray-400">
             This site is responsive and is built using React, TypeScript, and
             Tailwind CSS. I am using getform.io for the contact form and React
@@ -39,7 +49,7 @@ const About = (props: Props) => {
           <p className="text-xl text-gray-400">
             Check out my work and social links on the Contact page!
           </p>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

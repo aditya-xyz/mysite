@@ -31,7 +31,7 @@ const Navbar = (props: Props) => {
   ];
 
   return (
-    <div className="fixed flex h-16 w-full items-center justify-between bg-black px-4 text-white">
+    <div className="fixed z-40 flex h-16 w-full items-center justify-between bg-black px-4 text-white">
       <Link to="home" smooth duration={500}>
         <h1 className="ml-2 cursor-pointer font-signature text-3xl">Aditya</h1>
       </Link>

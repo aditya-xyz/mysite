@@ -4,6 +4,7 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { motion } from "framer-motion";
 
 type Props = {};
 
@@ -79,16 +80,37 @@ const Contact = (props: Props) => {
   return (
     <div
       id="contact"
-      className="min-h-screen w-full bg-gradient-to-b from-black to-gray-800 p-4 pt-20 text-white"
+      className="min-h-screen w-full bg-gradient-to-b from-black to-gray-800 p-4 text-white"
     >
-      <div className="mx-auto flex h-full max-w-screen-lg flex-col justify-center p-4">
+      <div className="mx-auto flex h-full max-w-screen-lg flex-col justify-center p-4 pt-20 md:pt-32">
         <div className="pb-8">
           <p className="inline border-b-4 border-gray-500 text-4xl font-bold">
             Contact
           </p>
-          <p className="py-6 text-xl text-gray-400">Send me a message!</p>
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.5 }}
+            transition={{ duration: 0.75 }}
+            variants={{
+              hidden: { opacity: 0, x: -50 },
+              visible: { opacity: 1, x: 0 },
+            }}
+          >
+            <p className="py-6 text-xl text-gray-400">Send me a message!</p>
+          </motion.div>
         </div>
-        <div className="flex items-center justify-center">
+        <motion.div
+          className="flex items-center justify-center"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.5 }}
+          transition={{ delay: 0.2, duration: 0.75 }}
+          variants={{
+            hidden: { opacity: 0, x: -50 },
+            visible: { opacity: 1, x: 0 },
+          }}
+        >
           <form
             onSubmit={handleSubmit(submit)}
             className="flex w-full flex-col md:w-1/2"
@@ -119,7 +141,7 @@ const Contact = (props: Props) => {
             </button>
             <ToastContainer />
           </form>
-        </div>
+        </motion.div>
         <div className="right-0 flex flex-row justify-center">
           <ul className="flex flex-row">
             {links.map(({ id, child, href, style }) => (
