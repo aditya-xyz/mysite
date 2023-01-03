@@ -1,5 +1,3 @@
-import { motion } from "framer-motion";
-
 type Props = {};
 
 const About = (props: Props) => {
@@ -14,16 +12,7 @@ const About = (props: Props) => {
             About
           </p>
         </div>
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.75 }}
-          variants={{
-            hidden: { opacity: 0, x: 100 },
-            visible: { opacity: 1, x: 0 },
-          }}
-        >
+        <div>
           <p className="text-xl text-gray-400">
             This site is responsive and is built using React, TypeScript, and
             Tailwind CSS. I am using getform.io for the contact form and React
@@ -50,7 +39,7 @@ const About = (props: Props) => {
           <p className="text-xl text-gray-400">
             Check out my work and social links on the Contact page!
           </p>
-        </motion.div>
+        </div>
       </div>
     </section>
   );

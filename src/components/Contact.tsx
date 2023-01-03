@@ -4,7 +4,6 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { motion } from "framer-motion";
 
 type Props = {};
 
@@ -89,17 +88,7 @@ const Contact = (props: Props) => {
           </p>
           <p className="py-6 text-xl text-gray-400">Send me a message!</p>
         </div>
-        <motion.div
-          className="flex items-center justify-center"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.75 }}
-          variants={{
-            hidden: { opacity: 0, x: -100 },
-            visible: { opacity: 1, x: 0 },
-          }}
-        >
+        <div className="flex items-center justify-center">
           <form
             onSubmit={handleSubmit(submit)}
             className="flex w-full flex-col md:w-1/2"
@@ -130,7 +119,7 @@ const Contact = (props: Props) => {
             </button>
             <ToastContainer />
           </form>
-        </motion.div>
+        </div>
         <div className="right-0 flex flex-row justify-center">
           <ul className="flex flex-row">
             {links.map(({ id, child, href, style }) => (

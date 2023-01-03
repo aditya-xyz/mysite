@@ -7,7 +7,6 @@ import python from "@/assets/python.png";
 import nodejs from "@/assets/node.png";
 import github from "@/assets/github.png";
 import tailwind from "@/assets/tailwind.png";
-import { motion } from "framer-motion";
 
 type Props = {};
 
@@ -83,17 +82,7 @@ const Experience = (props: Props) => {
             These are the technologies I have worked with.
           </p>
         </div>
-        <motion.div
-          className="grid w-full grid-cols-2 gap-8 py-8 px-12 text-center sm:grid-cols-3 sm:px-0"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.75 }}
-          variants={{
-            hidden: { opacity: 0, x: 100 },
-            visible: { opacity: 1, x: 0 },
-          }}
-        >
+        <div className="grid w-full grid-cols-2 gap-8 py-8 px-12 text-center sm:grid-cols-3 sm:px-0">
           {technologies.map(({ id, src, title, style }) => (
             <div
               key={id}
@@ -103,7 +92,7 @@ const Experience = (props: Props) => {
               <p className="mt-4">{title}</p>
             </div>
           ))}
-        </motion.div>
+        </div>
       </div>
     </div>
   );

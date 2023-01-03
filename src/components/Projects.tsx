@@ -1,7 +1,6 @@
 import reactAndTailwind from "@/assets/portfolio/reactAndTailwind.jpg";
 import navbar from "@/assets/portfolio/navbar.jpg";
 import reactSmooth from "@/assets/portfolio/reactSmooth.jpg";
-import { motion } from "framer-motion";
 
 type Props = {};
 
@@ -47,17 +46,7 @@ const Projects = (props: Props) => {
           </p>
         </div>
 
-        <motion.div
-          className="grid gap-8 px-12 sm:grid-cols-2 sm:px-0 md:grid-cols-3"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.75 }}
-          variants={{
-            hidden: { opacity: 0, x: -100 },
-            visible: { opacity: 1, x: 0 },
-          }}
-        >
+        <div className="grid gap-8 px-12 sm:grid-cols-2 sm:px-0 md:grid-cols-3">
           {blogs.map(({ id, src, mediumUrl, githubUrl }) => (
             <div key={id} className="rounded-lg shadow-md shadow-gray-600">
               <img
@@ -85,7 +74,7 @@ const Projects = (props: Props) => {
               </div>
             </div>
           ))}
-        </motion.div>
+        </div>
       </div>
     </div>
   );

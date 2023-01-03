@@ -1,7 +1,6 @@
 import HeroImage from "../assets/heroImage.png";
 import { FiArrowRight } from "react-icons/fi";
 import { Link } from "react-scroll";
-import { motion } from "framer-motion";
 
 type Props = {};
 
@@ -12,17 +11,7 @@ const Home = (props: Props) => {
       className="min-h-screen w-full bg-gradient-to-b from-black via-black to-gray-800 pt-20 md:pt-32"
     >
       <div className="mx-auto flex max-w-screen-lg flex-col items-center justify-center px-4 md:flex-row">
-        <motion.div
-          className="flex h-full flex-col justify-center"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.75 }}
-          variants={{
-            hidden: { opacity: 0, x: -100 },
-            visible: { opacity: 1, x: 0 },
-          }}
-        >
+        <div className="flex h-full flex-col justify-center">
           <h2 className="text-4xl text-white sm:text-6xl">Hi y'all!</h2>
           <br />
           <p className="mr-2 max-w-md py-4 text-xl text-gray-400">
@@ -50,7 +39,7 @@ const Home = (props: Props) => {
               </span>
             </Link>
           </div>
-        </motion.div>
+        </div>
         <div>
           <img
             src={HeroImage}
