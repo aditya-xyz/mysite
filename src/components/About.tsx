@@ -16,7 +16,7 @@ const About = (props: Props) => {
         <motion.div
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.5 }}
+          viewport={{ once: true, amount: 0.25 }}
           transition={{ duration: 0.75 }}
           variants={{
             hidden: { opacity: 0, x: -50 },

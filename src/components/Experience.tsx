@@ -82,7 +82,7 @@ const Experience = (props: Props) => {
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, amount: 0.5 }}
+            viewport={{ once: true, amount: 0.25 }}
             transition={{ duration: 0.75 }}
             variants={{
               hidden: { opacity: 0, x: -50 },
@@ -98,7 +98,7 @@ const Experience = (props: Props) => {
           className="grid w-full grid-cols-2 gap-8 py-8 px-12 text-center sm:grid-cols-3 sm:px-0"
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.5 }}
+          viewport={{ once: true, amount: 0.25 }}
           transition={{ delay: 0.2, duration: 0.75 }}
           variants={{
             hidden: { opacity: 0, x: -50 },
