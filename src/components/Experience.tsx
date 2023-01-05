@@ -1,73 +1,34 @@
-import html from "@/assets/html.png";
-import css from "@/assets/css.png";
-import javascript from "@/assets/javascript.png";
-import typescript from "@/assets/typescript.png";
-import reactImage from "@/assets/react.png";
-import python from "@/assets/python.png";
-import nodejs from "@/assets/node.png";
-import github from "@/assets/github.png";
-import tailwind from "@/assets/tailwind.png";
 import { motion } from "framer-motion";
+import axios from "axios";
+import { useState, useEffect } from "react";
 
 type Props = {};
 
+export interface IExperience {
+  _id: string;
+  id: number;
+  src: string;
+  title: string;
+  styleString: string;
+}
+
 const Experience = (props: Props) => {
-  const technologies = [
-    {
-      id: 1,
-      src: html,
-      title: "HTML",
-      style: "shadow-orange-500",
-    },
-    {
-      id: 2,
-      src: css,
-      title: "CSS",
-      style: "shadow-blue-500",
-    },
-    {
-      id: 3,
-      src: javascript,
-      title: "JavaScript",
-      style: "shadow-yellow-500",
-    },
-    {
-      id: 4,
-      src: typescript,
-      title: "TypeScript",
-      style: "shadow-blue-600",
-    },
-    {
-      id: 5,
-      src: reactImage,
-      title: "ReactJS",
-      style: "shadow-blue-600",
-    },
-    {
-      id: 6,
-      src: tailwind,
-      title: "Tailwind CSS",
-      style: "shadow-sky-500",
-    },
-    {
-      id: 7,
-      src: nodejs,
-      title: "NodeJS",
-      style: "shadow-green-400",
-    },
-    {
-      id: 8,
-      src: python,
-      title: "Python",
-      style: "shadow-sky-400",
-    },
-    {
-      id: 9,
-      src: github,
-      title: "GitHub",
-      style: "shadow-gray-400",
-    },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<IExperience[] | null>(null);
+
+  useEffect(() => {
+    axios
+      .get("https://mysite-api.up.railway.app/experience")
+      .then((response) => {
+        setData(response.data);
+      })
+      .catch((error) => {
+        console.log(error.message);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
   return (
     <div
@@ -105,15 +66,20 @@ const Experience = (props: Props) => {
             visible: { opacity: 1, x: 0 },
           }}
         >
-          {technologies.map(({ id, src, title, style }) => (
-            <div
-              key={id}
-              className={`rounded-lg py-2 shadow-md duration-500 hover:scale-105 ${style}`}
-            >
-              <img src={src} alt="" className="mx-auto w-20" />
-              <p className="mt-4">{title}</p>
-            </div>
-          ))}
+          {!loading && data && data.map ? (
+            data.map(({ id, src, title }) => (
+              <div
+                key={id}
+                className={`)} rounded-lg py-2 shadow-md
+                shadow-gray-400 duration-500 hover:scale-105`}
+              >
+                <img src={src} alt="" className="mx-auto w-20" />
+                <p className="mt-4">{title}</p>
+              </div>
+            ))
+          ) : (
+            <p>Loading...</p>
+          )}
         </motion.div>
       </div>
     </div>

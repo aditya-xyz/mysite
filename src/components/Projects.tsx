@@ -1,36 +1,34 @@
-import reactAndTailwind from "@/assets/portfolio/reactAndTailwind.jpg";
-import navbar from "@/assets/portfolio/navbar.jpg";
-import reactSmooth from "@/assets/portfolio/reactSmooth.jpg";
 import { motion } from "framer-motion";
+import axios from "axios";
+import { useState, useEffect } from "react";
 
 type Props = {};
 
+export interface IProject {
+  _id: string;
+  id: number;
+  src: string;
+  mediumUrl: string;
+  githubUrl: string;
+}
+
 const Projects = (props: Props) => {
-  const blogs = [
-    {
-      id: 1,
-      src: reactAndTailwind,
-      mediumUrl:
-        "https://medium.com/@adityapatil.xyz/adding-tailwind-css-to-your-reactjs-app-2ab01a45fe40",
-      githubUrl: "https://github.com/aditya-xyz/website_frontend",
-    },
-    {
-      id: 2,
-      src: navbar,
-      mediumUrl:
-        "https://medium.com/@adityapatil.xyz/responsive-nav-bar-for-your-react-app-b08452b39b15",
-      githubUrl:
-        "https://github.com/aditya-xyz/website_frontend/blob/main/src/components/NavBar.jsx",
-    },
-    {
-      id: 3,
-      src: reactSmooth,
-      mediumUrl:
-        "https://medium.com/@adityapatil.xyz/adding-react-smooth-scroll-to-your-site-74c791a23c4c",
-      githubUrl:
-        "https://github.com/aditya-xyz/website_frontend/blob/main/src/components/NavBar.jsx",
-    },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<IProject[] | null>(null);
+
+  useEffect(() => {
+    axios
+      .get("https://mysite-api.up.railway.app/project")
+      .then((response) => {
+        setData(response.data);
+      })
+      .catch((error) => {
+        console.log(error.message);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
   return (
     <div
@@ -69,33 +67,37 @@ const Projects = (props: Props) => {
             visible: { opacity: 1, x: 0 },
           }}
         >
-          {blogs.map(({ id, src, mediumUrl, githubUrl }) => (
-            <div key={id} className="rounded-lg shadow-md shadow-gray-600">
-              <img
-                src={src}
-                alt=""
-                className="rounded-md duration-200 hover:scale-105"
-              />
-              <div className="flex items-center justify-center">
-                <button
-                  onClick={() => {
-                    window.open(mediumUrl, "_blank");
-                  }}
-                  className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105"
-                >
-                  Write-Up
-                </button>
-                <button
-                  onClick={() => {
-                    window.open(githubUrl, "_blank");
-                  }}
-                  className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105"
-                >
-                  Code
-                </button>
+          {loading || !data || !data.map ? (
+            <p>Loading</p>
+          ) : (
+            data.map(({ id, src, mediumUrl, githubUrl }) => (
+              <div key={id} className="rounded-lg shadow-md shadow-gray-600">
+                <img
+                  src={src}
+                  alt=""
+                  className="rounded-md duration-200 hover:scale-105"
+                />
+                <div className="flex items-center justify-center">
+                  <button
+                    onClick={() => {
+                      window.open(mediumUrl, "_blank");
+                    }}
+                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105"
+                  >
+                    Blog
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.open(githubUrl, "_blank");
+                    }}
+                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105"
+                  >
+                    Code
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </motion.div>
       </div>
     </div>
