@@ -50,7 +50,7 @@ const Projects = (props: Props) => {
               visible: { opacity: 1, x: 0 },
             }}
           >
-            <p className="py-6 text-xl text-gray-400">
+            <p className="py-6 text-xl text-gray-100">
               Check out some of my work!
             </p>
           </motion.div>
