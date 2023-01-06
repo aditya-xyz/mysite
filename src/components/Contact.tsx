@@ -97,7 +97,7 @@ const Contact = (props: Props) => {
               visible: { opacity: 1, x: 0 },
             }}
           >
-            <p className="py-6 text-xl text-gray-400">Send me a message!</p>
+            <p className="py-6 text-xl text-gray-100">Send me a message!</p>
           </motion.div>
         </div>
         <motion.div

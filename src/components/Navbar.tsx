@@ -40,7 +40,7 @@ const Navbar = (props: Props) => {
         {links.map(({ id, link }) => (
           <li
             key={id}
-            className="cursor-pointer px-4 font-medium capitalize text-gray-400 duration-200 hover:scale-105"
+            className="cursor-pointer px-4 font-medium capitalize text-gray-100 duration-200 hover:scale-105"
           >
             <Link to={link} smooth duration={500}>
               {link}
@@ -56,13 +56,13 @@ const Navbar = (props: Props) => {
             ? (document.body.style.overflow = "hidden")
             : (document.body.style.overflow = "unset");
         }}
-        className="z-10 cursor-pointer pr-4 text-gray-500 md:hidden"
+        className="z-10 cursor-pointer pr-4 text-gray-100 md:hidden"
       >
         {nav ? <FaTimes size={30} /> : <FaBars size={30} />}
       </div>
 
       {nav && (
-        <ul className="absolute top-0 left-0 flex h-screen w-full flex-col items-center justify-center bg-gradient-to-b from-black to-gray-800 text-gray-400">
+        <ul className="absolute top-0 left-0 flex h-screen w-full flex-col items-center justify-center bg-gradient-to-b from-black to-gray-800 text-gray-100">
           {links.map(({ id, link }) => (
             <li
               key={id}

@@ -50,7 +50,7 @@ const Experience = (props: Props) => {
               visible: { opacity: 1, x: 0 },
             }}
           >
-            <p className="py-6 text-xl text-gray-400">
+            <p className="py-6 text-xl text-gray-100">
               These are the technologies I have worked with.
             </p>
           </motion.div>
@@ -70,8 +70,8 @@ const Experience = (props: Props) => {
             data.map(({ id, src, title }) => (
               <div
                 key={id}
-                className={`)} rounded-lg py-2 shadow-md
-                shadow-gray-400 duration-500 hover:scale-105`}
+                className="rounded-lg py-2 shadow-md
+                 shadow-gray-400 duration-200 hover:scale-105"
               >
                 <img src={src} alt="" className="mx-auto w-20" />
                 <p className="mt-4">{title}</p>

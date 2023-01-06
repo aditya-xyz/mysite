@@ -25,12 +25,12 @@ const Home = (props: Props) => {
               visible: { opacity: 1, x: 0 },
             }}
           >
-            <p className="mr-2 max-w-md py-4 text-xl text-gray-400">
+            <p className="mr-2 max-w-md py-4 text-xl text-gray-100">
               I am a Full Stack Developer, dog dad, coffee connoisseur,
               photography enthusiast, and a fan of the outdoors, like I'm sure
               every Coloradan is!
             </p>
-            <p className="mr-2 max-w-md py-4 text-xl text-gray-400">
+            <p className="mr-2 max-w-md py-4 text-xl text-gray-100">
               Outside of work, I like to spend time with my dog, Pixel. So far
               she has been to 10 states and that number will only go up! If
               you're interested in following her adventures, check out her
