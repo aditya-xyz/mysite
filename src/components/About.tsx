@@ -23,7 +23,7 @@ const About = (props: Props) => {
             visible: { opacity: 1, x: 0 },
           }}
         >
-          <p className="text-xl text-gray-100">
+          <p className="text-lg text-gray-100">
             This site is hosted on Netlify and built using React, TypeScript,
             and Tailwind CSS. I am using getform.io for the contact form, React
             Scroll for smooth scrolling, Axios for API calls, and Framer Motion
@@ -31,7 +31,7 @@ const About = (props: Props) => {
           </p>
           <br />
           <br />
-          <p className="text-xl text-gray-100">
+          <p className="text-lg text-gray-100">
             I am using Node.js and Express for the back-end, which is hosted on
             Railway.app (can't recommend them enough!). Both the front-end and
             back-end auto deploy from my GitHub repos. I chose MongoDB for the
@@ -40,7 +40,7 @@ const About = (props: Props) => {
           </p>
           <br />
           <br />
-          <p className="text-xl text-gray-100">
+          <p className="text-lg text-gray-100">
             As a full time Microsoft Power Platform professional by trade, I
             work on using Microsoft Dataverse and its suite of connectors and
             functionalities to build low-code/no-code solutions. This includes
@@ -48,7 +48,7 @@ const About = (props: Props) => {
           </p>
           <br />
           <br />
-          <p className="text-xl text-gray-100">
+          <p className="text-lg text-gray-100">
             Check out my GitHub repos and social links!
           </p>
         </motion.div>
