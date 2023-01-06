@@ -13,7 +13,6 @@ export interface IProject {
 }
 
 const Projects = (props: Props) => {
-  //grid cursor-pointer gap-8 px-12 sm:grid-cols-2 sm:px-0 md:grid-cols-3
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<IProject[] | null>(null);
 
@@ -34,11 +33,11 @@ const Projects = (props: Props) => {
   return (
     <div
       id="projects"
-      className="min-h-screen w-full bg-gradient-to-b from-black to-gray-800"
+      className="min-h-screen w-full bg-gradient-to-b from-black to-gray-800 text-white"
     >
-      <div className="mx-auto flex h-full w-full max-w-screen-lg flex-col justify-center p-4 pt-20 text-white md:pt-32">
-        <div>
-          <p className="inline border-b-4 border-gray-500 p-2 text-4xl font-bold">
+      <div className="mx-auto flex h-full w-full max-w-screen-lg flex-col justify-center p-4 pt-20 md:pt-32">
+        <div className="pb-8">
+          <p className="inline border-b-4 border-gray-500 text-4xl font-bold">
             Projects
           </p>
           <motion.div
@@ -51,14 +50,14 @@ const Projects = (props: Props) => {
               visible: { opacity: 1, x: 0 },
             }}
           >
-            <p className="py-6 text-xl text-gray-100">
-              Check out some of my work! Click on the tiles for Medium articles.
+            <p className="py-6 text-xl text-gray-400">
+              Check out some of my work!
             </p>
           </motion.div>
         </div>
 
         <motion.div
-          className="grid w-full cursor-pointer grid-cols-2 gap-8 py-8 px-12 text-center sm:grid-cols-4 sm:px-0"
+          className="grid gap-8 px-12 sm:grid-cols-2 sm:px-0 md:grid-cols-3"
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.25 }}
@@ -72,26 +71,30 @@ const Projects = (props: Props) => {
             <p>Loading</p>
           ) : (
             data.map(({ id, src, mediumUrl, githubUrl }) => (
-              <div
-                key={id}
-                onClick={() => {
-                  window.open(mediumUrl, "_blank");
-                }}
-                className="rounded-lg py-2 shadow-md shadow-gray-400"
-              >
+              <div key={id} className="rounded-lg shadow-md shadow-gray-600">
                 <img
                   src={src}
                   alt=""
-                  className="h-3/5 rounded-md duration-200 hover:scale-105 sm:h-auto"
+                  className="rounded-md duration-200 hover:scale-105"
                 />
-                <button
-                  onClick={() => {
-                    window.open(githubUrl, "_blank");
-                  }}
-                  className="m-4 mb-10 w-20 rounded-md border-2 border-slate-100 py-2 px-3 duration-200 hover:scale-105 sm:mb-2 sm:w-1/2 sm:px-6"
-                >
-                  Code
-                </button>
+                <div className="flex items-center justify-center">
+                  <button
+                    onClick={() => {
+                      window.open(mediumUrl, "_blank");
+                    }}
+                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105"
+                  >
+                    Blog
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.open(githubUrl, "_blank");
+                    }}
+                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105"
+                  >
+                    Code
+                  </button>
+                </div>
               </div>
             ))
           )}
