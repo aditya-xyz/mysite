@@ -2,7 +2,10 @@ import { motion } from "framer-motion";
 import axios from "axios";
 import { useState, useEffect } from "react";
 
-type Props = {};
+type Props = {
+  selectedPage: string;
+  setSelectedPage: (val: string) => void;
+};
 
 export interface IProject {
   _id: string;
@@ -33,7 +36,7 @@ const Projects = (props: Props) => {
   return (
     <div
       id="projects"
-      className="min-h-screen w-full bg-gradient-to-b from-black to-gray-800 text-white"
+      className="min-h-screen w-full bg-gradient-to-b from-black to-gray-900 text-white"
     >
       <div className="mx-auto flex h-full w-full max-w-screen-lg flex-col justify-center p-4 pt-20 md:pt-32">
         <div className="pb-8">
@@ -43,10 +46,10 @@ const Projects = (props: Props) => {
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, amount: 0.25 }}
-            transition={{ duration: 0.75 }}
+            viewport={{ once: false, amount: 0.25 }}
+            transition={{ duration: 0.5 }}
             variants={{
-              hidden: { opacity: 0, x: -50 },
+              hidden: { opacity: 0, x: -25 },
               visible: { opacity: 1, x: 0 },
             }}
           >
@@ -60,11 +63,14 @@ const Projects = (props: Props) => {
           className="grid gap-8 px-12 sm:grid-cols-2 sm:px-0 md:grid-cols-3"
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.25 }}
-          transition={{ delay: 0.2, duration: 0.75 }}
+          viewport={{ once: false, amount: 0.25 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
           variants={{
-            hidden: { opacity: 0, x: -50 },
+            hidden: { opacity: 0, x: -25 },
             visible: { opacity: 1, x: 0 },
+          }}
+          onViewportEnter={() => {
+            props.setSelectedPage("projects");
           }}
         >
           {loading || !data || !data.map ? (
@@ -82,7 +88,7 @@ const Projects = (props: Props) => {
                     onClick={() => {
                       window.open(mediumUrl, "_blank");
                     }}
-                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105"
+                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105 hover:border-blue-500 hover:text-blue-500"
                   >
                     Blog
                   </button>
@@ -90,7 +96,7 @@ const Projects = (props: Props) => {
                     onClick={() => {
                       window.open(githubUrl, "_blank");
                     }}
-                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105"
+                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105 hover:border-blue-500 hover:text-blue-500"
                   >
                     Code
                   </button>

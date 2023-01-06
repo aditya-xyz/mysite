@@ -2,7 +2,10 @@ import { useState } from "react";
 import { FaBars, FaTimes } from "react-icons/fa";
 import { Link } from "react-scroll";
 
-type Props = {};
+type Props = {
+  selectedPage: string;
+  setSelectedPage: (val: string) => void;
+};
 
 const Navbar = (props: Props) => {
   const [nav, setNav] = useState(false);
@@ -32,17 +35,35 @@ const Navbar = (props: Props) => {
 
   return (
     <div className="fixed z-40 flex h-16 w-full items-center justify-between bg-black px-4 text-white">
-      <Link to="home" smooth duration={500}>
-        <h1 className="ml-2 cursor-pointer font-signature text-3xl">Aditya</h1>
+      <Link
+        to="home"
+        onClick={() => {
+          props.setSelectedPage("home");
+        }}
+        smooth
+        duration={500}
+      >
+        <h1 className="ml-2 cursor-pointer font-signature text-3xl hover:scale-105 hover:text-blue-500">
+          Aditya
+        </h1>
       </Link>
 
       <ul className="hidden md:flex">
         {links.map(({ id, link }) => (
           <li
             key={id}
-            className="cursor-pointer px-4 font-medium capitalize text-gray-100 duration-200 hover:scale-105"
+            className={`cursor-pointer px-4 font-medium capitalize text-gray-100 duration-200 hover:scale-105 hover:text-blue-500 ${
+              props.selectedPage === link ? "text-blue-500" : "text-gray-100"
+            }`}
           >
-            <Link to={link} smooth duration={500}>
+            <Link
+              to={link}
+              smooth
+              duration={500}
+              onClick={() => {
+                props.setSelectedPage(link);
+              }}
+            >
               {link}
             </Link>
           </li>
@@ -66,7 +87,9 @@ const Navbar = (props: Props) => {
           {links.map(({ id, link }) => (
             <li
               key={id}
-              className="cursor-pointer px-4 py-6 text-4xl capitalize"
+              className={`cursor-pointer px-4 py-6 text-4xl capitalize ${
+                props.selectedPage === link ? "text-blue-500" : "text-gray-100"
+              }`}
             >
               <Link
                 onClick={() => {

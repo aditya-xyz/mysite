@@ -6,7 +6,10 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { motion } from "framer-motion";
 
-type Props = {};
+type Props = {
+  selectedPage: string;
+  setSelectedPage: (val: string) => void;
+};
 
 const Contact = (props: Props) => {
   const GETFORM_FORM_ENDPOINT =
@@ -80,7 +83,7 @@ const Contact = (props: Props) => {
   return (
     <div
       id="contact"
-      className="min-h-screen w-full bg-gradient-to-b from-black to-gray-800 p-4 text-white"
+      className="min-h-screen w-full bg-gradient-to-b from-black to-gray-900 p-4 text-white"
     >
       <div className="mx-auto flex h-full max-w-screen-lg flex-col justify-center p-4 pt-20 md:pt-32">
         <div className="pb-8">
@@ -90,10 +93,10 @@ const Contact = (props: Props) => {
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, amount: 0.25 }}
-            transition={{ duration: 0.75 }}
+            viewport={{ once: false, amount: 0.25 }}
+            transition={{ duration: 0.5 }}
             variants={{
-              hidden: { opacity: 0, x: -50 },
+              hidden: { opacity: 0, x: -25 },
               visible: { opacity: 1, x: 0 },
             }}
           >
@@ -104,11 +107,14 @@ const Contact = (props: Props) => {
           className="flex items-center justify-center"
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.25 }}
-          transition={{ delay: 0.2, duration: 0.75 }}
+          viewport={{ once: false, amount: 0.25 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
           variants={{
-            hidden: { opacity: 0, x: -50 },
+            hidden: { opacity: 0, x: -25 },
             visible: { opacity: 1, x: 0 },
+          }}
+          onViewportEnter={() => {
+            props.setSelectedPage("contact");
           }}
         >
           <form
