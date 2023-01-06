@@ -11,7 +11,14 @@ const Home = (props: Props) => {
       id="home"
       className="min-h-screen w-full bg-gradient-to-b from-black via-black to-gray-800"
     >
-      <div className="mx-auto flex max-w-screen-lg flex-col items-center justify-center px-4 pt-20 md:flex-row md:pt-32">
+      <div className="mx-auto flex max-w-screen-lg flex-col items-center justify-center gap-8 px-4 pt-20 md:flex-row md:pt-32">
+        <div>
+          <img
+            src={HeroImage}
+            alt="my profile"
+            className="mx-auto w-2/3 rounded-2xl md:w-full"
+          />
+        </div>
         <div className="flex h-full flex-col justify-center">
           <h2 className="text-4xl text-white sm:text-6xl">Hi y'all!</h2>
           <br />
@@ -26,9 +33,9 @@ const Home = (props: Props) => {
             }}
           >
             <p className="mr-2 max-w-md py-4 text-xl text-gray-100">
-              I am a Full Stack Developer, dog dad, coffee connoisseur,
-              photography enthusiast, and a fan of the outdoors, like I'm sure
-              every Coloradan is!
+              I am a Full Stack React Developer, dog dad, coffee connoisseur,
+              photography enthusiast, and &mdash; like a true Coloradan &mdash;
+              a fan of the outdoors and a beginner snowboarder.
             </p>
             <p className="mr-2 max-w-md py-4 text-xl text-gray-100">
               Outside of work, I like to spend time with my dog, Pixel. So far
@@ -60,13 +67,6 @@ const Home = (props: Props) => {
               </span>
             </Link>
           </motion.div>
-        </div>
-        <div>
-          <img
-            src={HeroImage}
-            alt="my profile"
-            className="mx-auto w-2/3 rounded-2xl md:w-full"
-          />
         </div>
       </div>
     </div>
