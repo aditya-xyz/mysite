@@ -94,7 +94,7 @@ const Contact = (props: Props) => {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: false }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.25 }}
             variants={{
               hidden: { opacity: 0, x: -25 },
               visible: { opacity: 1, x: 0 },
@@ -108,7 +108,7 @@ const Contact = (props: Props) => {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: false }}
-          transition={{ delay: 0.2, duration: 0.5 }}
+          transition={{ delay: 0.2, duration: 0.25 }}
           variants={{
             hidden: { opacity: 0, x: -25 },
             visible: { opacity: 1, x: 0 },

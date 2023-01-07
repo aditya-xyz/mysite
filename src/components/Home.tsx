@@ -19,7 +19,7 @@ const Home = (props: Props) => {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: false }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.25 }}
           variants={{
             hidden: { opacity: 0, x: -25 },
             visible: { opacity: 1, x: 0 },
@@ -35,7 +35,7 @@ const Home = (props: Props) => {
           />
         </motion.div>
         <div className="flex h-full flex-col justify-center">
-          <h2 className="text-4xl text-white sm:text-6xl">Hi y'all!</h2>
+          <h2 className="text-3xl text-white sm:text-5xl">Hi y'all!</h2>
           <br />
           <div>
             <p className="mr-2 max-w-md py-4 text-lg text-gray-100">
