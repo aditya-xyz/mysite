@@ -40,8 +40,8 @@ const Home = (props: Props) => {
           <div>
             <p className="mr-2 max-w-md py-4 text-lg text-gray-100">
               I am a Full Stack React Developer, dog dad, coffee connoisseur,
-              photography enthusiast, and &mdash; like a true Coloradan &mdash;
-              a fan of the outdoors and a beginner snowboarder.
+              photography enthusiast, beginner snowboarder and &mdash; like a
+              true Coloradan &mdash; a fan of the outdoors.
             </p>
             <p className="mr-2 max-w-md py-4 text-lg text-gray-100">
               Outside of work, I like to spend time with my dog, Pixel. So far
