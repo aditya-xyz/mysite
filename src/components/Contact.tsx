@@ -93,7 +93,7 @@ const Contact = (props: Props) => {
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: false, amount: 0.25 }}
+            viewport={{ once: false }}
             transition={{ duration: 0.5 }}
             variants={{
               hidden: { opacity: 0, x: -25 },
@@ -107,7 +107,7 @@ const Contact = (props: Props) => {
           className="flex items-center justify-center"
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: false, amount: 0.25 }}
+          viewport={{ once: false }}
           transition={{ delay: 0.2, duration: 0.5 }}
           variants={{
             hidden: { opacity: 0, x: -25 },
