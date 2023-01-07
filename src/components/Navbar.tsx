@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FaBars, FaTimes } from "react-icons/fa";
 import { Link } from "react-scroll";
+import { motion } from "framer-motion";
 
 type Props = {
   selectedPage: string;
@@ -79,33 +80,41 @@ const Navbar = (props: Props) => {
         }}
         className="z-10 cursor-pointer pr-4 text-gray-100 md:hidden"
       >
-        {nav ? <FaTimes size={30} /> : <FaBars size={30} />}
+        {nav ? <FaTimes size={25} /> : <FaBars size={25} />}
       </div>
 
       {nav && (
-        <ul className="absolute top-0 left-0 flex h-screen w-full flex-col items-center justify-center bg-gradient-to-b from-black to-gray-800 text-gray-100">
-          {links.map(({ id, link }) => (
-            <li
-              key={id}
-              className={`cursor-pointer px-4 py-6 text-4xl capitalize ${
-                props.selectedPage === link ? "text-blue-500" : "text-gray-100"
-              }`}
-            >
-              <Link
-                onClick={() => {
-                  setNav(!nav);
-                  !nav
-                    ? (document.body.style.overflow = "hidden")
-                    : (document.body.style.overflow = "unset");
-                }}
-                to={link}
-                smooth
-                duration={500}
+        <ul className="absolute top-0 left-0 flex h-screen w-full flex-col items-center justify-center bg-gradient-to-b from-black to-gray-900 text-gray-100">
+          <motion.div
+            initial={{ height: 1000, opacity: 0 }}
+            animate={{ height: 550, opacity: 1 }}
+            transition={{ duration: 0.75 }}
+          >
+            {links.map(({ id, link }) => (
+              <li
+                key={id}
+                className={`cursor-pointer px-4 py-6 text-2xl capitalize ${
+                  props.selectedPage === link
+                    ? "text-blue-500"
+                    : "text-gray-100"
+                }`}
               >
-                {link}
-              </Link>
-            </li>
-          ))}
+                <Link
+                  onClick={() => {
+                    setNav(!nav);
+                    !nav
+                      ? (document.body.style.overflow = "hidden")
+                      : (document.body.style.overflow = "unset");
+                  }}
+                  to={link}
+                  smooth
+                  duration={500}
+                >
+                  {link}
+                </Link>
+              </li>
+            ))}
+          </motion.div>
         </ul>
       )}
     </div>
