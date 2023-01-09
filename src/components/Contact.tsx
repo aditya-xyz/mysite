@@ -111,16 +111,18 @@ const Contact = (props: Props) => {
             <p className="py-6 text-xl text-gray-100">Send me a message!</p>
           </motion.div>
         </div>
-        <div className="flex items-center justify-center">
-          <motion.form
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: false }}
-            transition={{ delay: 0.1, duration: 0.5 }}
-            variants={{
-              hidden: { opacity: 0, scale: 0.8 },
-              visible: { opacity: 1, scale: 1 },
-            }}
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: false }}
+          transition={{ delay: 0.1, duration: 0.5 }}
+          variants={{
+            hidden: { opacity: 0, scale: 0.8 },
+            visible: { opacity: 1, scale: 1 },
+          }}
+          className="flex items-center justify-center"
+        >
+          <form
             onSubmit={handleSubmit(submit)}
             className="flex w-full flex-col md:w-1/2"
           >
@@ -173,27 +175,17 @@ const Contact = (props: Props) => {
                   "Max length is 2000 char."}
               </p>
             )}
-            <motion.button
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: false }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-              variants={{
-                hidden: { opacity: 0, scale: 0.8 },
-                visible: { opacity: 1, scale: 1 },
-              }}
-              className="my-8 mx-auto flex items-center rounded-md bg-gradient-to-b from-cyan-500 to-blue-500 px-6 py-3 text-white duration-300 hover:scale-110"
-            >
+            <button className="my-8 mx-auto flex items-center rounded-md bg-gradient-to-b from-cyan-500 to-blue-500 px-6 py-3 text-white duration-300 hover:scale-110">
               Let's talk
-            </motion.button>
+            </button>
             <ToastContainer />
-          </motion.form>
-        </div>
+          </form>
+        </motion.div>
         <motion.div
           initial="hidden"
           whileInView="visible"
           viewport={{ once: false }}
-          transition={{ delay: 0.3, duration: 0.5 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
           variants={{
             hidden: { opacity: 0, scale: 0.8 },
             visible: { opacity: 1, scale: 1 },

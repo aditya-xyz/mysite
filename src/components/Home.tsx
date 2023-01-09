@@ -34,65 +34,34 @@ const Home = (props: Props) => {
             className="mx-auto w-2/3 rounded-2xl md:w-full"
           />
         </motion.div>
-        <div className="flex h-full flex-col justify-center">
-          <motion.h2
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: false }}
-            transition={{ delay: 0.1, duration: 0.5 }}
-            variants={{
-              hidden: { opacity: 0, x: -25 },
-              visible: { opacity: 1, x: 0 },
-            }}
-            className="text-3xl text-white sm:text-5xl"
-          >
-            Hi y'all!
-          </motion.h2>
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: false }}
+          transition={{ delay: 0.1, duration: 0.5 }}
+          variants={{
+            hidden: { opacity: 0, scale: 0.8 },
+            visible: { opacity: 1, scale: 1 },
+          }}
+          className="flex h-full flex-col justify-center"
+        >
+          <h2 className="text-3xl text-white sm:text-5xl">Hi y'all!</h2>
           <br />
           <div>
-            <motion.p
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: false }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-              variants={{
-                hidden: { opacity: 0, x: -25 },
-                visible: { opacity: 1, x: 0 },
-              }}
-              className="mr-2 max-w-md py-4 text-lg text-gray-100"
-            >
+            <p className="mr-2 max-w-md py-4 text-lg text-gray-100">
               I am a Full Stack React Developer, dog dad, coffee connoisseur,
               photography enthusiast, beginner snowboarder and &mdash; like a
               true Coloradan &mdash; a fan of the outdoors.
-            </motion.p>
-            <motion.p
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: false }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-              variants={{
-                hidden: { opacity: 0, x: -25 },
-                visible: { opacity: 1, x: 0 },
-              }}
-              className="mr-2 max-w-md py-4 text-lg text-gray-100"
-            >
+            </p>
+            <p className="mr-2 max-w-md py-4 text-lg text-gray-100">
               Outside of work, I like to spend time with my dog, Pixel. So far
               she has been to 10 states and that number will only go up! If
               you're interested in following her adventures, check out her
               Instagram! All links are under the Contact section.
-            </motion.p>
+            </p>
             <br />
           </div>
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: false }}
-            transition={{ delay: 0.4, duration: 0.5 }}
-            variants={{
-              hidden: { opacity: 0, x: -25 },
-              visible: { opacity: 1, x: 0 },
-            }}
-          >
+          <div>
             <Link
               to="experience"
               onClick={() => {
@@ -107,8 +76,8 @@ const Home = (props: Props) => {
                 <FiArrowRight size={25} className="ml-1" />
               </span>
             </Link>
-          </motion.div>
-        </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
