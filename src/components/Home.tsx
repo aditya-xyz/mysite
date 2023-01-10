@@ -19,9 +19,9 @@ const Home = (props: Props) => {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: false }}
-          transition={{ duration: 0.5 }}
+          transition={{ delay: 0.1, duration: 0.25 }}
           variants={{
-            hidden: { opacity: 0, scale: 0.8 },
+            hidden: { opacity: 0, scale: 0.95 },
             visible: { opacity: 1, scale: 1 },
           }}
           onViewportEnter={() => {
@@ -38,9 +38,9 @@ const Home = (props: Props) => {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: false }}
-          transition={{ delay: 0.1, duration: 0.5 }}
+          transition={{ delay: 0.25, duration: 0.25 }}
           variants={{
-            hidden: { opacity: 0, scale: 0.8 },
+            hidden: { opacity: 0, scale: 0.95 },
             visible: { opacity: 1, scale: 1 },
           }}
           className="flex h-full flex-col justify-center"

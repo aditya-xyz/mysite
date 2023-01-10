@@ -47,7 +47,7 @@ const Projects = (props: Props) => {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: false }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.25 }}
             variants={{
               hidden: { opacity: 0, x: -25 },
               visible: { opacity: 1, x: 0 },
@@ -67,9 +67,9 @@ const Projects = (props: Props) => {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: false }}
-          transition={{ delay: 0.25, duration: 0.5 }}
+          transition={{ delay: 0.25, duration: 0.25 }}
           variants={{
-            hidden: { opacity: 0, scale: 0.8 },
+            hidden: { opacity: 0, scale: 0.95 },
             visible: { opacity: 1, scale: 1 },
           }}
         >
