@@ -21,7 +21,12 @@ const Contact = (props: Props) => {
     message: string;
   };
 
-  const { register, handleSubmit, reset } = useForm<Inputs>();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<Inputs>();
 
   const submit: SubmitHandler<Inputs> = (data) => {
     axios
@@ -94,61 +99,99 @@ const Contact = (props: Props) => {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: false }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.5 }}
             variants={{
               hidden: { opacity: 0, x: -25 },
               visible: { opacity: 1, x: 0 },
+            }}
+            onViewportEnter={() => {
+              props.setSelectedPage("contact");
             }}
           >
             <p className="py-6 text-xl text-gray-100">Send me a message!</p>
           </motion.div>
         </div>
         <motion.div
-          className="flex items-center justify-center"
           initial="hidden"
           whileInView="visible"
           viewport={{ once: false }}
-          transition={{ delay: 0.2, duration: 0.25 }}
+          transition={{ delay: 0.1, duration: 0.5 }}
           variants={{
-            hidden: { opacity: 0, x: -25 },
-            visible: { opacity: 1, x: 0 },
+            hidden: { opacity: 0, scale: 0.8 },
+            visible: { opacity: 1, scale: 1 },
           }}
-          onViewportEnter={() => {
-            props.setSelectedPage("contact");
-          }}
+          className="flex items-center justify-center"
         >
           <form
             onSubmit={handleSubmit(submit)}
             className="flex w-full flex-col md:w-1/2"
           >
             <input
-              {...register("name")}
+              {...register("name", {
+                required: true,
+                maxLength: 100,
+              })}
               type="text"
-              placeholder="Enter your name"
-              required
+              placeholder="NAME"
               className="border-2 bg-transparent p-2 text-white focus:outline-none"
             />
+            {errors.name && (
+              <p className="text-red mt-1">
+                {errors.name.type === "required" && "This field is required."}
+                {errors.name.type === "maxLength" &&
+                  "Max length is 100 characters."}
+              </p>
+            )}
             <input
-              {...register("email")}
+              {...register("email", {
+                required: true,
+                pattern: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+              })}
               type="text"
-              placeholder="Enter your email"
-              required
+              placeholder="EMAIL"
               className="my-4 border-2 bg-transparent p-2 text-white focus:outline-none"
             />
+            {errors.email && (
+              <p className="text-red mt-1">
+                {errors.email.type === "required" && "This field is required."}
+                {errors.email.type === "pattern" && "Invalid email address."}
+              </p>
+            )}
             <textarea
-              {...register("message")}
-              placeholder="Enter your message"
+              {...register("message", {
+                required: true,
+                maxLength: 2000,
+              })}
+              placeholder="MESSAGE"
               required
               rows={10}
               className="border-2 bg-transparent p-2 text-white focus:outline-none"
-            ></textarea>
+            />
+            {errors.message && (
+              <p className="text-red mt-1">
+                {errors.message.type === "required" &&
+                  "This field is required."}
+                {errors.message.type === "maxLength" &&
+                  "Max length is 2000 char."}
+              </p>
+            )}
             <button className="my-8 mx-auto flex items-center rounded-md bg-gradient-to-b from-cyan-500 to-blue-500 px-6 py-3 text-white duration-300 hover:scale-110">
               Let's talk
             </button>
             <ToastContainer />
           </form>
         </motion.div>
-        <div className="right-0 flex flex-row justify-center">
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: false }}
+          transition={{ delay: 0.2, duration: 0.5 }}
+          variants={{
+            hidden: { opacity: 0, scale: 0.8 },
+            visible: { opacity: 1, scale: 1 },
+          }}
+          className="right-0 flex flex-row justify-center"
+        >
           <ul className="flex flex-row">
             {links.map(({ id, child, href, style }) => (
               <li
@@ -166,7 +209,7 @@ const Contact = (props: Props) => {
               </li>
             ))}
           </ul>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

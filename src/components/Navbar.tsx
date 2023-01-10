@@ -86,9 +86,14 @@ const Navbar = (props: Props) => {
       {nav && (
         <ul className="absolute top-0 left-0 flex h-screen w-full flex-col items-center justify-center bg-gradient-to-b from-black to-gray-900 text-gray-100">
           <motion.div
-            initial={{ height: 1000, opacity: 0 }}
-            animate={{ height: 550, opacity: 1 }}
-            transition={{ duration: 0.75 }}
+            variants={{
+              hidden: { opacity: 0, x: 50 },
+              visible: { opacity: 1, x: 0 },
+            }}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: false }}
+            transition={{ duration: 0.5 }}
           >
             {links.map(({ id, link }) => (
               <li

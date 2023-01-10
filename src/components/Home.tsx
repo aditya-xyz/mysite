@@ -19,10 +19,10 @@ const Home = (props: Props) => {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: false }}
-          transition={{ duration: 0.25 }}
+          transition={{ duration: 0.5 }}
           variants={{
-            hidden: { opacity: 0, x: -25 },
-            visible: { opacity: 1, x: 0 },
+            hidden: { opacity: 0, scale: 0.8 },
+            visible: { opacity: 1, scale: 1 },
           }}
           onViewportEnter={() => {
             props.setSelectedPage("home");
@@ -34,7 +34,17 @@ const Home = (props: Props) => {
             className="mx-auto w-2/3 rounded-2xl md:w-full"
           />
         </motion.div>
-        <div className="flex h-full flex-col justify-center">
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: false }}
+          transition={{ delay: 0.1, duration: 0.5 }}
+          variants={{
+            hidden: { opacity: 0, scale: 0.8 },
+            visible: { opacity: 1, scale: 1 },
+          }}
+          className="flex h-full flex-col justify-center"
+        >
           <h2 className="text-3xl text-white sm:text-5xl">Hi y'all!</h2>
           <br />
           <div>
@@ -67,7 +77,7 @@ const Home = (props: Props) => {
               </span>
             </Link>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
