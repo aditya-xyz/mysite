@@ -50,14 +50,22 @@ const Home = (props: Props) => {
           <div>
             <p className="mr-2 max-w-md py-4 text-lg text-gray-100">
               I am a Full Stack React Developer, dog dad, coffee connoisseur,
-              photography enthusiast, beginner snowboarder and &mdash; like a
-              true Coloradan &mdash; a fan of the outdoors.
+              photography enthusiast, gym rat, and &mdash; like a true Coloradan
+              &mdash; a fan of the outdoors.
             </p>
             <p className="mr-2 max-w-md py-4 text-lg text-gray-100">
               Outside of work, I like to spend time with my dog, Pixel. So far
               she has been to 10 states and that number will only go up! If
-              you're interested in following her adventures, check out her
-              Instagram! All links are under the Contact section.
+              you're interested in following her adventures, check out her{" "}
+              <a
+                href={"https://www.instagram.com/pixelthegsd/"}
+                className={`cursor-pointer duration-200 hover:text-blue-500 `}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Instagram
+              </a>
+              ! All links are under the Contact section.
             </p>
             <br />
           </div>

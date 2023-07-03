@@ -56,7 +56,16 @@ const About = (props: Props) => {
           <br />
           <br />
           <p className="text-lg text-gray-100">
-            Check out my GitHub repos and social links!
+            Check out my{" "}
+            <a
+              href={"https://github.com/aditya-xyz"}
+              className={`cursor-pointer duration-200 hover:text-blue-500 `}
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub repos
+            </a>{" "}
+            and social links in the contact tab!
           </p>
         </motion.div>
       </div>
