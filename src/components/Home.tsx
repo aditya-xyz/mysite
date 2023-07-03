@@ -65,7 +65,7 @@ const Home = (props: Props) => {
               >
                 Instagram
               </a>
-              ! All links are under the Contact section.
+              ! All links are also under the Contact section.
             </p>
             <br />
           </div>

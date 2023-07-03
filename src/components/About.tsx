@@ -65,7 +65,7 @@ const About = (props: Props) => {
             >
               GitHub repos
             </a>{" "}
-            and social links in the contact tab!
+            and social links in the Contact section!
           </p>
         </motion.div>
       </div>
