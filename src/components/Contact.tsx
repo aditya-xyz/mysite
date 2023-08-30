@@ -80,7 +80,7 @@ const Contact = (props: Props) => {
           <FaInstagram size={30} />
         </>
       ),
-      href: "https://www.instagram.com/pixelthegsd/",
+      href: "https://www.instagram.com/rockymtn_pups/",
       style: "rounded-bl-md",
     },
   ];
