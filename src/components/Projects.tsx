@@ -12,10 +12,7 @@ const features = [
     title: "From interface to API.",
     description:
       "An exploration of a MERN application, with a write-up and backend source to dig into.",
-    type: "01",
     Icon: FiLayers,
-    style: "coral",
-    words: ["INTERFACE", "LOGIC", "DATA"],
   },
   {
     id: 5,
@@ -23,10 +20,7 @@ const features = [
     title: "Navigation that follows along.",
     description:
       "Using Framer Motion to highlight navigation as you move through a page.",
-    type: "02",
     Icon: FiMousePointer,
-    style: "teal",
-    words: ["SCROLL", "OBSERVE", "RESPOND"],
   },
   {
     id: 3,
@@ -34,10 +28,7 @@ const features = [
     title: "Small screens. Thoughtful navigation.",
     description:
       "Building a responsive navigation bar for a React app, step by step.",
-    type: "03",
     Icon: FiCode,
-    style: "ochre",
-    words: ["DESKTOP", "TABLET", "MOBILE"],
   },
 ];
 const Projects = () => (
@@ -49,11 +40,9 @@ const Projects = () => (
     <div className="shell">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">01 / Selected builds & writing</p>
+          <p className="eyebrow">Work & writing</p>
           <h2 id="work-title">
-            Made to work.
-            <br />
-            <em>Shared to learn.</em>
+            Built & <em>shared.</em>
           </h2>
         </div>
         <p className="section-aside">
@@ -62,60 +51,37 @@ const Projects = () => (
         </p>
       </div>
       <div className="work-grid">
-        {features.map(
-          ({ id, label, title, description, type, Icon, style, words }) => {
-            const project = projects.find((p) => p.id === id)!;
-            return (
-              <article className="work-item" key={id}>
+        {features.map(({ id, label, title, description, Icon }) => {
+          const project = projects.find((p) => p.id === id)!;
+          return (
+            <article className="work-item" key={id}>
+              <div className="project-mark" aria-hidden="true">
+                <Icon />
+              </div>
+              <p className="project-category">{label}</p>
+              <h3>{title}</h3>
+              <p className="project-description">{description}</p>
+              <div className="project-links">
                 <a
-                  className={`project-art ${style}`}
                   href={project.mediumUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={`Read ${project.title} (opens in a new tab)`}
                 >
-                  <div className="art-meta">
-                    <span>FIELD NOTES / {type}</span>
-                    <FiArrowUpRight aria-hidden="true" />
-                  </div>
-                  <Icon className="art-icon" aria-hidden="true" />
-                  <div className="art-words" aria-hidden="true">
-                    {words.map((word) => (
-                      <span key={word}>
-                        {word}
-                        <span className="art-dot">.</span>
-                      </span>
-                    ))}
-                  </div>
-                  <span className="art-caption">
-                    An Aditya Patil experiment
-                  </span>
+                  Read the story <FiArrowUpRight aria-hidden="true" />
+                  <span className="sr-only"> (opens in a new tab)</span>
                 </a>
-                <p className="project-category">{label}</p>
-                <h3>{title}</h3>
-                <p className="project-description">{description}</p>
-                <div className="project-links">
-                  <a
-                    href={project.mediumUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Read the story <FiArrowUpRight aria-hidden="true" />
-                    <span className="sr-only"> (opens in a new tab)</span>
-                  </a>
-                  <a
-                    href={project.githubUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Source code <FiArrowUpRight aria-hidden="true" />
-                    <span className="sr-only"> (opens in a new tab)</span>
-                  </a>
-                </div>
-              </article>
-            );
-          }
-        )}
+                <a
+                  href={project.githubUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Source code <FiArrowUpRight aria-hidden="true" />
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              </div>
+            </article>
+          );
+        })}
       </div>
       <details className="writing-archive">
         <summary>

@@ -17,11 +17,7 @@ const Footer = ({
   <footer className="site-footer" id="socials">
     <div className="shell">
       <div className="footer-top">
-        <p>
-          Good things start
-          <br />
-          with a <em>connection.</em>
-        </p>
+        <p>Find me around the web.</p>
         <nav aria-label="Social links">
           {socialLinks.map(({ id, label, href }) => {
             const Icon = icons[id as keyof typeof icons];
@@ -42,7 +38,7 @@ const Footer = ({
         </a>
         <p>Southern California · Made with curiosity.</p>
         <div className="palette-picker" role="group" aria-label="Color palette">
-          <span>Make it yours</span>
+          <span>Palette</span>
           {[
             { id: "paper", label: "Paper & clay" },
             { id: "moss", label: "Moss & cream" },

@@ -1,8 +1,4 @@
 // Public content lives with the site; images are bundled by Vite.
-import javascript from "@/assets/public-content/javascript.png";
-import typescript from "@/assets/public-content/typescript.png";
-import react from "@/assets/public-content/react.png";
-import node from "@/assets/public-content/node.png";
 import mernApp from "@/assets/public-content/mern_app.png";
 import reactAndTailwind from "@/assets/public-content/reactAndTailwind.jpg";
 import navbar from "@/assets/public-content/navbar.jpg";
@@ -13,72 +9,58 @@ export const experiences = [
   {
     id: "code-apps",
     title: "Power Apps code apps",
-    icon: "apps",
-    accent: "text-fuchsia-400",
     description:
       "Building custom web experiences with React and TypeScript inside Power Platform.",
   },
   {
     id: "functions",
     title: "Azure Functions",
-    icon: "functions",
-    accent: "text-sky-400",
     description:
       "Writing serverless backend logic and APIs to support apps and integrations.",
   },
   {
     id: "automate",
     title: "Power Automate",
-    icon: "automate",
-    accent: "text-blue-400",
     description:
       "Connecting services and automating business processes with cloud flows.",
   },
   {
     id: "dataverse",
     title: "Microsoft Dataverse",
-    icon: "data",
-    accent: "text-emerald-400",
     description:
       "Working with business data and relationships to support Power Platform solutions.",
   },
   {
     id: "connectors",
     title: "APIs & custom connectors",
-    icon: "connectors",
-    accent: "text-cyan-400",
     description:
       "Bringing services together through APIs and connectors for apps and workflows.",
   },
   {
     id: "react",
     title: "React",
-    src: react,
     description:
       "Building interactive interfaces and reusable components for web apps.",
   },
   {
     id: "typescript",
     title: "TypeScript",
-    src: typescript,
     description:
       "Adding types and clear contracts to frontend and backend application code.",
   },
   {
     id: "javascript",
     title: "JavaScript",
-    src: javascript,
     description:
       "Writing the application logic and interactions behind web experiences.",
   },
   {
     id: "node",
     title: "Node.js",
-    src: node,
     description:
       "Building backend services and API integrations with JavaScript and TypeScript.",
   },
-];
+] as const;
 
 export const projects = [
   {

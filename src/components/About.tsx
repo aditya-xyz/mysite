@@ -7,11 +7,9 @@ const About = () => (
   >
     <div className="shell about-layout">
       <div>
-        <p className="eyebrow">03 / Beyond the job title</p>
+        <p className="eyebrow">About</p>
         <h2 id="about-title">
-          A builder’s mind.
-          <br />
-          <em>An explorer’s heart.</em>
+          A little <em>about me.</em>
         </h2>
         <div className="about-copy">
           <p>
@@ -40,17 +38,7 @@ const About = () => (
         </a>
       </div>
       <aside className="personal-note" aria-labelledby="personal-title">
-        <div className="note-top">
-          <span>A NOTE FROM OFFLINE</span>
-          <span>↗</span>
-        </div>
-        <h3 id="personal-title">
-          More life.
-          <br />
-          More outside.
-          <br />
-          <em>More Pixel.</em>
-        </h3>
+        <h3 id="personal-title">Away from the keyboard.</h3>
         <ul>
           <li>
             <FiCompass aria-hidden="true" />
@@ -72,7 +60,6 @@ const About = () => (
         >
           Follow Pixel’s adventures <FiArrowUpRight aria-hidden="true" />
         </a>
-        <span className="note-signature">See you out there, Aditya</span>
       </aside>
     </div>
   </section>

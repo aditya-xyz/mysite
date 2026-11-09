@@ -4,20 +4,15 @@ import { linkedInUrl } from "@/socials";
 const Home = () => (
   <section id="home" className="hero shell" aria-labelledby="home-title">
     <div className="hero-copy">
-      <p className="eyebrow">
-        <span className="location-dot" /> Southern California · Builder &
-        explorer
-      </p>
+      <p className="eyebrow">Hi, I’m Aditya · Southern California</p>
       <h1 id="home-title">
-        Connecting
-        <br />
-        the dots.
+        Connecting the dots.
         <br />
         <em>Building what’s next.</em>
       </h1>
       <p className="hero-intro">
-        Hi, I’m Aditya. I bring apps, data, and automation together with Power
-        Platform, Azure, and a little custom code.
+        I bring apps, data, and automation together with Power Platform, Azure,
+        and a little custom code.
       </p>
       <div className="hero-actions">
         <a className="button button-solid" href="#projects">
@@ -32,10 +27,6 @@ const Home = () => (
           Find me on LinkedIn <FiArrowUpRight aria-hidden="true" />
         </a>
       </div>
-      <div className="hero-footnote">
-        <span>01 / A little introduction</span>
-        <span>Usually with Pixel nearby.</span>
-      </div>
     </div>
     <figure className="hero-photo">
       <div className="photo-mat">
@@ -43,12 +34,11 @@ const Home = () => (
           src={HeroImage}
           alt="Aditya and his dog Pixel outside in a grassy field"
         />
-        <span className="photo-stamp">AP + P</span>
       </div>
       <figcaption>
-        <span>Off-screen, in good company.</span>
+        <span>Aditya & Pixel</span>
         <a
-          className="handwritten"
+          className="photo-link"
           href="https://www.instagram.com/pixelthegsd/"
           target="_blank"
           rel="noopener noreferrer"
