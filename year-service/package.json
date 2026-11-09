@@ -1,0 +1,31 @@
+{
+  "name": "aditya-year-service",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "check": "tsc --noEmit",
+    "test": "npm run admin:build && wrangler deploy --dry-run --outdir .wrangler/test-bundle && wrangler deploy --config admin/wrangler.jsonc --dry-run --outdir ../.wrangler/admin-test-bundle && node --experimental-strip-types --test test/*.test.ts",
+    "admin:build": "node scripts/build-admin.mjs",
+    "admin:dev": "npm run admin:build && wrangler dev --config admin/wrangler.jsonc --port 8789",
+    "admin:deploy": "npm run admin:build && wrangler deploy --config admin/wrangler.jsonc",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "db:remote": "wrangler d1 migrations apply DB --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
+    "miniflare": "5.20261104.0-beta",
+    "qrcode": "^1.5.4",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "jose": "^6.2.16"
+  }
+}

@@ -34,3 +34,24 @@ No API or database environment variables are required. Any existing
 The tracked `dist` files are historical generated output. Build from source
 when deploying. Backend hosting and database resources can be retired separately
 after confirming they have no other consumers.
+
+## Private scrapbook and admin dashboard
+
+The private 2026 scrapbook and owner-only dashboard run on Cloudflare Workers,
+separately from the Netlify portfolio. Their source, setup, and deployment
+commands are in [year-service/README.md](year-service/README.md) and
+[year-service/admin/README.md](year-service/admin/README.md).
+
+The scrapbook uses phone-bound invitations, Twilio SMS verification, D1 sessions,
+and private R2 media. The admin editor uses Google through Cloudflare Access,
+with independent server-side identity checks. It supports stories, photo uploads,
+recipient/group assignments, QR invitations, previews, and explicit draft/publish.
+
+Deploy the portfolio from the repository root. Deploy the Cloudflare services
+from year-service using its separate scripts. Never upload local .dev.vars,
+.private, .wrangler, or personal mockup photos. Build the admin client before
+its deployment. Guestbook and home-server monitoring are future additions.
+
+The original local React design prototype is not part of the public release.
+The live private services enforce access on the backend and do not use the
+prototype's sample-code authentication. Public-site DNS remains unchanged.

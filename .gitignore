@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Private media used only in the local scrapbook mockup
+/src/year/local-photos/
+
+# Worker secrets and local development state
+**/.dev.vars
+**/.dev.vars.*
+!**/.dev.vars.example
+**/.wrangler/
+**/.private/
+
+# Built admin client (source is in year-service/admin/client)
+/year-service/admin/web/app.js

@@ -1,0 +1,119 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { Miniflare, convertV4MiniflareOptions } from "miniflare";
+import { generateKeyPair, exportJWK, SignJWT } from "jose";
+import { digest } from "../src/security.ts";
+
+test("private admin authentication, drafts, publishing, uploads, and recipient isolation", async t => {
+  const {privateKey,publicKey} = await generateKeyPair("RS256",{extractable:true});
+  const jwk = {...await exportJWK(publicKey),kid:"test-key",alg:"RS256",use:"sig"};
+  const issuer="https://test-team.cloudflareaccess.com",aud="test-admin-application";
+  const adminEmail="owner@example.com";
+  const outbound = async (request: {url:string}) => {
+    assert.equal(request.url,issuer+"/cdn-cgi/access/certs","Admin operations must never send SMS or contact arbitrary destinations");
+    return Response.json({keys:[jwk]});
+  };
+  const mf = new Miniflare(convertV4MiniflareOptions({workers:[{
+    name:"admin",routes:["admin.test/*"],modules:true,scriptPath:".wrangler/admin-test-bundle/index.js",compatibilityDate:"2026-08-06",
+    d1Databases:{DB:"shared-db"},r2Buckets:{MEDIA:"shared-media"},
+    bindings:{ADMIN_EMAIL:adminEmail,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:aud,JOURNAL_ORIGIN:"https://journal.test"},outboundService:outbound
+  },{
+    name:"guest",routes:["journal.test/*"],modules:true,scriptPath:".wrangler/test-bundle/index.js",compatibilityDate:"2026-08-06",
+    d1Databases:{DB:"shared-db"},r2Buckets:{MEDIA:"shared-media"},bindings:{SMS_ENABLED:"false"},outboundService:outbound
+  }]}));
+  async function signed(email=adminEmail,audience=aud,expires="5m",iss=issuer) {
+    return new SignJWT({email}).setProtectedHeader({alg:"RS256",kid:"test-key"})
+      .setSubject("test-user").setIssuedAt().setIssuer(iss).setAudience(audience).setExpirationTime(expires).sign(privateKey);
+  }
+  try {
+    const db=await mf.getD1Database("DB","admin"),bucket=await mf.getR2Bucket("MEDIA","admin");
+    for(const f of ["0001_invites.sql","0002_editor.sql"]) await db.exec((await readFile("migrations/"+f,"utf8")).replace(/\n/g," "));
+    const expires=Math.floor(Date.now()/1000)+86400;
+    await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',?1,'Angela','+15555550101',?2)").bind(await digest("a".repeat(64)),expires).run();
+    let assertion=await signed();
+    async function req(path: string,data?:unknown,origin="https://admin.test",jwt=assertion) {
+      const multipart=data instanceof FormData;
+      const encoded=multipart?new Request("https://admin.test",{method:"POST",body:data}):null;
+      return mf.dispatchFetch("https://admin.test"+path,{method:data===undefined?"GET":"POST",
+        headers:{Origin:origin,...(jwt?{"Cf-Access-Jwt-Assertion":jwt}:{}),"Content-Type":encoded?.headers.get("Content-Type")||"application/json"},
+        ...(data===undefined?{}:{body:encoded?await encoded.arrayBuffer():JSON.stringify(data)})});
+    }
+    await t.test("all admin pages, assets, and APIs reject unauthenticated or forged identities",async()=>{
+      for(const path of ["/","/app.js","/style.css","/api/state","/api/media/anything/preview"])assert.equal((await req(path,undefined,undefined,"")).status,401);
+      const forged=await mf.dispatchFetch("https://admin.test/api/state",{headers:{"Cf-Access-Authenticated-User-Email":adminEmail}});assert.equal(forged.status,401);
+      for(const jwt of [await signed("other@example.com"),await signed(adminEmail,"other-app"),await signed(adminEmail,aud,"-1m"),await signed(adminEmail,aud,"5m","https://other-team.cloudflareaccess.com"),"forged.jwt.value"])
+        assert.equal((await req("/api/state",undefined,undefined,jwt)).status,401);
+      assert.equal((await req("/api/state")).status,200);
+    });
+    await t.test("authenticated writes still reject cross-origin requests",async()=>{
+      assert.equal((await req("/api/draft",{},"https://other.test")).status,403);
+    });
+    const original=new Uint8Array([255,216,255,225,69,88,73,70,0,2,4,6,255,217]);
+    async function upload(){const form=new FormData();form.set("original",new File([original],"original.jpeg",{type:"image/jpeg"}));form.set("preview",new File([original],"preview.jpg",{type:"image/jpeg"}));return req("/api/upload",form);}
+    let photoId="",personId="";
+    await t.test("uploads preserve untouched originals and never publish automatically",async()=>{
+      const r=await upload();assert.equal(r.status,201);photoId=(await r.json() as {id:string}).id;
+      const m=await db.prepare("SELECT original_key FROM media_objects WHERE id=?").bind(photoId).first<{original_key:string}>();
+      assert.deepEqual(new Uint8Array(await (await bucket.get(m!.original_key))!.arrayBuffer()),original);
+      const ed=await db.prepare("SELECT published_json FROM editions WHERE year=2026").first<{published_json:string|null}>();assert.equal(ed!.published_json,null);
+      const form=new FormData();form.set("original",new File(["<svg></svg>"],"unsafe.svg",{type:"image/svg+xml"}));form.set("preview",new File([original],"preview.jpg"));
+      assert.equal((await req("/api/upload",form)).status,400);
+    });
+    await t.test("creating a person generates a phone-bound link without sending SMS",async()=>{
+      const r=await req("/api/people",{name:"Sam",phone:"+15555550102"});assert.equal(r.status,201);
+      const result=await r.json() as {id:string;url:string};personId=result.id;assert.match(result.url,/^https:\/\/journal.test\/#\w{64}$/);
+      const stored=await db.prepare("SELECT token_hash FROM invites WHERE id=?").bind(personId).first<{token_hash:string}>();
+      assert.equal(stored!.token_hash,await digest(result.url.split("#")[1]));
+      assert.equal((await req("/api/people",{name:"Duplicate",phone:"+15555550102"})).status,400);
+    });
+    const initial=await (await req("/api/state")).json() as {draft:import("../src/edition.ts").Draft;version:number};
+    let version=initial.version;
+    const draft=initial.draft;draft.note="Our saved opening note.";draft.stories=[{id:"first-story",title:"A little adventure",body:"A story from both of us."}];
+    draft.photos=[{id:photoId,caption:"A memory together",alt:"An illustrative photo",recipients:["angela",personId]}];
+    await t.test("save uses version checks and preview is private",async()=>{
+      const r=await req("/api/draft",{version,draft});assert.equal(r.status,200);version=(await r.json() as {version:number}).version;
+      assert.equal((await req("/api/draft",{version:initial.version,draft})).status,409);
+      const preview=await (await req("/api/preview?recipient=angela")).json() as {photos:{id:string}[];note:string};
+      assert.equal(preview.note,draft.note);assert.equal(preview.photos[0].id,photoId);
+      const ed=await db.prepare("SELECT published_json FROM editions WHERE year=2026").first<{published_json:string|null}>();assert.equal(ed!.published_json,null);
+      const invalid={...draft,photos:[{...draft.photos[0],recipients:["unknown-person"]}]};
+      assert.equal((await req("/api/draft",{version,draft:invalid})).status,400);
+    });
+    let guestToken="b".repeat(64),samToken="c".repeat(64);
+    const guestReq=(id:string,raw=guestToken)=>mf.dispatchFetch("https://journal.test/api/"+id,{headers:{Cookie:"__Host-year_session="+raw}});
+    await t.test("publish connects the edition to guests and enforces selected groups",async()=>{
+      const r=await req("/api/publish",{version});assert.equal(r.status,200);
+      for(const [raw,id] of [[guestToken,"angela"],[samToken,personId]])await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)").bind(await digest(raw),id,expires).run();
+      for(const raw of [guestToken,samToken]){
+        const journal=await (await guestReq("journal",raw)).json() as {photos:{id:string;canSave:boolean}[];note:string;stories:unknown[]};
+        assert.equal(journal.note,draft.note);assert.equal(journal.photos[0].id,photoId);assert.equal(journal.photos[0].canSave,true);assert.equal(journal.stories.length,1);
+        assert.deepEqual(new Uint8Array(await (await guestReq(`media/${photoId}/original`,raw)).arrayBuffer()),original);
+      }
+    });
+    await t.test("draft audience edits do not leak before publication; shared originals stay blocked",async()=>{
+      draft.photos[0].recipients=[];
+      let r=await req("/api/draft",{version,draft});version=(await r.json() as {version:number}).version;
+      assert.equal((await guestReq(`media/${photoId}/original`)).status,200,"Published personal access must persist until a new publication");
+      r=await req("/api/publish",{version});assert.equal(r.status,200);
+      assert.equal((await guestReq(`media/${photoId}/original`)).status,404);
+      assert.equal((await guestReq(`media/${photoId}`)).status,200);
+      draft.photos[0].recipients=[personId];
+      r=await req("/api/draft",{version,draft});version=(await r.json() as {version:number}).version;
+      await req("/api/publish",{version});
+      assert.equal((await guestReq(`media/${photoId}`)).status,404);
+      assert.equal((await guestReq(`media/${photoId}/original`)).status,404);
+      assert.equal((await guestReq(`media/${photoId}/original`,samToken)).status,200);
+    });
+    await t.test("rotating and revoking invitations invalidates existing sessions",async()=>{
+      const changed=await req(`/api/people/${personId}/details`,{name:"Sam Updated",phone:"+15555550103"});assert.equal(changed.status,200);
+      assert.equal((await guestReq("journal",samToken)).status,401,"Changing a phone must end that recipient's existing session");
+      await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)").bind(await digest(samToken),personId,expires).run();
+      const rotated=await req(`/api/people/${personId}/invite`,{});assert.equal(rotated.status,200);
+      assert.equal((await guestReq("journal",samToken)).status,401);
+      const revoked=await req("/api/people/angela/revoke",{});assert.equal(revoked.status,200);
+      assert.equal((await guestReq("journal")).status,401);
+      const events=await db.prepare("SELECT count(*) n FROM admin_events").first<{n:number}>();assert.ok(events!.n>=9);
+    });
+  }finally{await mf.dispose();}
+});

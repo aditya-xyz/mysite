@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "aditya-year-2026",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-06",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "triggers": { "crons": ["23 9 * * *"] },
+  "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },
+  "vars": { "SMS_ENABLED": "true" },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "aditya-year-2026",
+    "database_id": "0e630137-279f-4b4c-ae9f-d2dd8f56597e",
+    "migrations_dir": "migrations"
+  }],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "aditya-year-2026-private" }]
+}

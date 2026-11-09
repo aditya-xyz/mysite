@@ -1,0 +1,23 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "aditya-private-admin",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-06",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },
+  "vars": {
+    "ADMIN_EMAIL": "aditya.patil.gverse@gmail.com",
+    "ACCESS_TEAM_DOMAIN": "https://billowing-truth-eac1.cloudflareaccess.com",
+    "ACCESS_AUD": "4e3ce74bfb8b88284386d0717ab85ab84a236ace37b649fbeb2e0dc63c85a0aa",
+    "JOURNAL_ORIGIN": "https://aditya-year-2026.aditya-year-service.workers.dev"
+  },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "aditya-year-2026",
+    "database_id": "0e630137-279f-4b4c-ae9f-d2dd8f56597e",
+    "migrations_dir": "../migrations"
+  }],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "aditya-year-2026-private" }]
+}
