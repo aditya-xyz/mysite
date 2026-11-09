@@ -11,7 +11,7 @@ interface Env {
   TWILIO_API_KEY_SECRET: string;
   TWILIO_VERIFY_SERVICE_SID: string;
 }
-interface Invite { id: string; name: string; phone: string; expires_at: number; challenge_expires_at: number }
+interface Invite { person_id: string | null; edition_year: number; id: string; name: string; phone: string; expires_at: number; challenge_expires_at: number }
 interface Photo { id: string; invite_id: string | null; preview_key: string; original_key: string | null; filename: string | null; caption: string; alt: string }
 const INVITE = "__Host-year_invite", SESSION = "__Host-year_session";
 class Failure extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -86,16 +86,20 @@ async function route(request: Request, env: Env) {
     const row = await env.DB.prepare("SELECT name FROM invites WHERE token_hash=?1 AND revoked_at IS NULL AND expires_at>?2")
       .bind(await digest(data.token), now()).first<{ name: string }>();
     if (!row) throw new Failure(401, "This invitation link is not valid or has expired.");
-    return json({ name: row.name }, 200, { "Set-Cookie": sessionCookie(INVITE, data.token, 86400) });
+    const headers=new Headers();headers.append("Set-Cookie",sessionCookie(INVITE,data.token,86400));
+    headers.append("Set-Cookie",sessionCookie(SESSION,"",0));
+    return json({ name: row.name }, 200, headers);
   }
   if (path === "/api/invitation" && request.method === "GET") {
     const i = await invitation(request, env);
-    const edition = await publishedEdition(env.DB);
-    return json({ name: i.name, phoneHint: i.phone.slice(-4), smsEnabled: env.SMS_ENABLED === "true",
+    const edition = await publishedEdition(env.DB,i.edition_year);
+    if (!edition && i.edition_year !== 2026) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
+    return json({ year:i.edition_year,name: i.name, phoneHint: i.phone.slice(-4), smsEnabled: env.SMS_ENABLED === "true",
       ...(edition ? { title:edition.title,authors:edition.authors,intro:edition.intro } : {}) });
   }
   if (path === "/api/send" && request.method === "POST") {
     const i = await invitation(request, env);
+    if (i.edition_year !== 2026 && !await publishedEdition(env.DB,i.edition_year)) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
     if (env.SMS_ENABLED !== "true") throw new Failure(503, "Your invitation is ready. Text verification will be enabled soon.");
     await limited(env, `send:${i.id}`, 5, 3600);
     const stamp = now();
@@ -136,19 +140,20 @@ async function route(request: Request, env: Env) {
   }
   if (path === "/api/journal" && request.method === "GET") {
     const i = await authenticated(request, env);
-    const edition = await publishedEdition(env.DB);
-    if (edition) return json(clientEdition(edition,i.id,i.name));
+    const edition = await publishedEdition(env.DB,i.edition_year);
+    if (edition) return json(clientEdition(edition,i.id,i.name,i.edition_year,i.person_id||i.id));
+    if (i.edition_year !== 2026) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
     const photos = await env.DB.prepare(`SELECT id,caption,alt,invite_id,original_key FROM photos
       WHERE invite_id IS NULL OR invite_id=?1 ORDER BY invite_id IS NULL,sort_order,id`).bind(i.id).all<Photo>();
-    return json({ name: i.name, photos: photos.results.map(p => ({ id: p.id, caption: p.caption, alt: p.alt,
+    return json({ year:i.edition_year,name: i.name, photos: photos.results.map(p => ({ id: p.id, caption: p.caption, alt: p.alt,
       personal: p.invite_id !== null, src: `/api/media/${p.id}`, canSave: !!p.invite_id && !!p.original_key })) });
   }
   const media = /^\/api\/media\/([a-z0-9-]+)(\/original)?$/.exec(path);
   if (media && request.method === "GET") {
     const i = await authenticated(request, env);
-    const edition = await publishedEdition(env.DB);
+    const edition = await publishedEdition(env.DB,i.edition_year);
     if (edition) {
-      const p = visiblePhotos(edition,i.id).find(p => p.id === media[1]);
+      const p = visiblePhotos(edition,i.id,i.person_id||i.id).find(p => p.id === media[1]);
       if (!p || (media[2] && (!p.recipients.length || !p.original_key))) throw new Failure(404,"Photo not found.");
       const file = await env.MEDIA.get(media[2] ? p.original_key! : p.preview_key);
       if (!file) throw new Failure(404,"Photo not found.");
@@ -156,6 +161,7 @@ async function route(request: Request, env: Env) {
       if (media[2]) headers.set("Content-Disposition",`attachment; filename="${p.filename.replace(/[^a-zA-Z0-9._-]/g,"_")}"`);
       return new Response(file.body,{headers});
     }
+    if (i.edition_year !== 2026) throw new Failure(404,"Photo not found.");
     const p = await env.DB.prepare("SELECT * FROM photos WHERE id=?1 AND (invite_id IS NULL OR invite_id=?2)")
       .bind(media[1], i.id).first<Photo>();
     if (!p || (media[2] && (!p.invite_id || !p.original_key))) throw new Failure(404, "Photo not found.");

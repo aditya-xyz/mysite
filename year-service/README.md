@@ -1,4 +1,4 @@
-# Aditya & Angela · Private 2026 pilot
+# Aditya & Angela · Private scrapbooks
 
 Public portfolio: Netlify, unchanged. This separate Cloudflare Worker hosts a
 small invitation flow and sample journal from Aditya & Angela to their friends at:
@@ -113,3 +113,24 @@ available. The public portfolio remains hosted on Netlify. On November 9, 2026,
 the owner changed the domain delegation to Cloudflare; its root and www records
 continue to route directly to Netlify. See admin/README.md for the DNS mapping
 and activation details.
+
+## Additional years
+
+The admin editor supports a separate scrapbook per year, including its own draft,
+publication, photos, and invitations. Use Scrapbooks > New scrapbook, then follow
+Stories, Photos, Sharing, and Review & publish. New years start empty; existing
+2026 links and the pre-publication pilot keep working. Guest access derives the
+year from the invitation. See admin/README.md for the scoped API and migration
+0003/0004 deployment order. The current Worker hostname and D1/R2 resource names retain
+2026 for compatibility; new years do not require new infrastructure.
+
+## People directory
+
+People are persistent across scrapbooks. Adding a person never invites them or
+sends a message. Photos offers a searchable multiselect with quick-add; assignments
+stay in draft. Each scrapbook's Sharing step creates or manages its invitations.
+Publication requires active invitations for everyone assigned personal photos.
+Migration 0004 preserves existing invitation tokens and published content while
+linking invitations to directory people. See admin/README.md for compatibility
+and phone-change behavior. Production migration/deployment is separate from the
+local design preview.

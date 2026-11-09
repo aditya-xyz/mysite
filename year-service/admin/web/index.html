@@ -1,9 +1,24 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#202529"><meta name="robots" content="noindex,nofollow"><title>Aditya · Private dashboard</title><link rel="stylesheet" href="/style.css"><script src="/app.js" type="module"></script></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0c0f12"><meta name="robots" content="noindex,nofollow"><title>Aditya · Workspace</title><link rel="stylesheet" href="/style.css"><script src="/app.js" type="module"></script></head>
 <body>
-  <aside class="sidebar"><a class="brand" href="/">aditya<span>.</span></a><p class="eyebrow">A private workspace</p><nav aria-label="Dashboard"><button data-view="home" aria-current="page">Overview <span>↗</span></button><button data-view="story">Scrapbook <span>2026</span></button><button data-view="people">People & invitations</button></nav><div class="sidebar-bottom"><span class="status-dot"></span> Only you have access<br><a href="/cdn-cgi/access/logout">Sign out</a></div></aside>
-  <div class="workspace"><header><span id="breadcrumb">Your workspace</span><span class="private-label">Private · Aditya</span></header><main id="app"><h1>A little space<br>for <em>everything.</em></h1><p>Opening your dashboard…</p></main></div>
+  <a class="skip-link" href="#app">Skip to content</a>
+  <button class="nav-backdrop" id="nav-backdrop" aria-label="Close navigation" hidden></button>
+  <aside class="sidebar" id="sidebar" aria-label="Workspace navigation">
+    <a class="brand" href="#home"><span class="brand-mark">a.</span><span>Aditya<span class="brand-subtitle">Personal workspace</span></span></a>
+    <button id="nav-close" class="icon-button nav-dismiss" aria-label="Close navigation">×</button>
+    <nav aria-label="Workspace">
+      <a href="#home" data-view="home" aria-current="page"><span data-icon="home"></span>Overview</a>
+      <p class="nav-group">Creative</p>
+      <a href="#scrapbooks" data-view="scrapbooks"><span data-icon="photos"></span>Scrapbooks</a>
+      <a href="#articles" data-view="articles"><span data-icon="write"></span>Articles</a>
+      <a href="#people" data-view="directory"><span data-icon="people"></span>People</a>
+      <p class="nav-group">System</p>
+      <a href="#server" data-view="server"><span data-icon="server"></span>Home Server</a>
+    </nav>
+    <div class="sidebar-bottom"><div class="owner-avatar">AP</div><div><strong>Aditya Patil</strong><span>Private workspace</span></div><a href="/cdn-cgi/access/logout" aria-label="Sign out" title="Sign out"><span data-icon="logout"></span></a></div>
+  </aside>
+  <div class="workspace"><header class="workspace-header"><div class="header-location"><button id="nav-toggle" class="icon-button nav-toggle" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false"><span data-icon="menu"></span></button><span id="breadcrumb">Workspace / Overview</span></div><span class="private-label"><span data-icon="lock"></span> Only you</span></header><main id="app" tabindex="-1"><h1>Opening your workspace…</h1><p class="lede">Loading your tasks and saved draft.</p></main></div>
   <div id="toast" role="status" aria-live="polite"></div>
   <dialog id="modal"><div id="modal-content"></div><button type="button" class="icon-button modal-close" aria-label="Close dialog">×</button></dialog>
 </body></html>

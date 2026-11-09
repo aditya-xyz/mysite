@@ -1,4 +1,4 @@
-# Private dashboard and 2026 editor
+# Private dashboard and scrapbook editor
 
 The separate `aditya-private-admin` Worker is the private dashboard. It shares
 D1/R2 bindings with the guest service but has no Twilio credentials and no SMS
@@ -36,8 +36,13 @@ Use Node 22.13 or later. From year-service:
 - npm run check
 - npm test
 - npm run db:remote
-- npm run deploy (guest compatibility with publications)
+- npm run deploy (guest compatibility with per-year publications)
 - npm run admin:deploy
+
+Apply migrations 0003 and 0004 first, then deploy the guest Worker before the admin Worker.
+Migration 0003 adds year indexes. Migration 0004 creates persistent People and
+links invitations by phone, without rewriting existing content, tokens, or sessions. If preexisting duplicate
+phones block the index, investigate them rather than deleting records.
 
 The generated admin/web/app.js is ignored; the build script bundles the source
 from admin/client/app.js. Worker assets always run through the auth gate first.
@@ -75,14 +80,61 @@ custom-domain binding or bypass its Access policy.
 
 ## Editor behavior
 
-Overview shows the 2026 draft and a deliberately unconnected home-server card.
-Story edits the title, authors, introduction, opening note, shared chapter title,
-and up to 20 stories. Photos supports original uploads, captions, accessible
+The sidebar contains Overview; Creative > Scrapbooks, Articles, and People; and System >
+Home Server. It stays the same inside every workspace. Overview contains only
+three summary rows (Scrapbooks, Home server, Articles), each with View workspace.
+The Home server row keeps its not-connected state; Articles is a not-set-up
+workspace with no editing or publishing backend yet.
+
+The Scrapbooks workspace contains the collection. New scrapbook asks
+for a year (2000–2100), title, and authors, then creates one private draft for that
+year. Duplicate years are rejected atomically. It starts with default introductory
+text and no photos, stories, or invitations; nothing is copied from another year.
+Titles and authors stay editable; the year identifies the scrapbook.
+
+Opening a scrapbook reveals a year selector in the main content area and a guided flow: Write stories,
+Manage photos, Sharing, then Review & publish. Save & continue
+advances through content steps. The step indicator lets you revisit any step;
+people can be added globally or directly from a personal photo. Tasks use URLs
+such as `#scrapbooks/2027/photos`. Browser Back/Forward and year switches preserve
+unsaved drafts in memory. Reloading discards unsaved edits, with a warning that
+also covers changes cached in other years. The phone drawer supports focus
+management, close, backdrop dismissal, and Escape.
+
+All scrapbook navigation stays in the main content area, including the collection
+link, year switcher, and creation steps. The sidebar highlights Scrapbooks
+throughout editing and creation.
+
+The collection shows each year's draft/publication status and content counts.
+Review links missing details back to the relevant task. Home server is explicitly
+not connected; service health, storage, and backup sections have no simulated data.
+Write stories edits the title, authors, introduction, opening note, shared chapter title,
+and up to 20 stories. Manage photos supports original uploads, captions, accessible
 image descriptions, reordering, and shared or selected-recipient/group access.
-People supports adding/correcting names and phones, local QR generation, link
-rotation, and revocation. Phone changes, link rotation, and revocation terminate
-existing sessions. People/invitation changes take effect immediately; content
-and photo-audience changes remain in draft until publication.
+People is a persistent directory with name/phone search and explicit person
+creation. Adding someone creates no invitation and sends no message. Global
+name edits update their linked invitations. Phone changes atomically end their
+sessions and pending codes across all scrapbooks; invitation tokens stay intact.
+Person edits use optimistic version checks.
+
+Sharing manages each scrapbook's invitations independently: create an invitation
+for an existing person, explicitly replace its link, or revoke its access. It
+shows whether a person is invited and how many draft photos are assigned to them.
+Invitation changes take effect immediately; photo assignments remain draft-only.
+The photo recipient picker searches names/phones, supports multiple chips,
+Arrow/Enter selection, Escape dismissal, and keyboard-accessible quick-add.
+Quick-add keeps the photo's draft edits and selects the new person, without
+inviting them. Uninvited, expired, and revoked recipients are marked on chips;
+review links to Sharing and both client/server block publication until every
+selected photo recipient has an active invitation for this scrapbook. Saving a
+draft with uninvited people remains allowed.
+
+
+Save draft stays on the content-editing and review pages. Publishing is available
+only in Review & publish, with a final confirmation. Unsaved changes or missing
+required details disable publishing; the review checklist links back to the
+relevant task. Sharing has its own immediate-access actions without
+draft/publish buttons. Saving alone never publishes content.
 
 Uploads support JPEG, PNG, and WebP up to 25 MB each. HEIC and SVG aren't
 supported in this first version. The browser generates a JPEG preview up to
@@ -99,8 +151,8 @@ have no originals; assigning them personally won't invent a missing original.
 Saving uses optimistic version checks and never changes published_json.
 Publishing validates the saved draft and writes one immutable manifest snapshot
 atomically in D1, conditional on the reviewed version. Guests only read that
-published snapshot and its allowed media IDs. Before the first publication,
-the old pilot gallery remains available. Current pilot media is imported into
+published snapshot and its allowed media IDs. Before the first 2026 publication,
+the old pilot gallery remains available for 2026 only. Current pilot media is imported into
 the first draft by migration 0002 without changing the published guest view.
 Admin Preview filters the saved draft by recipient and never creates a guest
 session or sends SMS. Guest text is rendered as plain text, not HTML.
@@ -111,6 +163,40 @@ replaces the old one. No invitation delivery or SMS happens from admin actions.
 New phone numbers still need Twilio trial verification until that account is
 upgraded; this provider enrollment cannot be bypassed by the dashboard.
 
+## Multi-year backend
+
+`GET /api/editions` lists scrapbooks. `POST /api/editions` accepts year, title,
+and authors. State, draft, publish, preview, upload, people, and media APIs live
+under `/api/editions/{year}/...`. Every operation checks that the scrapbook exists.
+Draft validation accepts only that year's media and directory person IDs.
+Legacy invitation recipient IDs are resolved only within their original year. Uploads use
+year-prefixed private R2 keys. A phone may have separate invitations in multiple
+years; changing one invitation affects only its own sessions. Original unscoped
+admin API URLs remain bound to 2026 for compatibility with older clients.
+
+`GET/POST /api/contacts` lists or creates directory people. Creation returns a
+person, never an invitation URL. `POST /api/contacts/{id}/details` requires the
+person's version. `POST /api/editions/{year}/invitations` accepts `personId` and
+returns a new scrapbook-specific link only when no invitation exists for that
+person/year. A duplicate request cannot silently rotate their existing token.
+Legacy person/invitation endpoints remain available for older clients.
+
+Migration 0004 groups existing invitations by exact phone, choosing the latest
+year's name for the directory. It adds `invites.person_id` while preserving
+invitation IDs, hashes, expiry/revocation state, sessions, and draft/publication
+JSON. An insert trigger supports existing provisioning scripts; a contact update
+trigger keeps invitation contact details and phone-change session invalidation
+atomic. Published manifests retain legacy recipient IDs; guest authorization
+supports both its own invitation ID and the linked directory person ID, always
+inside its invitation's year. New saved drafts/publications use directory IDs.
+
+Guest APIs derive the year from the authenticated invitation, never a browser
+parameter. Each year reads its own published manifest. Only 2026 retains the
+pre-publication pilot fallback. New unpublished scrapbooks cannot expose pilot
+media or send verification texts. Opening an invitation clears any previous guest
+session cookie to avoid opening the wrong year. Existing invitation URLs, Worker
+hostnames, and storage resource names remain unchanged.
+
 ## Checks
 
 The integration suite runs real local Workers/D1/R2 with signed test identities
@@ -120,6 +206,22 @@ private previews, byte-preserving originals, shared versus personal/group
 permissions, publication isolation, phone changes, link rotation, and revocation.
 The browser editor was checked at desktop and 390px phone widths using an
 isolated fixture with fake people; it never queried production personal data.
+The navigation redesign was also checked at desktop and the 393px iPhone preset,
+including draft retention through Back, required-detail publication blockers,
+save-and-preview, and the mobile drawer. These browser checks used local test data.
+
+Multi-year checks also cover creating 2027, switching years with unsaved edits,
+Save & continue, the collection, and the 393px phone setup page. Integration tests
+cover concurrent creation, invalid years, per-year versions and publication,
+cross-year media/recipient denial, unpublished guest isolation, original-byte
+preservation, and existing 2026 compatibility.
+
+People migration tests additionally verify untouched tokens, sessions, manifests,
+and original bytes; deduplication by phone; explicit invitation creation; draft
+assignment without invitation; publication blocking; optimistic edits; global
+phone-change invalidation; and legacy invitation/recipient compatibility. Browser
+checks use fake contacts and cover desktop/iPhone chips, keyboard selection,
+quick-add, removal, search, saved assignments, and review warnings.
 
 A local-only preview harness is in .private/preview-admin.mjs. It creates an
 ephemeral test identity and fake in-memory database, binds localhost only, and

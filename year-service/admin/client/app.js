@@ -1,40 +1,192 @@
 import QRCode from 'qrcode';
+import {peoplePickerMarkup,bindPeoplePicker} from './people-picker.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal'),modalContent=document.querySelector('#modal-content');
-let state,view='home',dirty=false,busy=false,previewRecipient='',previewData=null,personalModes=new Set(),inviteData,editGeneration=0;
+let state,view=routeFromHash().view,editions=[],contacts=[],draftCache=new Map(),navigationGeneration=0,pendingRequests=0,dirty=false,busy=false,previewRecipient='',previewData=null,personalModes=new Set(),inviteData,editGeneration=0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const byId=id=>document.getElementById(id);
-async function api(path,data){
+async function requestApi(path,data){
   const multipart=data instanceof FormData;
   const response=await fetch('/api/'+path,data===undefined?{}:{method:'POST',headers:multipart?{}:{'Content-Type':'application/json'},body:multipart?data:JSON.stringify(data)});
   let result;try{result=await response.json();}catch{throw new Error('Your sign-in may have expired. Refresh this page to sign in again.');}
   if(!response.ok)throw new Error(result.error||'Something went wrong. Please try again.');return result;
 }
-let toastTimer;
+async function api(path,data){
+  if(!state)throw new Error('Choose a scrapbook first.');
+  pendingRequests++;updateBadge();
+  try{return await requestApi(`editions/${state.year}/${path}`,data);}
+  finally{pendingRequests--;updateBadge();}
+}
+const editionViews=['story','photos','sharing','preview'];
+function taskHref(task,year=state?.year){if(task==='directory')return '#people';return editionViews.includes(task)?`#scrapbooks/${year}/${task}`:'#'+task;}
+function rememberDraft(){updateEditionSummary();if(state)draftCache.set(state.year,{state,dirty,personalModes:new Set(personalModes),editGeneration,previewData,previewRecipient});}
+function updateEditionSummary(){
+  if(!state)return;
+  const summary=editions.find(e=>e.year===state.year);
+  if(summary)Object.assign(summary,{title:state.draft.title,authors:state.draft.authors,version:state.version,publishedVersion:state.publishedVersion,publishedAt:state.publishedAt,photoCount:state.draft.photos.length,storyCount:state.draft.stories.length,peopleCount:state.people.length});
+}
+let toastTimer,modalReturnFocus;
 function toast(text){const el=byId('toast');el.textContent=text;el.dataset.visible='true';clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.dataset.visible='false',6500);}
 function mark(){editGeneration++;dirty=true;previewData=null;updateBadge();}
-function updateBadge(){const el=byId('draft-badge');if(el){el.textContent=dirty?'Unsaved changes':state.publishedVersion===state.version?'Published':'Saved draft';el.classList.toggle('changed',dirty);}document.querySelectorAll('[data-busy]').forEach(b=>b.disabled=busy);}
-async function load(){state=await api('state');dirty=false;personalModes=new Set(state.draft.photos.filter(p=>p.recipients.length).map(p=>p.id));}
+const icons={
+  home:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  write:'<path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m13 6 5 5"/>',
+  photos:'<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+  people:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/>',
+  review:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2m-7 9 3 3 5-6"/>',
+  server:'<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M12 6.5h5M12 17.5h5"/>',
+  lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4m7 14 5-5-5-5M9 12h12"/>',
+  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+  arrow:'<path d="M5 12h14m-6-6 6 6-6 6"/>',
+  check:'<path d="m5 12 4 4L19 6"/>'
+};
+const icon=name=>`<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]||icons.home}</svg>`;
+const pages={
+  home:{title:'Overview',section:'Workspace'},
+  scrapbooks:{title:'Scrapbooks',section:'Creative'},
+  articles:{title:'Articles',section:'Creative'},
+  new:{title:'Create a scrapbook',section:'Scrapbooks'},
+  story:{title:'Write stories',section:'Scrapbook',description:'Set the scene, write an opening note, and add the moments you want to share.'},
+  photos:{title:'Manage photos',section:'Scrapbook',description:'Upload originals, arrange your photos, and decide who can see each one.'},
+  directory:{title:'People',section:'Creative',description:'Add someone once. Choose what to share with them in each scrapbook.'},
+  sharing:{title:'Sharing',section:'Scrapbook',description:'Create scrapbook invitations for people in your directory. Photo assignments alone don’t grant access.'},
+  preview:{title:'Review & publish',section:'Scrapbook',description:'Check your saved draft through a friend’s eyes before sharing it.'},
+  server:{title:'Home server',section:'System'}
+};
+function routeFromHash(){
+  const route=location.hash.slice(1),match=/^scrapbooks\/(\d{4})\/(story|photos|people|sharing|preview)$/.exec(route);
+  if(match)return {view:match[2]==='people'?'sharing':match[2],year:Number(match[1])};
+  if(route==='people')return {view:'directory'};
+  if(['story','photos','sharing','preview'].includes(route))return {view:route,year:2026};
+  return {view:['home','scrapbooks','articles','directory','new','server'].includes(route)?route:'home'};
+}
+function invitationFor(id){return state?.people.find(p=>p.person_id===id);}
+function accessStatus(id){const invitation=invitationFor(id);return !invitation?'Not invited':invitation.revoked_at?'Revoked':invitation.expires_at<=Date.now()/1000?'Expired':'Invited';}
+function missingInvitations(){return [...new Set(state.draft.photos.flatMap(p=>p.recipients))].filter(id=>accessStatus(id)!=='Invited');}
+async function contactApi(path='',data){pendingRequests++;updateBadge();try{return await requestApi('contacts'+path,data);}finally{pendingRequests--;updateBadge();}}
+function updateContacts(person){
+  contacts=[...contacts.filter(p=>p.id!==person.id),person].sort((a,b)=>a.name.localeCompare(b.name));
+  const states=new Set([state,...[...draftCache.values()].map(c=>c.state)].filter(Boolean));
+  for(const cached of states)cached.people=cached.people.map(invite=>invite.person_id===person.id?{...invite,name:person.name,phone:person.phone}:invite);
+  previewData=null;for(const cached of draftCache.values())cached.previewData=null;
+}
+function draftStatus(){return dirty?'Unsaved changes':state.publishedVersion===state.version?'Published':'Saved draft';}
+function draftIssues(){
+  const d=state.draft,issues=[];
+  const descriptions=d.photos.filter(p=>!p.alt.trim()).length;
+  const recipients=d.photos.filter(p=>personalModes.has(p.id)&&!p.recipients.length).length;
+  const stories=d.stories.filter(s=>!s.title.trim()||!s.body.trim()).length;
+  if(!d.photos.length)issues.push({view:'photos',text:'Add at least one photo'});
+  if(descriptions)issues.push({view:'photos',text:`Add descriptions to ${descriptions} photo${descriptions===1?'':'s'}`});
+  if(recipients)issues.push({view:'photos',text:`Choose recipients for ${recipients} personal photo${recipients===1?'':'s'}`});
+  if(stories)issues.push({view:'story',text:`Finish ${stories} stor${stories===1?'y':'ies'}`});
+  if(['title','authors','intro','note','sharedTitle'].some(key=>!d[key].trim()))issues.push({view:'story',text:'Complete the edition details'});
+  const missing=missingInvitations();
+  if(missing.length)issues.push({view:'sharing',text:`Invite ${missing.length} selected ${missing.length===1?'person':'people'} to this scrapbook`});
+  return issues;
+}
+function updateBadge(){
+  if(!state)return;
+  const el=byId('draft-badge');if(el){el.textContent=draftStatus();el.classList.toggle('changed',dirty);}
+  document.querySelectorAll('[data-busy]').forEach(b=>b.disabled=busy||pendingRequests>0);
+  const publish=byId('publish');if(publish)publish.disabled=busy||pendingRequests>0||dirty||draftIssues().length>0;
+}
+async function load(year){
+  const cached=draftCache.get(year);
+  if(cached){({state,dirty,personalModes,editGeneration,previewData,previewRecipient}=cached);return;}
+  state=await requestApi(`editions/${year}/state`);dirty=false;editGeneration=0;previewRecipient='';previewData=null;
+  personalModes=new Set(state.draft.photos.filter(p=>p.recipients.length).map(p=>p.id));
+}
 function field(label,key,value,textarea=false,extra=''){
   return `<label class="field"><span>${esc(label)}</span>${textarea?`<textarea data-field="${key}" ${extra}>${esc(value)}</textarea>`:`<input data-field="${key}" value="${esc(value)}" ${extra}>`}</label>`;
 }
-function tabs(){return `<nav class="tabs" aria-label="2026 editor">${[['story','Story'],['photos','Photos'],['people','People & invitations'],['preview','Preview']].map(([id,label])=>`<button data-view="${id}" ${view===id?'aria-current="page"':''}>${label}</button>`).join('')}</nav>`;}
-function head(){return `<div class="page-head"><div><p class="kicker">Scrapbook · 2026</p><h1>A year, <em>together.</em></h1><span id="draft-badge" class="badge"></span></div><div class="actions"><button class="secondary" id="save-draft" data-busy>Save draft</button><button class="button" id="publish" data-busy>Publish…</button></div></div>${tabs()}`;}
-function home(){return `<p class="kicker">Your private dashboard</p><h1>A little space<br>for <em>everything.</em></h1><p class="lede">Your stories, your people, and the things you’re building. Start with a little of your year.</p><div class="metrics"><div class="metric"><strong>${state.draft.photos.length}</strong><span>Photos in the draft</span></div><div class="metric"><strong>${state.people.length}</strong><span>People invited</span></div><div class="metric"><strong>${state.draft.stories.length}</strong><span>Stories to share</span></div></div><section class="feature"><div><p class="kicker">Aditya & Angela</p><h2>Scrapbook 2026</h2><p>${state.publishedAt?'Published '+new Date(state.publishedAt*1000).toLocaleDateString()+'. Changes stay in draft until you publish again.':'Your editor is ready. The existing pilot remains live until you publish your first edition.'}</p></div><button class="button" data-view="story">Open the editor →</button></section><section class="feature"><div><p class="kicker">A home for what’s next</p><h2>Home server</h2><p>Not connected yet. This is where service health, storage, and backup status will live.</p></div><span class="badge">Later</span></section>`;}
-function story(){const d=state.draft;return `${head()}<div class="editor-width"><div class="notice">Saving keeps your changes private. Publishing updates what your invited friends can see.</div><div class="form-grid">${field('Edition title','title',d.title,false,'maxlength="150"')}${field('From','authors',d.authors,false,'maxlength="100"')}</div>${field('Invitation introduction','intro',d.intro,true,'maxlength="1000"')}${field('Opening note','note',d.note,true,'class="long-note" maxlength="10000"')}${field('Shared chapter title','sharedTitle',d.sharedTitle,false,'maxlength="150"')}<div class="row-head"><div><h2>Stories</h2><p class="hint">Small updates, adventures, or a moment worth remembering.</p></div><button class="secondary" id="add-story">Add a story</button></div>${d.stories.map((s,i)=>`<article class="story-card" data-story="${esc(s.id)}"><div class="row-head"><span class="kicker">Story ${i+1}</span><button class="quiet danger" data-remove-story="${esc(s.id)}">Remove from draft</button></div>${field('Title','story-title',s.title,false,'maxlength="150"')}${field('Story','story-body',s.body,true,'maxlength="10000"')}</article>`).join('')||'<p class="hint">No stories yet. Your opening note and photos are enough to begin.</p>'}</div>`;}
-function photoCard(p,i){const personal=personalModes.has(p.id),hasOriginal=!!state.media.find(m=>m.id===p.id)?.has_original;return `<article class="photo-editor" data-photo="${esc(p.id)}"><img src="/api/media/${esc(p.id)}/preview" alt="${esc(p.alt||'Photo awaiting description')}" loading="lazy"><div class="photo-fields"><div class="photo-tools"><div class="actions"><button class="icon-button" data-move="up" aria-label="Move photo ${i+1} earlier" ${i===0?'disabled':''}>↑</button><button class="icon-button" data-move="down" aria-label="Move photo ${i+1} later" ${i===state.draft.photos.length-1?'disabled':''}>↓</button></div><button class="quiet danger" data-remove-photo>Remove from draft</button></div>${field('Caption','caption',p.caption,false,'maxlength="500"')}${field('Describe the photo for accessibility','alt',p.alt,false,'maxlength="500"')}<label class="field"><span>Who can see this photo?</span><span class="select-control"><select data-audience><option value="shared" ${!personal?'selected':''}>Everyone invited</option><option value="personal" ${personal?'selected':''}>Selected people</option></select></span></label><p class="hint">${personal?(hasOriginal?'Only selected people can view and save the original.':'Only selected people can view this sample. No original is available.'):'Everyone invited can view the preview. The original stays private.'}</p>${personal?`<div class="people-checks">${state.people.map(person=>`<label class="check"><input type="checkbox" data-recipient="${esc(person.id)}" ${p.recipients.includes(person.id)?'checked':''}>${esc(person.name)}${person.revoked_at?' · revoked':''}</label>`).join('')||'<p class="hint">Add a person first, then select them here.</p>'}</div>`:''}</div></article>`;}
-function photos(){const used=new Set(state.draft.photos.map(p=>p.id)),unused=state.media.filter(m=>!used.has(m.id));return `${head()}<div class="row-head"><div><h2>Photos & little moments</h2><p class="hint">Arrange the photos, add their stories, and choose who gets each one.</p></div><span class="badge">${state.draft.photos.length} photos</span></div><div class="upload-zone"><div><p>Add original photos</p><span class="hint">JPEG, PNG, or WebP · up to 25 MB each<br>Originals keep their metadata. Previews are smaller and omit EXIF.</span></div><input id="upload" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple aria-label="Upload original photos"></div><p id="upload-status" role="status"></p><div class="photo-grid">${state.draft.photos.map(photoCard).join('')||'<div class="empty">Your first photo goes here.</div>'}</div>${unused.length?`<section class="library"><h3>Already uploaded</h3><p class="hint">Removed photos stay here so you can add them back. They aren’t published unless they’re in the draft.</p><div class="library-items">${unused.map(m=>`<button data-add-media="${esc(m.id)}" aria-label="Add ${esc(m.filename)} to draft"><img src="/api/media/${esc(m.id)}/preview" alt="">${esc(m.filename)}<br>+ Add to draft</button>`).join('')}</div></section>`:''}`;}
-function people(){return `${head()}<div class="row-head"><div><h2>The people in your world</h2><p class="hint">Each invitation is tied to one phone. Creating a link never sends a text.</p></div><button class="secondary" id="add-person">Add a person</button></div><div class="notice">People and invitation changes take effect immediately. Your SMS provider is still on a trial; new recipients must be verified in Twilio before they can receive login codes.</div><div class="people-list">${state.people.map(p=>`<article class="person"><div><strong>${esc(p.name)}</strong> <span class="badge">${p.revoked_at?'Revoked':p.expires_at<Date.now()/1000?'Expired':'Active'}</span><p>${esc(p.phone)}</p></div><div class="actions"><button class="quiet" data-edit-person="${esc(p.id)}">Edit</button><button class="secondary" data-invite="${esc(p.id)}">Create new invitation</button>${!p.revoked_at?`<button class="quiet danger" data-revoke="${esc(p.id)}">Revoke access</button>`:''}</div></article>`).join('')||'<div class="empty">Add someone to make their invitation.</div>'}</div>`;}
-function preview(){return `${head()}<h2>Through a friend’s eyes</h2><p class="hint">This is an admin-only preview of the saved draft. It doesn’t send a text or create a friend’s session.</p><label class="field editor-width"><span>Preview for</span><span class="select-control"><select id="preview-person"><option value="">Shared photos only</option>${state.people.map(p=>`<option value="${esc(p.id)}" ${previewRecipient===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></span></label><button class="secondary" id="load-preview">${dirty?'Save draft & preview':'Open preview'}</button><div id="edition-preview">${previewData?previewMarkup(previewData):''}</div>`;}
-function previewMarkup(d){const chapter=personal=>d.photos.filter(p=>p.personal===personal).map(p=>`<figure><img src="${esc(p.src)}" alt="${esc(p.alt)}"><figcaption>${esc(p.caption)}${p.canSave?' · Original can be saved':''}</figcaption></figure>`).join('');return `<article class="preview"><p class="kicker">2026 · ${esc(d.authors)}</p><h1>${esc(d.title)}</h1><p>Hey ${esc(d.name)}, we’re glad you’re here.</p><p class="prose">${esc(d.note)}</p><p><em>With love, ${esc(d.authors)}</em></p>${d.photos.some(p=>p.personal)?`<h2>For you, ${esc(d.name)}</h2><div class="gallery">${chapter(true)}</div>`:''}<h2>${esc(d.sharedTitle)}</h2><div class="gallery">${chapter(false)}</div>${d.stories.map(s=>`<section><h2>${esc(s.title)}</h2><p class="prose">${esc(s.body)}</p></section>`).join('')}</article>`;}
-function render(){
-  document.querySelectorAll('.sidebar [data-view]').forEach(b=>b.setAttribute('aria-current',b.dataset.view===view||(b.dataset.view==='story'&&['photos','preview'].includes(view))?'page':'false'));
-  byId('breadcrumb').textContent=view==='home'?'Your workspace':'Scrapbook / 2026';
-  app.innerHTML=({home,story,photos,people,preview}[view]||home)();updateBadge();bind();
+function head(){
+  const p=pages[view],editing=['story','photos'].includes(view),review=view==='preview';
+  return `${editionViews.includes(view)?scrapbookContext():''}<div class="page-head"><div><p class="kicker">${editionViews.includes(view)?'Scrapbook / '+state.year:p.section}</p><h1>${p.title}</h1><p class="lede">${p.description||''}</p></div>${editing||review?`<div class="page-actions"><span id="draft-badge" class="badge"></span><div class="actions"><button class="secondary" id="save-draft" data-busy>Save draft</button>${review?'<button class="button" id="publish" data-busy>Publish edition…</button>':`<a class="button" href="${taskHref('preview')}" data-view="preview">Review & publish ${icon('arrow')}</a>`}</div></div>`:view==='directory'?'<button class="button" id="add-contact">+ Add a person</button>':''}</div>${editionViews.includes(view)?flowSteps():''}`;
 }
-function navigate(next){if(busy)return;view=next;render();window.scrollTo(0,0);}
+function editionCard(e){
+  const cached=draftCache.get(e.year),unsaved=cached?.dirty,status=unsaved?'Unsaved changes':e.publishedVersion===e.version?'Published':'Draft';
+  return `<a class="panel scrapbook-card" href="${taskHref('story',e.year)}" data-view="story" data-year="${e.year}"><div class="panel-heading"><span class="year-label">${e.year}</span><span class="badge ${status==='Published'?'active-badge':unsaved?'changed':''}">${status}</span></div><h2>${esc(e.title||'Untitled scrapbook')}</h2><p>${esc(e.authors)}</p><div class="scrapbook-card-bottom"><span>${e.photoCount} photos · ${e.storyCount} stories · ${e.peopleCount} people</span><span>Open scrapbook ${icon('arrow')}</span></div></a>`;
+}
+function workspaceRow(target,title,description,iconName,badge=''){
+  return `<section class="panel system-summary"><span class="task-icon">${icon(iconName)}</span><div><div class="inline-heading"><h2>${title}</h2>${badge?`<span class="badge">${badge}</span>`:''}</div><p>${description}</p></div><a class="quiet" href="#${target}" data-view="${target}" aria-label="View ${title} workspace">View workspace ${icon('arrow')}</a></section>`;
+}
+function home(){return `<div class="page-head"><div><h1>Overview</h1></div></div><div class="workspace-list">${workspaceRow('scrapbooks','Scrapbooks','Create a yearly scrapbook and share it with your people.','photos')}${workspaceRow('server','Home server','Service health, storage, and backups will have a home here.','server','Not connected')}${workspaceRow('articles','Articles','A space to write and manage your blog posts.','write','Not set up')}</div>`;}
+function scrapbookContext(){return `<div class="scrapbook-context"><a class="quiet" href="#scrapbooks" data-view="scrapbooks">${icon('arrow')} All scrapbooks</a><label class="scrapbook-switcher"><span>Editing scrapbook</span><span class="select-control"><select id="edition-picker" aria-label="Choose a scrapbook">${editions.map(e=>`<option value="${e.year}" ${state.year===e.year?'selected':''}>${e.year} · ${esc(e.title||'Untitled scrapbook')}</option>`).join('')}</select></span></label></div>`;}
+function articles(){return `${head()}<section class="panel server-empty"><span class="server-illustration">${icon('write')}</span><span class="badge">Not set up</span><h2>A place for your writing.</h2><p class="lede">Your article workspace will live here.<br>Drafting and publishing aren’t connected yet.</p></section>`;}
+function scrapbooks(){return `<div class="page-head"><div><p class="kicker">Your collection</p><h1>Scrapbooks</h1><p class="lede">One scrapbook for each year. Open an existing one or start the next.</p></div></div><div class="scrapbook-grid">${editions.map(editionCard).join('')}<a class="panel new-scrapbook-card" href="#new" data-view="new"><span>+</span><strong>Create a scrapbook</strong><p>Start a new year with an empty draft.</p></a></div>`;}
+function newScrapbook(){
+  let year=new Date().getFullYear();while(editions.some(e=>e.year===year)&&year<=2100)year++;
+  year=Math.min(year,2100);
+  return `${head()}<div class="creation-grid"><form id="create-scrapbook" class="panel form-panel"><div class="section-heading"><h2>Start with the basics</h2><p class="hint">You can edit the title and authors later. The year identifies this scrapbook.</p></div><label class="field"><span>Year</span><input name="year" type="number" min="2000" max="2100" step="1" value="${year}" required></label><label class="field"><span>Scrapbook title</span><input name="title" maxlength="150" value="Our year, ${year}." required></label><label class="field"><span>From</span><input name="authors" maxlength="100" value="Aditya & Angela" required></label><div class="actions"><button class="button" type="submit">Create draft & continue ${icon('arrow')}</button><a href="#scrapbooks" data-view="scrapbooks" class="quiet">Cancel</a></div><p class="error" id="creation-error" role="alert"></p></form><aside class="panel creation-guide"><p class="kicker">Build it step by step</p><h2>A year worth keeping.</h2><ol><li><strong>Write your stories</strong><span>Add an opening note and the moments that matter.</span></li><li><strong>Add your photos</strong><span>Arrange your memories and choose who sees each one.</span></li><li><strong>Choose what to share</strong><span>Create scrapbook invitations from your People directory.</span></li><li><strong>Review & publish</strong><span>See it through a friend’s eyes, then share when ready.</span></li></ol><p class="hint">Starts with no photos, stories, or invitations. Existing scrapbooks stay unchanged.</p></aside></div>`;
+}
+function flowSteps(){return `<nav class="flow-steps" aria-label="Scrapbook creation steps">${[['story','Stories'],['photos','Photos'],['sharing','Sharing'],['preview','Review & publish']].map(([task,label],i)=>`<a href="${taskHref(task)}" data-view="${task}" ${view===task?'aria-current="step"':''}><span>${i+1}</span>${label}</a>`).join('')}</nav>`;}
+function continueFlow(next,save=true){return `<div class="flow-footer"><a class="quiet" href="#scrapbooks" data-view="scrapbooks">${icon('arrow')} All scrapbooks</a>${save?`<button class="button" data-continue="${next}" data-busy>Save & continue to ${next==='photos'?'photos':'sharing'} ${icon('arrow')}</button>`:`<a class="button" href="${taskHref(next)}" data-view="${next}">Continue to review ${icon('arrow')}</a>`}</div>`;}
+function story(){const d=state.draft;return `${head()}<div class="notice">You’re editing a private draft. Save your work, then go to Review & publish when it’s ready.</div><div class="editor-width"><section class="panel form-panel"><div class="section-heading"><h2>Edition details</h2><p class="hint">The introduction your friends see when they open the scrapbook.</p></div><div class="form-grid">${field('Edition title','title',d.title,false,'maxlength="150"')}${field('From','authors',d.authors,false,'maxlength="100"')}</div>${field('Invitation introduction','intro',d.intro,true,'maxlength="1000"')}${field('Opening note','note',d.note,true,'class="long-note" maxlength="10000"')}${field('Shared chapter title','sharedTitle',d.sharedTitle,false,'maxlength="150"')}</section><section class="panel form-panel"><div class="row-head"><div><h2>Stories</h2><p class="hint">A trip, a milestone, or an ordinary day worth remembering.</p></div><button class="secondary" id="add-story" ${d.stories.length>=20?'disabled':''}>+ Add a story</button></div>${d.stories.map((s,i)=>`<article class="story-card" data-story="${esc(s.id)}"><div class="row-head"><span class="kicker">Story ${i+1}</span><button class="quiet danger" data-remove-story="${esc(s.id)}">Remove from draft</button></div>${field('Title','story-title',s.title,false,'maxlength="150"')}${field('Story','story-body',s.body,true,'maxlength="10000"')}</article>`).join('')||'<div class="empty">No stories yet.<span>Your opening note and photos are enough to start. Add a story whenever you have one.</span></div>'}</section></div>${continueFlow('photos')}`;}
+function photoCard(p,i){const personal=personalModes.has(p.id),hasOriginal=!!state.media.find(m=>m.id===p.id)?.has_original;return `<article class="photo-editor" data-photo="${esc(p.id)}"><img src="/api/editions/${state.year}/media/${esc(p.id)}/preview" alt="${esc(p.alt||'Photo awaiting description')}" loading="lazy"><div class="photo-fields"><div class="photo-tools"><div class="actions"><button class="icon-button" data-move="up" aria-label="Move photo ${i+1} earlier" ${i===0?'disabled':''}>↑</button><button class="icon-button" data-move="down" aria-label="Move photo ${i+1} later" ${i===state.draft.photos.length-1?'disabled':''}>↓</button></div><button class="quiet danger" data-remove-photo>Remove from draft</button></div>${field('Caption','caption',p.caption,false,'maxlength="500"')}${field('Describe the photo for accessibility','alt',p.alt,false,'maxlength="500"')}<label class="field"><span>Who can see this photo?</span><span class="select-control"><select data-audience><option value="shared" ${!personal?'selected':''}>Everyone invited</option><option value="personal" ${personal?'selected':''}>Selected people</option></select></span></label><p class="hint">${personal?(hasOriginal?'Only selected people can view and save the original.':'Only selected people can view this sample. No original is available.'):'Everyone invited can view the preview. The original stays private.'}</p>${personal?peoplePickerMarkup(p.id,`People for photo ${i+1}`):''}</div></article>`;}
+function photos(){const used=new Set(state.draft.photos.map(p=>p.id)),unused=state.media.filter(m=>!used.has(m.id));return `${head()}<div class="row-head"><div><h2>Photos & little moments</h2><p class="hint">Arrange the photos, add their stories, and choose who gets each one.</p></div><span class="badge">${state.draft.photos.length} photos</span></div><div class="upload-zone"><div><p>Add original photos</p><span class="hint">JPEG, PNG, or WebP · up to 25 MB each<br>Originals keep their metadata. Previews are smaller and omit EXIF.</span></div><input id="upload" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple aria-label="Upload original photos"></div><p id="upload-status" role="status"></p><div class="photo-grid">${state.draft.photos.map(photoCard).join('')||'<div class="empty">Your first photo goes here.</div>'}</div>${unused.length?`<section class="library"><h3>Already uploaded</h3><p class="hint">Removed photos stay here so you can add them back. They aren’t published unless they’re in the draft.</p><div class="library-items">${unused.map(m=>`<button data-add-media="${esc(m.id)}" aria-label="Add ${esc(m.filename)} to draft"><img src="/api/editions/${state.year}/media/${esc(m.id)}/preview" alt="">${esc(m.filename)}<br>+ Add to draft</button>`).join('')}</div></section>`:''}${continueFlow('sharing')}`;}
+function directoryRows(query=''){
+  const matches=contacts.filter(p=>(p.name+' '+p.phone).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  return matches.map(p=>`<article class="person"><div class="person-identity"><span class="person-avatar">${esc(p.name.slice(0,1).toUpperCase())}</span><div><strong>${esc(p.name)}</strong><p>${esc(p.phone)}</p></div></div><button class="secondary" data-edit-contact="${esc(p.id)}">Edit details</button></article>`).join('')||'<div class="empty">No people found.<span>Add someone to your directory, or try a different search.</span></div>';
+}
+function directory(){return `${head()}<div class="notice">Adding a person never sends a message or grants scrapbook access. Invitations are managed separately in each scrapbook.</div><section class="panel people-panel"><div class="row-head"><h2>Your people <span class="badge">${contacts.length}</span></h2><label class="directory-search"><span class="sr-only">Search people</span><input id="directory-search" type="search" placeholder="Search people…" autocomplete="off"></label></div><div class="people-list" id="directory-list">${directoryRows()}</div></section>`;}
+function sharingRows(query=''){
+  return contacts.filter(p=>(p.name+' '+p.phone).toLocaleLowerCase().includes(query.toLocaleLowerCase())).map(p=>{
+    const invite=invitationFor(p.id),status=accessStatus(p.id),count=state.draft.photos.filter(photo=>photo.recipients.includes(p.id)).length;
+    return `<article class="person"><div class="person-identity"><span class="person-avatar">${esc(p.name.slice(0,1).toUpperCase())}</span><div><strong>${esc(p.name)}</strong><p>${count?`${count} assigned photo${count===1?'':'s'} · `:''}${esc(p.phone)}</p></div></div><span class="badge ${status==='Invited'?'active-badge':count?'changed':''}">${status}</span><div class="actions">${invite?`<button class="secondary" data-invite="${esc(invite.id)}">Create fresh link</button>${!invite.revoked_at?`<button class="quiet danger" data-revoke="${esc(invite.id)}">Revoke access</button>`:''}`:`<button class="secondary" data-create-invitation="${esc(p.id)}">Create invitation</button>`}</div></article>`;
+  }).join('')||'<div class="empty">No matching people.<span>Add someone in People or directly from a photo.</span></div>';
+}
+function sharing(){return `${head()}<div class="notice">Creating an invitation gives access to this scrapbook and returns a link for you to share. It never sends a text. Twilio trial recipients still need verification in Twilio before receiving login codes.</div><section class="panel people-panel"><div class="row-head"><div><h2>Share with your people</h2><a class="hint" href="#people" data-view="directory">Manage People directory</a></div><label class="directory-search"><span class="sr-only">Find people to invite</span><input id="sharing-search" type="search" placeholder="Search people…" autocomplete="off"></label></div><div class="people-list" id="sharing-list">${sharingRows()}</div></section>${continueFlow('preview',false)}`;}
+function preview(){
+  const issues=draftIssues();
+  return `${head()}<section class="panel review-summary"><div><h2>Publication check</h2><p class="hint">${dirty?'Save your changes to review the latest draft.':state.publishedVersion===state.version?'This saved draft is already published.':state.publishedAt?'Publishing replaces the edition your invited friends see.':'Publish this scrapbook when you’re ready for invited friends to open it.'}</p></div><span class="badge ${issues.length||dirty?'changed':'active-badge'}">${issues.length?'Details needed':dirty?'Save needed':'Ready to review'}</span><div class="review-checks">${issues.length?issues.map(i=>`<a href="${taskHref(i.view)}" data-view="${i.view}">${icon('arrow')}${esc(i.text)}</a>`).join(''):`<span>${icon('check')} ${state.draft.photos.length} photos with descriptions and audiences</span><span>${icon('check')} Edition details complete${state.draft.stories.length?' · '+state.draft.stories.length+' stories':''}</span>`}</div></section><section class="panel preview-panel"><div class="section-heading"><h2>Preview as a friend</h2><p class="hint">Shows the saved draft. No text is sent and no recipient session is created.</p></div><div class="preview-controls"><label class="field"><span>Preview for</span><span class="select-control"><select id="preview-person"><option value="">Shared photos only</option>${contacts.map(p=>`<option value="${esc(p.id)}" ${previewRecipient===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></span></label><button class="secondary" id="load-preview" data-busy>${dirty?'Save draft & preview':'Open preview'}</button></div><div id="edition-preview">${previewData?previewMarkup(previewData):'<div class="empty preview-empty">Choose a recipient and open the preview.<span>Check which photos they’ll see before publishing.</span></div>'}</div></section>`;
+}
+function server(){return `${head()}<div class="panel server-empty"><span class="server-illustration">${icon('server')}</span><span class="badge">Not connected</span><h2>Your home server, at a glance.</h2><p class="lede">A dedicated place for your services, storage, and backups.<br>There’s no server connected yet, so no health data is available.</p><div class="server-capabilities"><div>${icon('server')}<strong>Service health</strong><span>Availability and resource usage</span></div><div>${icon('photos')}<strong>Storage</strong><span>Disk capacity and usage</span></div><div>${icon('review')}<strong>Backups</strong><span>Last run and backup status</span></div></div><p class="hint">Monitoring can be connected here when your home server is ready.</p></div>`;}
+function previewMarkup(d){const chapter=personal=>d.photos.filter(p=>p.personal===personal).map(p=>`<figure><img src="${esc(p.src)}" alt="${esc(p.alt)}"><figcaption>${esc(p.caption)}${p.canSave?' · Original can be saved':''}</figcaption></figure>`).join('');return `<article class="preview"><p class="kicker">${state.year} · ${esc(d.authors)}</p><h1>${esc(d.title)}</h1><p>Hey ${esc(d.name)}, we’re glad you’re here.</p><p class="prose">${esc(d.note)}</p><p><em>With love, ${esc(d.authors)}</em></p>${d.photos.some(p=>p.personal)?`<h2>For you, ${esc(d.name)}</h2><div class="gallery">${chapter(true)}</div>`:''}<h2>${esc(d.sharedTitle)}</h2><div class="gallery">${chapter(false)}</div>${d.stories.map(s=>`<section><h2>${esc(s.title)}</h2><p class="prose">${esc(s.body)}</p></section>`).join('')}</article>`;}
+function render(){
+  updateEditionSummary();
+  document.querySelectorAll('.sidebar [data-view]').forEach(link=>{
+    if(link.dataset.view===view||((view==='new'||editionViews.includes(view))&&link.dataset.view==='scrapbooks'))link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
+  });
+  const section=editionViews.includes(view)?'Scrapbooks / '+state.year:pages[view].section;
+  byId('breadcrumb').textContent=section+' / '+pages[view].title;
+  document.title=pages[view].title+(editionViews.includes(view)?' · '+state.year:'')+' · Aditya';
+  app.innerHTML=({home,scrapbooks,articles,directory,new:newScrapbook,story,photos,sharing,preview,server}[view]||home)();updateBadge();bind();
+}
+function closeNavigation(restoreFocus=false){document.body.classList.remove('nav-open');document.querySelector('.workspace').inert=false;byId('nav-toggle').setAttribute('aria-expanded','false');byId('nav-backdrop').hidden=true;if(restoreFocus)byId('nav-toggle').focus();}
+async function navigate(next,push=true,year=state?.year){
+  if(!pages[next])next='home';
+  if(busy||pendingRequests||modal.open){toast(modal.open?'Close the dialog before switching tasks.':'Wait for the current change to finish.');if(!push)history.replaceState(null,'',taskHref(view));return;}
+  closeNavigation();rememberDraft();const generation=++navigationGeneration;
+  const oldView=view,oldState=state;
+  busy=true;updateBadge();
+  try{
+    if(next==='directory')contacts=(await requestApi('contacts')).people;
+    if(editionViews.includes(next)){
+      year=Number(year||editions[0]?.year);
+      if(!Number.isInteger(year))next='scrapbooks';
+      else if(state?.year!==year)await load(year);
+    }
+    if(generation!==navigationGeneration)return;
+    view=next;
+    const hash=taskHref(next,year);if(push&&location.hash!==hash)history.pushState(null,'',hash);
+    busy=false;render();window.scrollTo(0,0);app.focus({preventScroll:true});
+  }catch(error){view=oldView;state=oldState;history.replaceState(null,'',taskHref(view));toast(error.message);}
+  finally{busy=false;updateBadge();}
+}
 function bind(){
-  app.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
-  byId('save-draft')?.addEventListener('click',()=>saveDraft().catch(e=>toast(e.message)));
+  byId('edition-picker')?.addEventListener('change',event=>{const previous=state.year;navigate(view,true,Number(event.target.value));event.target.value=String(previous);});
+  byId('create-scrapbook')?.addEventListener('submit',async event=>{
+    event.preventDefault();if(busy)return;const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;busy=true;
+    try{
+      const data=Object.fromEntries(new FormData(form));data.year=Number(data.year);
+      const result=await requestApi('editions',data);
+      editions=(await requestApi('editions')).editions;busy=false;await navigate('story',true,result.year);
+    }catch(error){byId('creation-error').textContent=error.message;button.disabled=false;}finally{busy=false;}
+  });
+  app.querySelectorAll('[data-continue]').forEach(button=>button.onclick=async()=>{try{await saveDraft();await navigate(button.dataset.continue);}catch(error){toast(error.message);}});
+
+  byId('save-draft')?.addEventListener('click',()=>saveDraft().then(()=>{if(view==='preview')render();}).catch(e=>toast(e.message)));
   byId('publish')?.addEventListener('click',confirmPublish);
   app.querySelectorAll('[data-field]').forEach(input=>input.oninput=()=>{
     const photo=input.closest('[data-photo]'),story=input.closest('[data-story]');
@@ -47,16 +199,17 @@ function bind(){
   app.querySelectorAll('[data-photo]').forEach(card=>{
     const p=state.draft.photos.find(p=>p.id===card.dataset.photo);
     card.querySelector('[data-audience]').onchange=e=>{if(e.target.value==='personal')personalModes.add(p.id);else{personalModes.delete(p.id);p.recipients=[];}mark();render();};
-    card.querySelectorAll('[data-recipient]').forEach(input=>input.onchange=()=>{p.recipients=input.checked?[...new Set([...p.recipients,input.dataset.recipient])]:p.recipients.filter(id=>id!==input.dataset.recipient);mark();});
+    const picker=card.querySelector('[data-picker]');
+    if(picker)bindPeoplePicker(picker,{people:()=>contacts,selected:()=>p.recipients,status:accessStatus,toggle:id=>{p.recipients=p.recipients.includes(id)?p.recipients.filter(value=>value!==id):[...p.recipients,id];mark();},add:query=>addPerson({photoId:p.id,name:query})});
     card.querySelector('[data-remove-photo]').onclick=()=>{state.draft.photos=state.draft.photos.filter(item=>item.id!==p.id);mark();render();};
     card.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const i=state.draft.photos.indexOf(p),j=i+(b.dataset.move==='up'?-1:1);[state.draft.photos[i],state.draft.photos[j]]=[state.draft.photos[j],state.draft.photos[i]];mark();render();});
   });
   app.querySelectorAll('[data-add-media]').forEach(b=>b.onclick=()=>{state.draft.photos.push({id:b.dataset.addMedia,caption:'',alt:'',recipients:[]});mark();render();});
   byId('upload')?.addEventListener('change',uploadFiles);
-  byId('add-person')?.addEventListener('click',addPerson);
-  app.querySelectorAll('[data-edit-person]').forEach(b=>b.onclick=()=>editPerson(b.dataset.editPerson));
-  app.querySelectorAll('[data-invite]').forEach(b=>b.onclick=()=>confirmInvitation(b.dataset.invite));
-  app.querySelectorAll('[data-revoke]').forEach(b=>b.onclick=()=>confirmRevoke(b.dataset.revoke));
+  byId('add-contact')?.addEventListener('click',()=>addPerson());
+  byId('directory-search')?.addEventListener('input',e=>{byId('directory-list').innerHTML=directoryRows(e.target.value);bindContactActions();});
+  byId('sharing-search')?.addEventListener('input',e=>{byId('sharing-list').innerHTML=sharingRows(e.target.value);bindSharingActions();});
+  bindContactActions();bindSharingActions();
   byId('preview-person')?.addEventListener('change',e=>{previewRecipient=e.target.value;previewData=null;byId('edition-preview').innerHTML='';});
   byId('load-preview')?.addEventListener('click',async()=>{try{if(dirty)await saveDraft();previewData=await api('preview?recipient='+encodeURIComponent(previewRecipient));render();}catch(e){toast(e.message);}});
 }
@@ -64,26 +217,52 @@ async function saveDraft(){
   if(busy)throw new Error('Wait for the current change to finish.');
   if(state.draft.photos.some(p=>personalModes.has(p.id)&&!p.recipients.length))throw new Error('Select at least one person for every personal photo.');
   if(state.draft.photos.some(p=>!p.alt.trim()))throw new Error('Add an accessibility description for each photo before saving.');
-  const saveGeneration=editGeneration;busy=true;updateBadge();try{const result=await api('draft',{draft:state.draft,version:state.version});state.version=result.version;dirty=editGeneration!==saveGeneration;toast('Draft saved. Friends still see the published edition.');}finally{busy=false;updateBadge();}
+  const saveGeneration=editGeneration;busy=true;updateBadge();try{const result=await api('draft',{draft:state.draft,version:state.version});state.version=result.version;dirty=editGeneration!==saveGeneration;updateEditionSummary();toast('Draft saved. Your changes stay private until you publish.');}finally{busy=false;updateBadge();}
 }
-function showModal(html){modalContent.innerHTML=html;if(!modal.open)modal.showModal();}
+function showModal(html){modalContent.innerHTML=html;const title=modalContent.querySelector('h2');if(title){title.id='modal-title';modal.setAttribute('aria-labelledby','modal-title');}if(!modal.open)modal.showModal();}
 document.querySelector('.modal-close').onclick=()=>modal.close();
-modal.addEventListener('close',()=>{inviteData=null;modalContent.innerHTML='';});
+modal.addEventListener('close',()=>{inviteData=null;modalContent.innerHTML='';const restore=modalReturnFocus;modalReturnFocus=null;restore?.();});
 function confirmPublish(){
+  if(busy)return;
+  if(draftIssues().length){toast('Complete the publication check before publishing.');return;}
   if(dirty){toast('Save your draft before publishing.');return;}
-  showModal(`<p class="kicker">Publish 2026</p><h2>Ready to share?</h2><p>Your invited friends will see the saved stories, captions, and photo assignments. Personal photos stay limited to the people you selected.</p><p class="hint">${state.draft.photos.length} photos · ${state.draft.stories.length} stories</p><button class="button" id="confirm-publish">Publish this edition</button><p class="error" id="modal-error"></p>`);
-  byId('confirm-publish').onclick=async e=>{e.target.disabled=true;try{const result=await api('publish',{version:state.version});state.publishedVersion=result.publishedVersion;state.publishedAt=Math.floor(Date.now()/1000);modal.close();render();toast('Your 2026 edition is published.');}catch(error){byId('modal-error').textContent=error.message;e.target.disabled=false;}};
+  showModal(`<p class="kicker">Publish ${state.year}</p><h2>Ready to share?</h2><p>Your invited friends will see the saved stories, captions, and photo assignments. Personal photos stay limited to the people you selected.</p><p class="hint">${state.draft.photos.length} photos · ${state.draft.stories.length} stories</p><button class="button" id="confirm-publish">Publish this edition</button><p class="error" id="modal-error"></p>`);
+  byId('confirm-publish').onclick=async e=>{e.target.disabled=true;try{const result=await api('publish',{version:state.version});state.publishedVersion=result.publishedVersion;state.publishedAt=Math.floor(Date.now()/1000);modal.close();render();updateEditionSummary();toast(`Your ${state.year} scrapbook is published.`);}catch(error){byId('modal-error').textContent=error.message;e.target.disabled=false;}};
 }
-function addPerson(){
-  showModal(`<p class="kicker">Someone in your world</p><h2>Add a person</h2><form id="person-form"><label class="field"><span>Name</span><input name="name" required maxlength="100" autocomplete="off"></label><label class="field"><span>Phone, including country code</span><input name="phone" type="tel" required placeholder="+1…" autocomplete="off"></label><p class="hint">We’ll create their link and QR code. This won’t send a text.</p><button class="button">Create invitation</button><p class="error" id="modal-error"></p></form>`);
-  byId('person-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;const data=Object.fromEntries(new FormData(form));try{const result=await api('people',data);await refreshPeople();await showInvitation(data.name,result.url);}catch(error){byId('modal-error').textContent=error.message;button.disabled=false;}};
+function bindContactActions(){app.querySelectorAll('[data-edit-contact]').forEach(button=>button.onclick=()=>editPerson(button.dataset.editContact));}
+function bindSharingActions(){
+  app.querySelectorAll('[data-create-invitation]').forEach(button=>button.onclick=()=>createInvitation(button.dataset.createInvitation));
+  app.querySelectorAll('[data-invite]').forEach(button=>button.onclick=()=>confirmInvitation(button.dataset.invite));
+  app.querySelectorAll('[data-revoke]').forEach(button=>button.onclick=()=>confirmRevoke(button.dataset.revoke));
+}
+function addPerson({photoId='',name=''}={}){
+  if(photoId)modalReturnFocus=()=>app.querySelector(`[data-picker="${photoId}"] .picker-input`)?.focus();
+  showModal(`<p class="kicker">People directory</p><h2>Add a person</h2><form id="person-form"><label class="field"><span>Name</span><input name="name" value="${esc(name)}" required maxlength="100" autocomplete="off"></label><label class="field"><span>Phone, including country code</span><input name="phone" type="tel" required placeholder="+1…" autocomplete="off"></label><p class="hint">Saves them to People${photoId?' and selects them for this photo':''}. This doesn’t invite them to a scrapbook or send a text.</p><button class="button">${photoId?'Add & select person':'Add person'}</button><p class="error" id="modal-error" role="alert"></p></form>`);
+  byId('person-form').onsubmit=async event=>{
+    event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+    try{
+      const result=await contactApi('',Object.fromEntries(new FormData(form)));updateContacts(result.person);
+      if(photoId){const photo=state.draft.photos.find(p=>p.id===photoId);photo.recipients=[...new Set([...photo.recipients,result.person.id])];mark();}
+      modal.close();render();
+      if(photoId)app.querySelector(`[data-picker="${photoId}"] .picker-input`)?.focus();
+      toast(photoId?'Person added and selected. Create their invitation in Sharing when ready.':'Person added. No invitation was created.');
+    }catch(error){byId('modal-error').textContent=error.message;button.disabled=false;}
+  };
 }
 function editPerson(id){
-  const p=state.people.find(p=>p.id===id);
-  showModal(`<p class="kicker">Someone in your world</p><h2>Edit ${esc(p.name)}</h2><form id="person-form"><label class="field"><span>Name</span><input name="name" value="${esc(p.name)}" required maxlength="100" autocomplete="off"></label><label class="field"><span>Phone, including country code</span><input name="phone" type="tel" value="${esc(p.phone)}" required autocomplete="off"></label><p class="hint">Changes take effect immediately. Changing the phone signs this person out and cancels any pending login code.</p><button class="button">Save person</button><p class="error" id="modal-error"></p></form>`);
-  byId('person-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;try{await api(`people/${id}/details`,Object.fromEntries(new FormData(form)));await refreshPeople();modal.close();toast('Person updated.');}catch(error){byId('modal-error').textContent=error.message;button.disabled=false;}};
+  const person=contacts.find(p=>p.id===id);
+  showModal(`<p class="kicker">People directory</p><h2>Edit ${esc(person.name)}</h2><form id="person-form"><label class="field"><span>Name</span><input name="name" value="${esc(person.name)}" required maxlength="100" autocomplete="off"></label><label class="field"><span>Phone, including country code</span><input name="phone" type="tel" value="${esc(person.phone)}" required autocomplete="off"></label><p class="hint">Updates this person across all scrapbooks. Changing their phone signs them out of every scrapbook and cancels pending login codes. Existing invitation links stay the same.</p><button class="button">Save person</button><p class="error" id="modal-error" role="alert"></p></form>`);
+  byId('person-form').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+    try{const result=await contactApi(`/${id}/details`,{...Object.fromEntries(new FormData(form)),version:person.version});updateContacts(result.person);modal.close();render();toast('Person updated across scrapbooks.');}
+    catch(error){byId('modal-error').textContent=error.message;button.disabled=false;}
+  };
 }
-async function refreshPeople(){const latest=await api('state');state.people=latest.people;render();}
+function createInvitation(id){
+  const person=contacts.find(p=>p.id===id);
+  showModal(`<p class="kicker">Sharing · ${state.year}</p><h2>Invite ${esc(person.name)}?</h2><p>Creates a personal link to this scrapbook. They’ll be able to view shared photos and photos assigned to them after publication. No text is sent.</p><button class="button" id="create-invitation">Create invitation</button><p class="error" id="modal-error" role="alert"></p>`);
+  byId('create-invitation').onclick=async event=>{event.target.disabled=true;try{const result=await api('invitations',{personId:id});await refreshPeople();await showInvitation(person.name,result.url);}catch(error){byId('modal-error').textContent=error.message;event.target.disabled=false;}};
+}
+async function refreshPeople(){const latest=await api('state');state.people=latest.people;updateEditionSummary();render();}
 function confirmInvitation(id){const person=state.people.find(p=>p.id===id);showModal(`<p class="kicker">Invitation for ${esc(person.name)}</p><h2>Create a fresh link?</h2><p>This replaces their previous invitation and signs out their current sessions. It won’t send a text.</p><button class="button" id="create-invite">Create new invitation</button><p class="error" id="modal-error"></p>`);byId('create-invite').onclick=async e=>{e.target.disabled=true;try{const data=await api(`people/${id}/invite`,{});await refreshPeople();await showInvitation(person.name,data.url);}catch(error){byId('modal-error').textContent=error.message;e.target.disabled=false;}};}
 function confirmRevoke(id){const person=state.people.find(p=>p.id===id);showModal(`<p class="kicker">Access for ${esc(person.name)}</p><h2>Close their invitation?</h2><p>Their link and current sessions will stop working immediately. You can create a new invitation later.</p><button class="button" id="confirm-revoke">Revoke access</button><p class="error" id="modal-error"></p>`);byId('confirm-revoke').onclick=async e=>{e.target.disabled=true;try{await api(`people/${id}/revoke`,{});await refreshPeople();modal.close();toast('Invitation and sessions revoked.');}catch(error){byId('modal-error').textContent=error.message;e.target.disabled=false;}};}
 async function showInvitation(name,url){const qr=await QRCode.toDataURL(url,{width:700,margin:4,color:{dark:'#202529',light:'#f4eddf'}});inviteData={name,url,qr};showModal(`<p class="kicker">Just for ${esc(name)}</p><h2>A little invitation.</h2><img class="qr" src="${qr}" alt="Personalized invitation QR code"><label class="field"><span>Invitation link</span><input class="invitation-url" value="${esc(url)}" readonly></label><p class="hint">Save this link now. We don’t retain the readable invitation token.</p><div class="actions"><button class="button" id="copy-invite">Copy link</button><a class="secondary" href="${qr}" download="invitation.png">Save QR</a><button class="secondary" id="save-invite">Save link</button></div>`);byId('copy-invite').onclick=async()=>{try{await navigator.clipboard.writeText(url);toast('Invitation link copied.');}catch{modal.querySelector('input').select();toast('Select and copy the invitation link.');}};byId('save-invite').onclick=()=>download(new Blob([url+'\n'],{type:'text/plain'}),'invitation.txt');}
@@ -103,6 +282,31 @@ async function uploadFiles(event){
   }
   busy=false;render();byId('upload-status').textContent=failure?`${completed.length} uploaded. ${failure.message}`:`${completed.length} uploaded. Add descriptions and choose recipients, then save your draft.`;
 }
-document.querySelectorAll('.sidebar [data-view]').forEach(b=>b.onclick=()=>navigate(b.dataset.view));
-window.addEventListener('beforeunload',e=>{if(dirty||busy){e.preventDefault();e.returnValue='';}});
-try{await load();render();}catch(error){app.innerHTML=`<p class="kicker">Private dashboard</p><h1>Let’s get you<br><em>signed in.</em></h1><p class="lede">${esc(error.message)}</p><a class="button" href="/">Try again</a>`;}
+document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
+document.addEventListener('click',event=>{
+  if(event.target.closest('.skip-link')){event.preventDefault();app.focus();return;}
+  const link=event.target.closest('[data-view]');
+  if(!link||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+  event.preventDefault();navigate(link.dataset.view,true,Number(link.dataset.year)||state?.year);
+});
+byId('nav-toggle').onclick=()=>{
+  const open=!document.body.classList.contains('nav-open');
+  document.body.classList.toggle('nav-open',open);document.querySelector('.workspace').inert=open;byId('nav-toggle').setAttribute('aria-expanded',String(open));byId('nav-backdrop').hidden=!open;
+  if(open)document.querySelector('.sidebar [aria-current="page"]')?.focus();
+};
+document.addEventListener('keydown',event=>{
+  if(!document.body.classList.contains('nav-open'))return;
+  if(event.key==='Escape'){event.preventDefault();closeNavigation(true);}
+  if(event.key==='Tab'){
+    const links=[...byId('sidebar').querySelectorAll('a[href],button:not([disabled]),select')],first=links[0],last=links.at(-1);
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  }
+});
+byId('nav-backdrop').onclick=()=>closeNavigation(true);
+byId('nav-close').onclick=()=>closeNavigation(true);
+
+window.matchMedia('(min-width: 801px)').addEventListener('change',e=>{if(e.matches)closeNavigation();});
+window.addEventListener('hashchange',()=>{const route=routeFromHash();if(route.view!==view||(route.year&&route.year!==state?.year))navigate(route.view,false,route.year);});
+window.addEventListener('beforeunload',e=>{if(dirty||busy||pendingRequests||[...draftCache].some(([year,cached])=>year!==state?.year&&cached.dirty)){e.preventDefault();e.returnValue='';}});
+try{const [catalogue,directory]=await Promise.all([requestApi('editions'),requestApi('contacts')]);editions=catalogue.editions;contacts=directory.people;const route=routeFromHash();if(editionViews.includes(route.view))await load(route.year||editions[0]?.year);render();}catch(error){app.innerHTML=`<p class="kicker">Private workspace</p><h1>Sign in to continue</h1><p class="lede">${esc(error.message)}</p><a class="button" href="/">Try again</a>`;}

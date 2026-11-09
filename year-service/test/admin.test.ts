@@ -28,7 +28,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
   }
   try {
     const db=await mf.getD1Database("DB","admin"),bucket=await mf.getR2Bucket("MEDIA","admin");
-    for(const f of ["0001_invites.sql","0002_editor.sql"]) await db.exec((await readFile("migrations/"+f,"utf8")).replace(/\n/g," "));
+    for(const f of ["0001_invites.sql","0002_editor.sql","0003_scrapbooks.sql","0004_people.sql"]) await db.exec((await readFile("migrations/"+f,"utf8")).replace(/\n/g," "));
     const expires=Math.floor(Date.now()/1000)+86400;
     await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',?1,'Angela','+15555550101',?2)").bind(await digest("a".repeat(64)),expires).run();
     let assertion=await signed();
@@ -40,7 +40,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
         ...(data===undefined?{}:{body:encoded?await encoded.arrayBuffer():JSON.stringify(data)})});
     }
     await t.test("all admin pages, assets, and APIs reject unauthenticated or forged identities",async()=>{
-      for(const path of ["/","/app.js","/style.css","/api/state","/api/media/anything/preview"])assert.equal((await req(path,undefined,undefined,"")).status,401);
+      for(const path of ["/","/app.js","/style.css","/api/state","/api/editions","/api/editions/2027/state","/api/media/anything/preview"])assert.equal((await req(path,undefined,undefined,"")).status,401);
       const forged=await mf.dispatchFetch("https://admin.test/api/state",{headers:{"Cf-Access-Authenticated-User-Email":adminEmail}});assert.equal(forged.status,401);
       for(const jwt of [await signed("other@example.com"),await signed(adminEmail,"other-app"),await signed(adminEmail,aud,"-1m"),await signed(adminEmail,aud,"5m","https://other-team.cloudflareaccess.com"),"forged.jwt.value"])
         assert.equal((await req("/api/state",undefined,undefined,jwt)).status,401);
@@ -105,6 +105,77 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
       assert.equal((await guestReq(`media/${photoId}/original`)).status,404);
       assert.equal((await guestReq(`media/${photoId}/original`,samToken)).status,200);
     });
+    let nextPerson="",nextPhoto="",nextInvite="",nextVersion=1;
+    const next=(path:string,data?:unknown)=>req("/api/editions/2027/"+path,data);
+    let nextDraft:import("../src/edition.ts").Draft;
+    const oldBefore=await (await req("/api/state")).json();
+    await t.test("scrapbook creation validates years and creates one empty draft per year atomically",async()=>{
+      for(const year of ["2027",1999,2101,2027.5,null])assert.equal((await req("/api/editions",{year,title:"Next year",authors:"Aditya & Angela"})).status,400);
+      assert.equal((await req("/api/editions",{year:2027,title:"",authors:"Aditya & Angela"})).status,400);
+      assert.equal((await req("/api/editions",{year:2027,title:"Next year",authors:"Aditya & Angela"},"https://other.test")).status,403);
+      const results=await Promise.all([1,2].map(()=>req("/api/editions",{year:2027,title:"Our 2027",authors:"Aditya & Angela"})));
+      assert.deepEqual(results.map(r=>r.status).sort(),[201,409]);
+      assert.equal((await req("/api/editions/2028/state")).status,404);
+      assert.equal((await req("/api/editions/not-a-year/state")).status,400);
+      const state=await (await next("state")).json() as {year:number;draft:import("../src/edition.ts").Draft;people:unknown[];media:unknown[]};
+      assert.equal(state.year,2027);assert.deepEqual(state.people,[]);assert.deepEqual(state.media,[]);assert.deepEqual(state.draft.photos,[]);assert.deepEqual(state.draft.stories,[]);nextDraft=state.draft;
+      const listing=await (await req("/api/editions")).json() as {editions:{year:number}[]};
+      assert.deepEqual(listing.editions.map(e=>e.year),[2027,2026]);
+      assert.ok(!JSON.stringify(listing).includes("+1555"));
+      assert.deepEqual(await (await req("/api/state")).json(),oldBefore);
+    });
+    await t.test("each scrapbook isolates admin media, invitations, previews, and draft assignments",async()=>{
+      for(const path of [`media/${photoId}/preview`,`media/${photoId}/original`,"preview?recipient=angela"])
+        assert.equal((await next(path)).status,404);
+      for(const action of ["invite","revoke","details"])
+        assert.equal((await next(`people/${personId}/${action}`,{name:"Wrong year",phone:"+15555550109"})).status,404);
+      const invitation=await next("people",{name:"Sam in 2027",phone:"+15555550105"});assert.equal(invitation.status,201);
+      const person=await invitation.json() as {id:string;url:string};nextPerson=person.id;nextInvite=person.url.split("#")[1];
+      // The same person can receive a separate annual invitation.
+      const same=await next("people",{name:"Angela in 2027",phone:"+15555550101"});assert.equal(same.status,201);
+      assert.equal((await next("people",{name:"Duplicate",phone:"+15555550101"})).status,400);
+      const form=new FormData();form.set("original",new File([original],"2027.jpeg",{type:"image/jpeg"}));form.set("preview",new File([original],"preview.jpg",{type:"image/jpeg"}));
+      const uploaded=await next("upload",form);assert.equal(uploaded.status,201);nextPhoto=(await uploaded.json() as {id:string}).id;
+      const stored=await db.prepare("SELECT year,original_key FROM media_objects WHERE id=?").bind(nextPhoto).first<{year:number;original_key:string}>();
+      assert.equal(stored!.year,2027);assert.ok(stored!.original_key.startsWith("2027/"));
+      assert.deepEqual(new Uint8Array(await (await bucket.get(stored!.original_key))!.arrayBuffer()),original);
+      assert.equal((await req(`/api/editions/2026/media/${nextPhoto}/preview`)).status,404);
+      nextDraft.photos=[{id:photoId,caption:"Wrong year",alt:"Sample",recipients:[]}];
+      assert.equal((await next("draft",{version:1,draft:nextDraft})).status,400);
+      nextDraft.photos=[{id:nextPhoto,caption:"New year",alt:"Sample",recipients:[personId]}];
+      assert.equal((await next("draft",{version:1,draft:nextDraft})).status,400);
+      nextDraft.photos[0].recipients=[nextPerson];
+      const saved=await next("draft",{version:1,draft:nextDraft});assert.equal(saved.status,200);nextVersion=(await saved.json() as {version:number}).version;
+      assert.equal((await next("draft",{version:1,draft:nextDraft})).status,409);
+      const preview=await (await next("preview?recipient="+nextPerson)).json() as {year:number;photos:{src:string}[]};
+      assert.equal(preview.year,2027);assert.ok(preview.photos[0].src.startsWith("/api/editions/2027/"));
+      assert.deepEqual(await (await req("/api/state")).json(),oldBefore);
+    });
+    const nextSession="d".repeat(64);
+    await t.test("unpublished scrapbooks never fall back to the 2026 pilot or send SMS",async()=>{
+      await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)").bind(await digest(nextSession),nextPerson,expires).run();
+      assert.equal((await guestReq("journal",nextSession)).status,409);
+      assert.equal((await guestReq(`media/${photoId}`,nextSession)).status,404);
+      assert.equal((await guestReq(`media/${nextPhoto}`,nextSession)).status,404);
+      for(const [path,data] of [["invitation",undefined],["send",{}]] as const){
+        const r=await mf.dispatchFetch("https://journal.test/api/"+path,{method:data?"POST":"GET",headers:{Origin:"https://journal.test",Cookie:"__Host-year_invite="+nextInvite,"Content-Type":"application/json"},...(data?{body:"{}"}:{})});
+        assert.equal(r.status,409);
+      }
+      const opened=await mf.dispatchFetch("https://journal.test/api/open",{method:"POST",headers:{Origin:"https://journal.test","Content-Type":"application/json",Cookie:"__Host-year_session="+samToken},body:JSON.stringify({token:nextInvite})});
+      assert.equal(opened.status,200);assert.ok(opened.headers.getSetCookie().some(c=>c.startsWith("__Host-year_session=")&&c.includes("Max-Age=0")));
+    });
+    await t.test("publication and guest access resolve the invitation's year without affecting older editions",async()=>{
+      assert.equal((await next("publish",{version:nextVersion})).status,200);
+      const journal=await (await guestReq("journal",nextSession)).json() as {year:number;title:string;photos:{id:string;canSave:boolean}[]};
+      assert.equal(journal.year,2027);assert.equal(journal.title,"Our 2027");assert.deepEqual(journal.photos.map(p=>p.id),[nextPhoto]);assert.equal(journal.photos[0].canSave,true);
+      assert.deepEqual(new Uint8Array(await (await guestReq(`media/${nextPhoto}/original`,nextSession)).arrayBuffer()),original);
+      assert.equal((await guestReq(`media/${photoId}`,nextSession)).status,404);
+      assert.equal((await guestReq(`media/${nextPhoto}`,samToken)).status,404);
+      assert.deepEqual(await (await req("/api/state")).json(),oldBefore);
+      const oldJournal=await (await guestReq("journal",samToken)).json() as {year:number;photos:{id:string}[]};assert.equal(oldJournal.year,2026);assert.equal(oldJournal.photos[0].id,photoId);
+      nextDraft.photos[0].recipients=[];const saved=await next("draft",{version:nextVersion,draft:nextDraft});assert.equal(saved.status,200);
+      assert.equal((await guestReq(`media/${nextPhoto}/original`,nextSession)).status,200,"New draft edits must not change the published edition");
+    });
     await t.test("rotating and revoking invitations invalidates existing sessions",async()=>{
       const changed=await req(`/api/people/${personId}/details`,{name:"Sam Updated",phone:"+15555550103"});assert.equal(changed.status,200);
       assert.equal((await guestReq("journal",samToken)).status,401,"Changing a phone must end that recipient's existing session");
@@ -113,6 +184,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
       assert.equal((await guestReq("journal",samToken)).status,401);
       const revoked=await req("/api/people/angela/revoke",{});assert.equal(revoked.status,200);
       assert.equal((await guestReq("journal")).status,401);
+      assert.equal((await guestReq("journal",nextSession)).status,200,"Changing 2026 invitations must not end 2027 sessions");
       const events=await db.prepare("SELECT count(*) n FROM admin_events").first<{n:number}>();assert.ok(events!.n>=9);
     });
   }finally{await mf.dispose();}

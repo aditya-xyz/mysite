@@ -9,7 +9,7 @@ async function api(path, data) {
   if (!response.ok) throw new Error(result.error || 'Please try again.');
   return result;
 }
-function applyBrand(authors='Aditya & Angela') { document.querySelector('.signature').textContent=authors.toLowerCase()+'.'; document.title='2026 · '+authors; const footer=document.querySelector('footer > span');footer.textContent='Made with love, '+authors; }
+function applyBrand(authors='Aditya & Angela',year) { document.querySelector('.signature').textContent=authors.toLowerCase()+'.'; document.title=(year?year+' · ':'')+authors; document.querySelector('header > span').textContent=(year?year+' · ':'')+'A private edition'; const footer=document.querySelector('footer > span');footer.textContent='Made with love, '+authors; }
 function titleMarkup(title) { return !title || title==='A year in little moments.' ? 'A year in<br><em>little moments.</em>' : escape(title); }
 function message(error) { app.innerHTML = `<section class="entry"><p class="kicker">A private edition</p><h1>A little<br><em>patience.</em></h1><p>${escape(error.message)}</p><button class="text-button" id="retry">Try again</button></section>`; document.querySelector('#retry').onclick = start; }
 async function start() {
@@ -19,7 +19,7 @@ async function start() {
     if (/^[a-f0-9]{64}$/.test(raw)) { history.replaceState(null, '', location.pathname); await api('open', {token:raw}); }
     try { journal = await api('journal'); showJournal(); return; } catch {}
     const invite = await api('invitation');
-    applyBrand(invite.authors);
+    applyBrand(invite.authors,invite.year);
     app.innerHTML = `<section class="entry"><p class="kicker">A little something for ${escape(invite.name)}</p><h1>${titleMarkup(invite.title)}</h1><p class="intro">${escape(invite.intro || "A few places, some familiar faces, and the everyday things worth keeping. We’d love to share them with you.")}</p><p>We’ll send a code to your phone ending in <strong>${escape(invite.phoneHint)}</strong>.</p><button class="button" id="send">Text me a code →</button><p class="error" role="alert" id="error"></p><p class="signoff">With love, ${escape(invite.authors || "Aditya & Angela")}</p></section>`;
     document.querySelector('#send').onclick = async e => { e.target.disabled = true; try { await api('send', {}); showCode(invite); } catch (error) { document.querySelector('#error').textContent = error.message; e.target.disabled = false; } };
   } catch (error) { message(error); }
@@ -34,7 +34,7 @@ function showCode(invite) {
   app.querySelector('form').onsubmit = async e => {e.preventDefault(); const button=app.querySelector('[type=submit]');button.disabled=true;try {await api('verify',{code:input.value});journal=await api('journal');showJournal();} catch(error){document.querySelector('#error').textContent=error.message;button.disabled=false;}};
 }
 function showJournal() {
-  applyBrand(journal.authors);
+  applyBrand(journal.authors,journal.year);
   const cards = personal => journal.photos.filter(p=>p.personal===personal).map(p=>`<button class="card" data-photo="${escape(p.id)}" aria-label="Open photo: ${escape(p.caption)}"><img src="${escape(p.src)}" alt="${escape(p.alt)}" loading="lazy"/><span>${escape(p.caption)}</span></button>`).join('');
   const hasPersonal=journal.photos.some(p=>p.personal), sharedTitle=journal.sharedTitle || 'A little of our year';
   const stories=(journal.stories || []).map(s=>`<section class="letter"><h2>${escape(s.title)}</h2><p class="prose">${escape(s.body)}</p></section>`).join('');

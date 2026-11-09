@@ -1,3 +1,4 @@
+import { canonicalDraft, type Contact } from "./people.ts";
 import { adminIdentity, type AuthConfig } from "./auth.ts";
 import { token, digest, now, sameOrigin } from "../../src/security.ts";
 import { clientEdition, type Draft, type Published, type PublishedPhoto } from "../../src/edition.ts";
@@ -23,19 +24,19 @@ async function body(request: Request) {
   try { const value = JSON.parse(new TextDecoder().decode(bytes)); if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(); return value as Record<string, unknown>; }
   catch { return fail("Invalid request."); }
 }
-async function edition(env: Env) {
-  const row = await env.DB.prepare("SELECT * FROM editions WHERE year=2026").first<EditionRow>();
-  if (!row) throw new Problem(503, "The 2026 editor has not been initialized.");
+async function edition(env: Env, year: number) {
+  const row = await env.DB.prepare("SELECT * FROM editions WHERE year=?1").bind(year).first<EditionRow>();
+  if (!row) throw new Problem(404, "Scrapbook not found.");
   return row;
 }
 const audit = (env: Env, actor: string, action: string, target: string) =>
   env.DB.prepare("INSERT INTO admin_events(actor,action,target) VALUES(?1,?2,?3)").bind(actor,action,target);
-async function validDraft(value: unknown, env: Env): Promise<Draft> {
+async function validDraft(value: unknown, env: Env, year: number): Promise<Draft> {
   if (!value || typeof value !== "object") return fail("Missing draft.");
-  const d = value as Draft;
+  const d = await canonicalDraft(value as Draft,env.DB,year);
   if (!Array.isArray(d.photos) || d.photos.length > 300 || !Array.isArray(d.stories) || d.stories.length > 20) return fail("Use at most 300 photos and 20 stories.");
-  const media = await env.DB.prepare("SELECT id FROM media_objects WHERE year=2026").all<{id:string}>();
-  const people = await env.DB.prepare("SELECT id FROM invites WHERE edition_year=2026").all<{id:string}>();
+  const media = await env.DB.prepare("SELECT id FROM media_objects WHERE year=?1").bind(year).all<{id:string}>();
+  const people = await env.DB.prepare("SELECT id FROM people").all<{id:string}>();
   const mediaIds = new Set(media.results.map(m => m.id)), peopleIds = new Set(people.results.map(p => p.id));
   const photoIds = new Set<string>(), storyIds = new Set<string>();
   const photos = d.photos.map(p => {
@@ -51,8 +52,8 @@ async function validDraft(value: unknown, env: Env): Promise<Draft> {
   return {title:text(d.title,"title",150),authors:text(d.authors,"authors",100),intro:text(d.intro,"invitation introduction",1000),
     note:text(d.note,"opening note",10000),sharedTitle:text(d.sharedTitle,"shared chapter title",150),stories,photos};
 }
-async function snapshot(draft: Draft, env: Env): Promise<Published> {
-  const media = await env.DB.prepare("SELECT * FROM media_objects WHERE year=2026").all<Media>();
+async function snapshot(draft: Draft, env: Env, year: number): Promise<Published> {
+  const media = await env.DB.prepare("SELECT * FROM media_objects WHERE year=?1").bind(year).all<Media>();
   const objects = new Map(media.results.map(m => [m.id,m]));
   const photos: PublishedPhoto[] = [];
   for (const p of draft.photos) {
@@ -68,55 +69,134 @@ function detect(bytes: Uint8Array) {
   return fail("Upload JPEG, PNG, or WebP photos. HEIC and SVG aren’t supported in this first editor.");
 }
 async function route(request: Request, env: Env, actor: string) {
-  const url = new URL(request.url), path = url.pathname;
+  const url = new URL(request.url); let path = url.pathname;
   if (!["GET","HEAD","POST"].includes(request.method)) throw new Problem(405,"Method not allowed.");
   if (request.method === "POST" && !sameOrigin(request)) throw new Problem(403,"Use the admin dashboard to make changes.");
+  if (path === "/api/contacts") {
+    if(request.method === "GET") {
+      const people=await env.DB.prepare("SELECT id,name,phone,version FROM people ORDER BY name COLLATE NOCASE,id").all<Contact>();
+      return json({people:people.results});
+    }
+    if(request.method === "POST") {
+      const data=await body(request),name=text(data.name,"name",100),phone=text(data.phone,"phone number",20);
+      if(!/^\+[1-9]\d{7,14}$/.test(phone)) return fail("Use a full phone number including country code.");
+      const id="contact-"+token().slice(0,24);
+      const person=await env.DB.prepare("INSERT INTO people(id,name,phone) VALUES(?1,?2,?3) ON CONFLICT(phone) DO NOTHING RETURNING id,name,phone,version")
+        .bind(id,name,phone).first<Contact>();
+      if(!person)throw new Problem(409,"That phone number is already in People. Search for the existing person.");
+      await audit(env,actor,"create-contact",id).run();
+      return json({person},201);
+    }
+  }
+  const contactRoute=/^\/api\/contacts\/([a-z0-9-]{1,100})\/details$/.exec(path);
+  if(contactRoute && request.method === "POST") {
+    const data=await body(request),name=text(data.name,"name",100),phone=text(data.phone,"phone number",20);
+    if(!/^\+[1-9]\d{7,14}$/.test(phone))return fail("Use a full phone number including country code.");
+    if(!Number.isInteger(data.version))return fail("Missing person version.");
+    const person=await env.DB.prepare("UPDATE people SET name=?1,phone=?2,version=version+1,updated_at=unixepoch() WHERE id=?3 AND version=?4 RETURNING id,name,phone,version")
+      .bind(name,phone,contactRoute[1],data.version as number).first<Contact>();
+    if(!person)throw new Problem(409,"This person changed in another window. Refresh before editing again.");
+    await audit(env,actor,"update-contact",person.id).run();
+    return json({person});
+  }
+  if (path === "/api/editions") {
+    if (request.method === "GET") {
+      const rows = await env.DB.prepare(`SELECT year,draft_json,draft_version,published_version,published_at,updated_at,
+        (SELECT count(*) FROM invites WHERE edition_year=editions.year) AS people_count
+        FROM editions ORDER BY year DESC`).all<EditionRow & {year:number;updated_at:number;people_count:number}>();
+      return json({editions:rows.results.map(row=>{
+        const draft=JSON.parse(row.draft_json) as Draft;
+        return {year:row.year,title:draft.title,authors:draft.authors,version:row.draft_version,
+          publishedVersion:row.published_version,publishedAt:row.published_at,updatedAt:row.updated_at,
+          photoCount:draft.photos.length,storyCount:draft.stories.length,peopleCount:row.people_count};
+      })});
+    }
+    if (request.method === "POST") {
+      const data=await body(request);
+      if (!Number.isInteger(data.year) || (data.year as number)<2000 || (data.year as number)>2100) return fail("Choose a year from 2000 to 2100.");
+      const year=data.year as number,title=text(data.title,"title",150),authors=text(data.authors,"authors",100);
+      const draft:Draft={title,authors,intro:"A few places, some familiar faces, and the everyday things worth keeping. We’d love to share them with you.",
+        note:"A little look back at our year, and the people who made it special.",sharedTitle:"A little of our year",stories:[],photos:[]};
+      const result=await env.DB.prepare("INSERT INTO editions(year,draft_json) VALUES(?1,?2) ON CONFLICT(year) DO NOTHING RETURNING year")
+        .bind(year,JSON.stringify(draft)).first<{year:number}>();
+      if (!result) throw new Problem(409,"A scrapbook for this year already exists. Open it from Scrapbooks.");
+      await audit(env,actor,"create-edition",String(year)).run();
+      return json({year},201);
+    }
+  }
+  // Original URLs remain scoped to the original pilot for older deployed clients.
+  // New clients always send the scrapbook year in the path, never in request bodies.
+  let year=2026;
+  const scoped=/^\/api\/editions\/([^/]+)(\/.*)$/.exec(path);
+  if (scoped) {
+    if (!/^\d{4}$/.test(scoped[1]) || Number(scoped[1])<2000 || Number(scoped[1])>2100) return fail("Invalid scrapbook year.");
+    year=Number(scoped[1]);path="/api"+scoped[2];
+  }
+  if (path.startsWith("/api/")) await edition(env,year);
   if (path === "/api/state" && request.method === "GET") {
-    const row = await edition(env);
-    const people = await env.DB.prepare("SELECT id,name,phone,expires_at,revoked_at FROM invites WHERE edition_year=2026 ORDER BY name").all();
-    const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,original_key IS NOT NULL AS has_original FROM media_objects WHERE year=2026 ORDER BY created_at DESC,id").all();
-    return json({actor,year:2026,draft:JSON.parse(row.draft_json),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,people:people.results,media:media.results});
+    const row = await edition(env,year);
+    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
+    const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,original_key IS NOT NULL AS has_original FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
+    return json({actor,year,draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,people:people.results,media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
-    const data = await body(request), draft = await validDraft(data.draft,env);
+    const data = await body(request), draft = await validDraft(data.draft,env,year);
     if (!Number.isInteger(data.version)) return fail("Missing draft version.");
-    const result = await env.DB.prepare("UPDATE editions SET draft_json=?1,draft_version=draft_version+1,updated_at=unixepoch() WHERE year=2026 AND draft_version=?2 RETURNING draft_version")
-      .bind(JSON.stringify(draft),data.version as number).first<{draft_version:number}>();
+    const result = await env.DB.prepare("UPDATE editions SET draft_json=?1,draft_version=draft_version+1,updated_at=unixepoch() WHERE year=?3 AND draft_version=?2 RETURNING draft_version")
+      .bind(JSON.stringify(draft),data.version as number,year).first<{draft_version:number}>();
     if (!result) throw new Problem(409,"This edition changed in another window. Reload before saving again.");
-    await audit(env,actor,"save-draft","2026").run();
+    await audit(env,actor,"save-draft",String(year)).run();
     return json({version:result.draft_version});
   }
   if (path === "/api/publish" && request.method === "POST") {
-    const data = await body(request), row = await edition(env);
+    const data = await body(request), row = await edition(env,year);
     if (data.version !== row.draft_version) throw new Problem(409,"Save and review the latest draft before publishing.");
-    const draft = await validDraft(JSON.parse(row.draft_json),env), published = await snapshot(draft,env);
+    const draft = await validDraft(JSON.parse(row.draft_json),env,year), published = await snapshot(draft,env,year);
     if (!published.photos.length) return fail("Add at least one photo before publishing.");
-    const result = await env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch() WHERE year=2026 AND draft_version=?2 RETURNING published_version")
-      .bind(JSON.stringify(published),row.draft_version).first<{published_version:number}>();
+    const invitations=await env.DB.prepare("SELECT person_id FROM invites WHERE edition_year=?1 AND revoked_at IS NULL AND expires_at>?2").bind(year,now()).all<{person_id:string}>();
+    const active=new Set(invitations.results.map(i=>i.person_id));
+    if(draft.photos.some(p=>p.recipients.some(id=>!active.has(id))))return fail("Invite every selected photo recipient to this scrapbook before publishing.");
+    const result = await env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch() WHERE year=?3 AND draft_version=?2 RETURNING published_version")
+      .bind(JSON.stringify(published),row.draft_version,year).first<{published_version:number}>();
     if (!result) throw new Problem(409,"The draft changed while publishing. Review it again.");
-    await audit(env,actor,"publish","2026").run();
+    await audit(env,actor,"publish",String(year)).run();
     return json({publishedVersion:result.published_version});
   }
   if (path === "/api/preview" && request.method === "GET") {
     const id = url.searchParams.get("recipient") || "";
-    const person = id ? await env.DB.prepare("SELECT name FROM invites WHERE id=?1 AND edition_year=2026").bind(id).first<{name:string}>() : null;
+    const person = id ? await env.DB.prepare(`SELECT p.id,p.name FROM people p WHERE p.id=?1 OR p.id=(SELECT person_id FROM invites WHERE id=?1 AND edition_year=?2)`)
+      .bind(id,year).first<{id:string;name:string}>() : null;
     if (id && !person) throw new Problem(404,"Recipient not found.");
-    const row = await edition(env), published = await snapshot(JSON.parse(row.draft_json),env);
-    const data = clientEdition(published,id,person?.name || "friend");
-    data.photos = data.photos.map(p => ({...p,src:`/api/media/${p.id}/preview`}));
+    const row = await edition(env,year), draft=await canonicalDraft(JSON.parse(row.draft_json),env.DB,year), published = await snapshot(draft,env,year);
+    const data = clientEdition(published,id,person?.name || "friend",year,person?.id);
+    data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`}));
     return json(data);
+  }
+  if (path === "/api/invitations" && request.method === "POST") {
+    const data=await body(request),personId=text(data.personId,"person",100);
+    const person=await env.DB.prepare("SELECT id,name,phone FROM people WHERE id=?1").bind(personId).first<Contact>();
+    if(!person)throw new Problem(404,"Person not found. Add them in People first.");
+    const count=await env.DB.prepare("SELECT count(*) n FROM invites WHERE edition_year=?1").bind(year).first<{n:number}>();
+    if(count && count.n>=100)return fail("This scrapbook supports up to 100 invitations.");
+    const id="person-"+token().slice(0,24),raw=token();
+    const created=await env.DB.prepare(`INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,edition_year)
+      VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(edition_year,person_id) WHERE person_id IS NOT NULL DO NOTHING RETURNING id`)
+      .bind(id,person.id,await digest(raw),person.name,person.phone,now()+90*86400,year).first();
+    if(!created)throw new Problem(409,"This person already has an invitation here. Manage their existing invitation instead.");
+    await audit(env,actor,"create-invitation",id).run();
+    return json({id,personId:person.id,url:env.JOURNAL_ORIGIN+"/#"+raw},201);
   }
   if (path === "/api/people" && request.method === "POST") {
     const data = await body(request), name = text(data.name,"name",100), phone = text(data.phone,"phone number",20);
     if (!/^\+[1-9]\d{7,14}$/.test(phone)) return fail("Use a full phone number including country code, such as +1 followed by ten digits.");
-    const count = await env.DB.prepare("SELECT count(*) n FROM invites WHERE edition_year=2026").first<{n:number}>();
+    const count = await env.DB.prepare("SELECT count(*) n FROM invites WHERE edition_year=?1").bind(year).first<{n:number}>();
     if (count && count.n >= 100) return fail("This edition supports up to 100 people.");
-    const duplicate = await env.DB.prepare("SELECT id FROM invites WHERE phone=?1 AND edition_year=2026").bind(phone).first();
+    const duplicate = await env.DB.prepare("SELECT id FROM invites WHERE phone=?1 AND edition_year=?2").bind(phone,year).first();
     if (duplicate) return fail("That phone number is already in this edition.");
     const id = "person-" + token().slice(0,24), raw = token();
     await env.DB.batch([
-      env.DB.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at,edition_year) VALUES(?1,?2,?3,?4,?5,2026)")
-        .bind(id,await digest(raw),name,phone,now()+90*86400), audit(env,actor,"add-person",id)
+      env.DB.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at,edition_year) VALUES(?1,?2,?3,?4,?5,?6)")
+        .bind(id,await digest(raw),name,phone,now()+90*86400,year), audit(env,actor,"add-person",id)
     ]);
     return json({id,url:env.JOURNAL_ORIGIN+"/#"+raw},201);
   }
@@ -124,23 +204,20 @@ async function route(request: Request, env: Env, actor: string) {
   if (detailsRoute && request.method === "POST") {
     const id=detailsRoute[1],data=await body(request),name=text(data.name,"name",100),phone=text(data.phone,"phone number",20);
     if (!/^\+[1-9]\d{7,14}$/.test(phone)) return fail("Use a full phone number including country code.");
-    const current=await env.DB.prepare("SELECT phone FROM invites WHERE id=?1 AND edition_year=2026").bind(id).first<{phone:string}>();
+    const current=await env.DB.prepare("SELECT phone,person_id FROM invites WHERE id=?1 AND edition_year=?2").bind(id,year).first<{phone:string;person_id:string}>();
     if (!current) throw new Problem(404,"Recipient not found.");
-    const duplicate=await env.DB.prepare("SELECT id FROM invites WHERE phone=?1 AND id<>?2 AND edition_year=2026").bind(phone,id).first();
+    const duplicate=await env.DB.prepare("SELECT id FROM invites WHERE phone=?1 AND id<>?2 AND edition_year=?3").bind(phone,id,year).first();
     if (duplicate) return fail("That phone number is already assigned to another person.");
     const changed=current.phone!==phone;
-    await env.DB.batch([
-      env.DB.prepare("UPDATE invites SET name=?1,phone=?2,challenge_expires_at=CASE WHEN ?3 THEN 0 ELSE challenge_expires_at END WHERE id=?4")
-        .bind(name,phone,changed?1:0,id),
-      env.DB.prepare("DELETE FROM sessions WHERE invite_id=?1 AND ?2=1").bind(id,changed?1:0),
-      audit(env,actor,changed?"change-phone":"edit-person",id)
-    ]);
+    await env.DB.prepare("UPDATE people SET name=?1,phone=?2,version=version+1,updated_at=unixepoch() WHERE id=?3")
+      .bind(name,phone,current.person_id).run();
+    await audit(env,actor,changed?"change-phone":"edit-person",id).run();
     return json({saved:true,phoneChanged:changed});
   }
   const personRoute = /^\/api\/people\/(person-[a-f0-9]{24}|angela)\/(invite|revoke)$/.exec(path);
   if (personRoute && request.method === "POST") {
     const id = personRoute[1];
-    const person = await env.DB.prepare("SELECT id FROM invites WHERE id=?1 AND edition_year=2026").bind(id).first();
+    const person = await env.DB.prepare("SELECT id FROM invites WHERE id=?1 AND edition_year=?2").bind(id,year).first();
     if (!person) throw new Problem(404,"Recipient not found.");
     const raw = token(), revoke = personRoute[2] === "revoke";
     await env.DB.batch([
@@ -157,20 +234,20 @@ async function route(request: Request, env: Env, actor: string) {
     if (original.size > 25*1024*1024 || preview.size > 4*1024*1024 || !original.size || !preview.size) throw new Problem(413,"Use an original up to 25 MB and a preview up to 4 MB.");
     const mime = detect(new Uint8Array(await original.slice(0,12).arrayBuffer()));
     if (detect(new Uint8Array(await preview.slice(0,12).arrayBuffer())) !== "image/jpeg") return fail("The preview must be JPEG.");
-    const id = "photo-"+token().slice(0,24), originalKey = `2026/${id}/original`, previewKey = `2026/${id}/preview.jpg`;
+    const id = "photo-"+token().slice(0,24), originalKey = `${year}/${id}/original`, previewKey = `${year}/${id}/preview.jpg`;
     try {
       await env.MEDIA.put(originalKey,original.stream(),{httpMetadata:{contentType:mime}});
       await env.MEDIA.put(previewKey,preview.stream(),{httpMetadata:{contentType:"image/jpeg"}});
       await env.DB.batch([
-        env.DB.prepare("INSERT INTO media_objects(id,year,preview_key,original_key,filename,mime,bytes) VALUES(?1,2026,?2,?3,?4,?5,?6)")
-          .bind(id,previewKey,originalKey,original.name.slice(0,200),mime,original.size), audit(env,actor,"upload-photo",id)
+        env.DB.prepare("INSERT INTO media_objects(id,year,preview_key,original_key,filename,mime,bytes) VALUES(?1,?7,?2,?3,?4,?5,?6)")
+          .bind(id,previewKey,originalKey,original.name.slice(0,200),mime,original.size,year), audit(env,actor,"upload-photo",id)
       ]);
     } catch { await env.MEDIA.delete([originalKey,previewKey]); throw new Problem(503,"The upload did not finish. Please try again."); }
     return json({id,filename:original.name,mime,bytes:original.size,has_original:true},201);
   }
   const mediaRoute = /^\/api\/media\/([a-z0-9-]+)\/(preview|original)$/.exec(path);
   if (mediaRoute && request.method === "GET") {
-    const media = await env.DB.prepare("SELECT * FROM media_objects WHERE id=?1 AND year=2026").bind(mediaRoute[1]).first<Media>();
+    const media = await env.DB.prepare("SELECT * FROM media_objects WHERE id=?1 AND year=?2").bind(mediaRoute[1],year).first<Media>();
     const key = mediaRoute[2] === "preview" ? media?.preview_key : media?.original_key;
     if (!key) throw new Problem(404,"Photo not found.");
     const file = await env.MEDIA.get(key); if (!file) throw new Problem(404,"Photo not found.");
@@ -186,7 +263,14 @@ export default {
     try {
       const actor = await adminIdentity(request,env);
       response = actor ? await route(request,env,actor) : json({error:"Sign in with the approved admin Google account to continue."},401);
-    } catch (error) { response = error instanceof Problem ? json({error:error.message},error.status) : json({error:"Something went wrong. Please try again."},500); }
+    } catch (error) {
+      if (error instanceof Problem) response=json({error:error.message},error.status);
+      else if (error instanceof Error && error.message.includes("UNIQUE constraint failed: invites.edition_year, invites.phone"))
+        response=json({error:"That phone number is already in this scrapbook. Refresh to see the latest invitations."},409);
+      else if(error instanceof Error && error.message.includes("UNIQUE constraint failed: people.phone"))
+        response=json({error:"That phone number belongs to another person in People."},409);
+      else response=json({error:"Something went wrong. Please try again."},500);
+    }
     const headers = new Headers(response.headers);
     headers.set("Cache-Control","private, no-store"); headers.set("Referrer-Policy","no-referrer");
     headers.set("X-Content-Type-Options","nosniff"); headers.set("X-Frame-Options","DENY");
