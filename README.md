@@ -54,4 +54,8 @@ its deployment. Guestbook and home-server monitoring are future additions.
 
 The original local React design prototype is not part of the public release.
 The live private services enforce access on the backend and do not use the
-prototype's sample-code authentication. Public-site DNS remains unchanged.
+prototype's sample-code authentication. The admin custom hostname is
+`admin.adityapatil.xyz`; its Cloudflare routing is declared in the admin Worker
+configuration. DNS management is moving to Cloudflare while the public website
+remains hosted on Netlify. The protected workers.dev admin URL remains a fallback
+during DNS/HTTPS activation.

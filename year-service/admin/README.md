@@ -46,12 +46,29 @@ Do not publish the local React mockup or its private photo imports to Netlify.
 The owner successfully signed in through Google and confirmed the live dashboard
 on November 8, 2026.
 
-The temporary host is
-https://aditya-private-admin.aditya-year-service.workers.dev
-A future admin.adityapatil.xyz custom domain needs a Cloudflare-managed active
-zone or a separate reviewed routing arrangement. The current domain uses NS1
-nameservers. No DNS or registrar changes have been made. Review all website and
-mail records before any DNS migration; Netlify can remain the public host.
+The configured custom address is https://admin.adityapatil.xyz. The original
+https://aditya-private-admin.aditya-year-service.workers.dev remains available
+as a protected fallback. Both hostnames invoke the same Worker and are covered
+by the existing Worker-wide Access application and exact-email server checks.
+No additional Google OAuth callback or application audience is needed.
+
+On November 9, 2026, the owner saved the domain's GoDaddy delegation to
+katja.ns.cloudflare.com and venkat.ns.cloudflare.com. Cloudflare zone ID:
+bbb14649d5198ec211688746e3bbe15d. Activation, DNS caches, and HTTPS issuance must
+complete before the custom hostname is usable everywhere.
+
+The public website remains on Netlify. Its Cloudflare records are DNS-only:
+- CNAME @ -> apex-loadbalancer.netlify.com (flattened at the apex)
+- CNAME www -> adityapatilxyz.netlify.app
+The admin record is managed by the Worker's custom-domain binding. The original
+Netlify zone is retained for rollback; no original records or hosted content
+were deleted. The reviewed source zone had two NETLIFY website aliases and no
+mail records. The full pre-change inventory and public DNS/website baselines
+are stored locally in .private/domain-setup (ignored by Git). A 300-second
+admin CNAME to the protected workers.dev hostname was also added to the retained
+Netlify zone, so resolvers still using the previous nameservers can discover
+the same admin service during migration. This does not replace the Cloudflare
+custom-domain binding or bypass its Access policy.
 
 ## Editor behavior
 

@@ -4,6 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-06",
   "workers_dev": true,
+  "routes": [{ "pattern": "admin.adityapatil.xyz", "custom_domain": true }],
   "preview_urls": false,
   "observability": { "enabled": false },
   "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },

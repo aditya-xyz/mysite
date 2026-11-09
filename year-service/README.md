@@ -97,8 +97,9 @@ Provider references:
 
 ## Private admin dashboard
 
-The 2026 editor is deployed separately at
-https://aditya-private-admin.aditya-year-service.workers.dev
+The 2026 editor has a custom-domain binding at https://admin.adityapatil.xyz,
+with https://aditya-private-admin.aditya-year-service.workers.dev as its protected
+fallback while DNS/HTTPS activates.
 Only aditya.patil.gverse@gmail.com is allowed through Google + Cloudflare Access;
 the Worker also verifies the signed Access JWT on every request. The owner
 confirmed the live sign-in on November 8, 2026. See admin/README.md for setup,
@@ -107,5 +108,7 @@ operations, and validation details.
 Story, Photos, People & invitations, and recipient Preview are available. Saves
 remain private drafts. Publish explicitly updates the guest edition. No new
 content was published during implementation, and the original pilot remains
-available. The public Netlify portfolio and DNS were not changed. The eventual
-admin.adityapatil.xyz custom domain remains a separate DNS setup step.
+available. The public portfolio remains hosted on Netlify. On November 9, 2026,
+the owner changed the domain delegation to Cloudflare; its root and www records
+continue to route directly to Netlify. See admin/README.md for the DNS mapping
+and activation details.
