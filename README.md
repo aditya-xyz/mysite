@@ -28,6 +28,9 @@ commit and deploy them together. Keep original photo backups separately.
 ## Netlify
 
 Build command: `npm run build`. Publish directory: `dist`.
+Netlify's dependency settings use Node 22. The November 9, 2026 rebuild of
+`803a2fd` published successfully with Node 22.23.4; an isolated local build of
+the same committed source also passed. Local prototype files were excluded.
 No API or database environment variables are required. Any existing
 `VITE_API_BASE_URL` setting can be removed; it is no longer read.
 
@@ -56,6 +59,7 @@ The original local React design prototype is not part of the public release.
 The live private services enforce access on the backend and do not use the
 prototype's sample-code authentication. The admin custom hostname is
 `admin.adityapatil.xyz`; its Cloudflare routing is declared in the admin Worker
-configuration. DNS management is moving to Cloudflare while the public website
-remains hosted on Netlify. The protected workers.dev admin URL remains a fallback
-during DNS/HTTPS activation.
+configuration. Cloudflare DNS delegation and the admin hostname's HTTPS were
+verified on November 9, 2026, including the Access redirect and the signed-in
+dashboard. The public website remains hosted on Netlify. The protected
+workers.dev admin URL remains a fallback.

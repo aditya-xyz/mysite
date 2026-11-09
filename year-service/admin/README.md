@@ -48,14 +48,17 @@ on November 8, 2026.
 
 The configured custom address is https://admin.adityapatil.xyz. The original
 https://aditya-private-admin.aditya-year-service.workers.dev remains available
-as a protected fallback. Both hostnames invoke the same Worker and are covered
+as a protected fallback. On November 9, 2026, DNS resolved through Cloudflare,
+HTTPS redirected unauthenticated requests to Access, and Chrome's Aditya
+profile displayed the signed-in dashboard at the custom address. Both
+hostnames invoke the same Worker and are covered
 by the existing Worker-wide Access application and exact-email server checks.
 No additional Google OAuth callback or application audience is needed.
 
 On November 9, 2026, the owner saved the domain's GoDaddy delegation to
 katja.ns.cloudflare.com and venkat.ns.cloudflare.com. Cloudflare zone ID:
-bbb14649d5198ec211688746e3bbe15d. Activation, DNS caches, and HTTPS issuance must
-complete before the custom hostname is usable everywhere.
+bbb14649d5198ec211688746e3bbe15d. Subsequent checks confirmed the Cloudflare
+nameservers and working admin HTTPS. Resolver caches can vary during migration.
 
 The public website remains on Netlify. Its Cloudflare records are DNS-only:
 - CNAME @ -> apex-loadbalancer.netlify.com (flattened at the apex)
