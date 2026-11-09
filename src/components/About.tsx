@@ -1,75 +1,80 @@
-import { motion } from "framer-motion";
-
-type Props = {
-  selectedPage: string;
-  setSelectedPage: (val: string) => void;
-};
-
-const About = (props: Props) => {
-  return (
-    <section
-      id="about"
-      className="min-h-screen w-full bg-gradient-to-b from-gray-900 to-black text-white"
-    >
-      <div className="mx-auto flex h-full w-full max-w-screen-lg flex-col justify-center p-4 pt-20 md:pt-32">
-        <div className="pb-8">
-          <p className="inline border-b-4 border-gray-500 text-4xl font-bold">
-            About
+import { FiArrowUpRight, FiCoffee, FiCamera, FiCompass } from "react-icons/fi";
+const About = () => (
+  <section
+    id="about"
+    className="about-section section-pad"
+    aria-labelledby="about-title"
+  >
+    <div className="shell about-layout">
+      <div>
+        <p className="eyebrow">03 / Beyond the job title</p>
+        <h2 id="about-title">
+          A builder’s mind.
+          <br />
+          <em>An explorer’s heart.</em>
+        </h2>
+        <div className="about-copy">
+          <p>
+            I’m a Microsoft Power Platform professional who loves working with
+            code. My work spans business apps, Dataverse, automation, and Azure,
+            with React and TypeScript in the mix.
+          </p>
+          <p>
+            I enjoy figuring out how the pieces fit: a custom interface, a
+            useful API, or a workflow that handles the repetitive steps. The
+            goal is something useful, understandable, and easy to work with.
+          </p>
+          <p>
+            These days, Southern California is home. Away from the keyboard,
+            there’s usually a camera, a good coffee, or an adventure with my
+            dog, Pixel.
           </p>
         </div>
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: false }}
-          transition={{ delay: 0.25, duration: 0.25 }}
-          variants={{
-            hidden: { opacity: 0, scale: 0.95 },
-            visible: { opacity: 1, scale: 1 },
-          }}
-          onViewportEnter={() => {
-            props.setSelectedPage("about");
-          }}
+        <a
+          className="text-link"
+          href="https://github.com/aditya-xyz"
+          target="_blank"
+          rel="noopener noreferrer"
         >
-          <p className="text-lg text-gray-100">
-            This site is hosted on Netlify and built using React, TypeScript,
-            and Tailwind CSS. I am using getform.io for the contact form, React
-            Scroll for smooth scrolling, Axios for contact form submissions, and
-            Framer Motion for the animations.
-          </p>
-          <br />
-          <br />
-          <p className="text-lg text-gray-100">
-            Project details, technologies, and images are bundled with the site
-            and deployed together from GitHub. Public content is maintained in
-            the codebase, keeping the site independent of a database or external
-            image bucket.
-          </p>
-          <br />
-          <br />
-          <p className="text-lg text-gray-100">
-            As a full time Microsoft Power Platform professional by trade, I
-            work on using Microsoft Dataverse and its suite of connectors and
-            functionalities to build low-code/no-code solutions. This includes
-            standalone web apps, mobile apps, websites, and automations.
-          </p>
-          <br />
-          <br />
-          <p className="text-lg text-gray-100">
-            Check out my{" "}
-            <a
-              href={"https://github.com/aditya-xyz"}
-              className={`cursor-pointer duration-200 hover:text-blue-500 `}
-              target="_blank"
-              rel="noreferrer"
-            >
-              GitHub repos
-            </a>{" "}
-            and social links in the Contact section!
-          </p>
-        </motion.div>
+          See what I’m building <FiArrowUpRight aria-hidden="true" />
+        </a>
       </div>
-    </section>
-  );
-};
-
+      <aside className="personal-note" aria-labelledby="personal-title">
+        <div className="note-top">
+          <span>A NOTE FROM OFFLINE</span>
+          <span>↗</span>
+        </div>
+        <h3 id="personal-title">
+          More life.
+          <br />
+          More outside.
+          <br />
+          <em>More Pixel.</em>
+        </h3>
+        <ul>
+          <li>
+            <FiCompass aria-hidden="true" />
+            Trails & little adventures
+          </li>
+          <li>
+            <FiCamera aria-hidden="true" />
+            Photos of the everyday
+          </li>
+          <li>
+            <FiCoffee aria-hidden="true" />
+            Always time for coffee
+          </li>
+        </ul>
+        <a
+          href="https://www.instagram.com/pixelthegsd/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Follow Pixel’s adventures <FiArrowUpRight aria-hidden="true" />
+        </a>
+        <span className="note-signature">See you out there, Aditya</span>
+      </aside>
+    </div>
+  </section>
+);
 export default About;

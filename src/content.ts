@@ -1,13 +1,8 @@
 // Public content lives with the site; images are bundled by Vite.
-import html from "@/assets/public-content/html.png";
-import css from "@/assets/public-content/css.png";
 import javascript from "@/assets/public-content/javascript.png";
 import typescript from "@/assets/public-content/typescript.png";
 import react from "@/assets/public-content/react.png";
-import tailwind from "@/assets/public-content/tailwind.png";
 import node from "@/assets/public-content/node.png";
-import mongodb from "@/assets/public-content/mongodb-3629020-3030245.webp";
-import python from "@/assets/public-content/python.png";
 import mernApp from "@/assets/public-content/mern_app.png";
 import reactAndTailwind from "@/assets/public-content/reactAndTailwind.jpg";
 import navbar from "@/assets/public-content/navbar.jpg";
@@ -15,15 +10,74 @@ import reactSmooth from "@/assets/public-content/reactSmooth.jpg";
 import highlightNavbar from "@/assets/public-content/highlight_nav_bar.png";
 
 export const experiences = [
-  { id: 1, src: html, title: "HTML" },
-  { id: 2, src: css, title: "CSS" },
-  { id: 3, src: javascript, title: "JavaScript" },
-  { id: 4, src: typescript, title: "TypeScript" },
-  { id: 5, src: react, title: "React" },
-  { id: 6, src: tailwind, title: "Tailwind CSS" },
-  { id: 7, src: node, title: "NodeJS" },
-  { id: 8, src: mongodb, title: "MongoDB" },
-  { id: 9, src: python, title: "Python" },
+  {
+    id: "code-apps",
+    title: "Power Apps code apps",
+    icon: "apps",
+    accent: "text-fuchsia-400",
+    description:
+      "Building custom web experiences with React and TypeScript inside Power Platform.",
+  },
+  {
+    id: "functions",
+    title: "Azure Functions",
+    icon: "functions",
+    accent: "text-sky-400",
+    description:
+      "Writing serverless backend logic and APIs to support apps and integrations.",
+  },
+  {
+    id: "automate",
+    title: "Power Automate",
+    icon: "automate",
+    accent: "text-blue-400",
+    description:
+      "Connecting services and automating business processes with cloud flows.",
+  },
+  {
+    id: "dataverse",
+    title: "Microsoft Dataverse",
+    icon: "data",
+    accent: "text-emerald-400",
+    description:
+      "Working with business data and relationships to support Power Platform solutions.",
+  },
+  {
+    id: "connectors",
+    title: "APIs & custom connectors",
+    icon: "connectors",
+    accent: "text-cyan-400",
+    description:
+      "Bringing services together through APIs and connectors for apps and workflows.",
+  },
+  {
+    id: "react",
+    title: "React",
+    src: react,
+    description:
+      "Building interactive interfaces and reusable components for web apps.",
+  },
+  {
+    id: "typescript",
+    title: "TypeScript",
+    src: typescript,
+    description:
+      "Adding types and clear contracts to frontend and backend application code.",
+  },
+  {
+    id: "javascript",
+    title: "JavaScript",
+    src: javascript,
+    description:
+      "Writing the application logic and interactions behind web experiences.",
+  },
+  {
+    id: "node",
+    title: "Node.js",
+    src: node,
+    description:
+      "Building backend services and API integrations with JavaScript and TypeScript.",
+  },
 ];
 
 export const projects = [
