@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 
 function App() {
   const [selectedPage, setSelectedPage] = useState("home");
-  const [palette, setPalette] = useState("paper");
+  const [palette, setPalette] = useState("night");
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
