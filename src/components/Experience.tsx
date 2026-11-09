@@ -1,38 +1,12 @@
 import { motion } from "framer-motion";
-import axios from "axios";
-import { useState, useEffect } from "react";
+import { experiences } from "@/content";
 
 type Props = {
   selectedPage: string;
   setSelectedPage: (val: string) => void;
 };
 
-export interface IExperience {
-  _id: string;
-  id: number;
-  src: string;
-  title: string;
-  styleString: string;
-}
-
 const Experience = (props: Props) => {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<IExperience[] | null>(null);
-
-  useEffect(() => {
-    axios
-      .get("https://mysite-api.up.railway.app/experience")
-      .then((response) => {
-        setData(response.data);
-      })
-      .catch((error) => {
-        console.log(error.message);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
-
   return (
     <div
       id="experience"
@@ -72,20 +46,25 @@ const Experience = (props: Props) => {
             visible: { opacity: 1, scale: 1 },
           }}
         >
-          {!loading && data && data.map ? (
-            data.map(({ id, src, title }) => (
-              <div
-                key={id}
-                className="rounded-lg py-2 shadow-md
+          {experiences.map(({ id, src, title }) => (
+            <div
+              key={id}
+              className="rounded-lg py-2 shadow-md
                  shadow-gray-400 duration-200 hover:scale-105"
-              >
-                <img src={src} alt="" className="mx-auto w-20" />
-                <p className="mt-4">{title}</p>
-              </div>
-            ))
-          ) : (
-            <p>Loading...</p>
-          )}
+            >
+              {src && (
+                <img
+                  src={src}
+                  alt=""
+                  className="mx-auto w-20"
+                  onError={(event) => {
+                    event.currentTarget.hidden = true;
+                  }}
+                />
+              )}
+              <p className="mt-4">{title}</p>
+            </div>
+          ))}
         </motion.div>
       </div>
     </div>

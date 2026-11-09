@@ -1,38 +1,12 @@
 import { motion } from "framer-motion";
-import axios from "axios";
-import { useState, useEffect } from "react";
+import { projects } from "@/content";
 
 type Props = {
   selectedPage: string;
   setSelectedPage: (val: string) => void;
 };
 
-export interface IProject {
-  _id: string;
-  id: number;
-  src: string;
-  mediumUrl: string;
-  githubUrl: string;
-}
-
 const Projects = (props: Props) => {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<IProject[] | null>(null);
-
-  useEffect(() => {
-    axios
-      .get("https://mysite-api.up.railway.app/project")
-      .then((response) => {
-        setData(response.data);
-      })
-      .catch((error) => {
-        console.log(error.message);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
-
   return (
     <div
       id="projects"
@@ -73,37 +47,41 @@ const Projects = (props: Props) => {
             visible: { opacity: 1, scale: 1 },
           }}
         >
-          {loading || !data || !data.map ? (
-            <p>Loading</p>
-          ) : (
-            data.map(({ id, src, mediumUrl, githubUrl }) => (
-              <div key={id} className="rounded-lg shadow-md shadow-gray-600">
+          {projects.map(({ id, src, title, mediumUrl, githubUrl }) => (
+            <div key={id} className="rounded-lg shadow-md shadow-gray-600">
+              {src && (
                 <img
                   src={src}
-                  alt=""
+                  alt={title}
                   className="rounded-md duration-200 hover:scale-105"
+                  onError={(event) => {
+                    event.currentTarget.hidden = true;
+                  }}
                 />
-                <div className="flex items-center justify-center">
-                  <button
-                    onClick={() => {
-                      window.open(mediumUrl, "_blank");
-                    }}
-                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105 hover:border-blue-500 hover:text-blue-500"
-                  >
-                    Blog
-                  </button>
-                  <button
-                    onClick={() => {
-                      window.open(githubUrl, "_blank");
-                    }}
-                    className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105 hover:border-blue-500 hover:text-blue-500"
-                  >
-                    Code
-                  </button>
-                </div>
+              )}
+              <h3 className="px-4 pt-4 text-center">
+                {title || `Project ${id}`}
+              </h3>
+              <div className="flex items-center justify-center">
+                <button
+                  onClick={() => {
+                    window.open(mediumUrl, "_blank");
+                  }}
+                  className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105 hover:border-blue-500 hover:text-blue-500"
+                >
+                  Blog
+                </button>
+                <button
+                  onClick={() => {
+                    window.open(githubUrl, "_blank");
+                  }}
+                  className="m-4 w-1/2 rounded-md border-2 border-slate-100 px-6 py-3 duration-200 hover:scale-105 hover:border-blue-500 hover:text-blue-500"
+                >
+                  Code
+                </button>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </motion.div>
       </div>
     </div>

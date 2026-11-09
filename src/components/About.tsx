@@ -33,17 +33,16 @@ const About = (props: Props) => {
           <p className="text-lg text-gray-100">
             This site is hosted on Netlify and built using React, TypeScript,
             and Tailwind CSS. I am using getform.io for the contact form, React
-            Scroll for smooth scrolling, Axios for API calls, and Framer Motion
-            for the animations.
+            Scroll for smooth scrolling, Axios for contact form submissions, and
+            Framer Motion for the animations.
           </p>
           <br />
           <br />
           <p className="text-lg text-gray-100">
-            I am using Node.js and Express for the back-end, which is hosted on
-            Railway.app (can't recommend them enough!). Both the front-end and
-            back-end auto deploy from my GitHub repos. I chose MongoDB for the
-            database which makes it super easy to add new content to the site on
-            the fly. For image hosting, I am using an AWS S3 bucket.
+            Project details, technologies, and images are bundled with the site
+            and deployed together from GitHub. Public content is maintained in
+            the codebase, keeping the site independent of a database or external
+            image bucket.
           </p>
           <br />
           <br />
