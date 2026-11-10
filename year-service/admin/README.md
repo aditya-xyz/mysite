@@ -443,3 +443,12 @@ headings remain editable and unchanged.
 The preview includes the scrapbook’s deep-moss closing footer, cream/peach
 credits, and links from `year-service/web/config.js`; the public portfolio’s
 footer remains separate.
+
+## Finding missing photo descriptions
+
+Manage photos numbers each card and lists photos missing accessibility descriptions
+by number and caption (falling back to the filename). Each entry jumps to and focuses
+the exact field. Empty descriptions have an inline error and `aria-invalid`; the
+list clears as descriptions are entered. Save errors identify the first incomplete
+photo and the remaining count, retaining all edits. Captions can be playful;
+accessibility descriptions should explain the visible scene.

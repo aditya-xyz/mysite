@@ -107,3 +107,5 @@ html:has(#modal[open]){overflow:hidden}
 
 .library-item{display:flex;flex-direction:column;gap:6px;max-width:145px}.library-item>button{width:100%}.library-item>.danger{min-height:44px;border:0;background:transparent;padding:8px 10px}.library-item>button:disabled{opacity:.65}
 .button.danger{background:#7b3038;color:#fff3ef;border-color:#a24f58}.button.danger:hover{background:#8f3b44}
+
+.photo-number{margin:0 0 10px}.photo-validation{border:1px solid #755448;background:#241c19;border-radius:9px;padding:18px;margin:0 0 22px}.photo-validation h2{color:var(--error);font-size:15px;margin-bottom:8px}.photo-validation .hint{margin:0 0 8px}.photo-validation ul{list-style:none;margin:0;padding:0;max-height:240px;overflow:auto}.photo-validation .quiet{justify-content:flex-start;text-align:left;white-space:normal;overflow-wrap:anywhere;color:var(--ink);width:100%;font-size:12px}.photo-description-error{margin:-8px 0 16px}input[aria-invalid=true]{border-color:var(--error)}
