@@ -124,7 +124,7 @@ async function route(request: Request, env: Env, actor: string) {
       if (!Number.isInteger(data.year) || (data.year as number)<2000 || (data.year as number)>2100) return fail("Choose a year from 2000 to 2100.");
       const year=data.year as number,title=text(data.title,"title",150),authors=text(data.authors,"authors",100);
       const draft:Draft={title,authors,intro:"A few places, some familiar faces, and the everyday things worth keeping. We’d love to share them with you.",
-        note:"A little look back at our year, and the people who made it special.",sharedTitle:"A little of our year",stories:[],photos:[]};
+        note:"A little look back at our year, and the people who made it special.",sharedTitle:"Meanwhile, in our camera roll…",stories:[],photos:[]};
       const result=await env.DB.prepare("INSERT INTO editions(year,draft_json) VALUES(?1,?2) ON CONFLICT(year) DO NOTHING RETURNING year")
         .bind(year,JSON.stringify(draft)).first<{year:number}>();
       if (!result) throw new Problem(409,"A scrapbook for this year already exists. Open it from Scrapbooks.");

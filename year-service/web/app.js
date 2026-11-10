@@ -1,8 +1,11 @@
 import {scrapbookConfig} from './config.js';
+import {photoOrder,adjacentIndex,swipeStep,wheelNavigation} from './photo-navigation.js';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#photo');
 const save = document.querySelector('#save');
 const fullResolution=document.querySelector('#full-resolution');
+const previousPhoto=document.querySelector('#previous-photo'),nextPhoto=document.querySelector('#next-photo'),photoStage=dialog.querySelector('.photo-stage');
+let viewerPhotos=[],viewerIndex=-1,viewerReturnFocus;
 let preparedFile, selected, journal, saveMode = 'share', generation = 0, fullImageUrl, originalRequest, downloadPending=false, imageObserver, layoutObserver, closeTimer;
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path, data) {
@@ -25,7 +28,7 @@ function renderFooter(){
   const links=scrapbookConfig.instagram;
   document.querySelector('footer > span').replaceChildren('By ',footerProfile('Aditya',links.aditya),' & ',footerProfile('Angela',links.angela),', with help from ',footerProfile('Pixel',links.pixel));
 }
-function titleMarkup(title) { return !title || title==='A year in little moments.' ? 'A year in<br><em>little moments.</em>' : escape(title); }
+function sharedHeading(title){return !title||['A little of our year','A little of our year.'].includes(title.trim())?'Meanwhile, in our camera roll…':title;}
 function message(error) { app.innerHTML = `<section class="entry"><p class="kicker">A private edition</p><h1>A little<br><em>patience.</em></h1><p>${escape(error.message)}</p><button class="text-button" id="retry">Try again</button></section>`; document.querySelector('#retry').onclick = start; }
 async function start() {
   try {
@@ -35,7 +38,7 @@ async function start() {
     try { journal = await api('journal'); showJournal(); return; } catch {}
     const invite = await api('invitation');
     applyBrand(invite.authors,invite.year);
-    app.innerHTML = `<section class="entry"><p class="kicker">A little something for ${escape(invite.name)}</p><h1>${titleMarkup(invite.title)}</h1><p class="intro">${escape(invite.intro || "A few places, some familiar faces, and the everyday things worth keeping. We’d love to share them with you.")}</p><p>We’ll send a code to ${escape(invite.verificationName || invite.name)}’s phone ending in <strong>${escape(invite.phoneHint)}</strong>.</p><button class="button" id="send">Text me a code →</button><p class="error" role="alert" id="error"></p><p class="signoff">With love, ${escape(invite.authors || "Aditya & Angela")}</p></section>`;
+    app.innerHTML = `<section class="entry"><h1 class="invitation-greeting">A little something for <em>${escape(invite.name)}</em>.</h1><p class="intro">${escape(invite.intro || "A few places, some familiar faces, and the everyday things worth keeping. We’d love to share them with you.")}</p><p>We’ll send a code to ${escape(invite.verificationName || invite.name)}’s phone ending in <strong>${escape(invite.phoneHint)}</strong>.</p><button class="button" id="send">Text me a code →</button><p class="error" role="alert" id="error"></p><p class="signoff">With love, ${escape(invite.authors || "Aditya & Angela")}</p></section>`;
     document.querySelector('#send').onclick = async e => { e.target.disabled = true; try { await api('send', {}); showCode(invite); } catch (error) { document.querySelector('#error').textContent = error.message; e.target.disabled = false; } };
   } catch (error) { message(error); }
 }
@@ -61,9 +64,9 @@ function showJournal() {
   imageObserver?.disconnect();layoutObserver?.disconnect();
   applyBrand(journal.authors,journal.year);
   const cards = personal => journal.photos.filter(p=>p.personal===personal).map(p=>`<button class="card" data-photo="${escape(p.id)}" aria-label="Open photo: ${escape(p.caption)}"><img data-src="${escape(p.src)}" alt="${escape(p.alt)}" loading="lazy" decoding="async" ${p.width&&p.height?`width="${p.width}" height="${p.height}"`:'class="pending-dimensions"'}/><span>${escape(p.caption)}</span></button>`).join('');
-  const hasPersonal=journal.photos.some(p=>p.personal), sharedTitle=journal.sharedTitle || 'A little of our year';
+  const hasPersonal=journal.photos.some(p=>p.personal), sharedTitle=sharedHeading(journal.sharedTitle);
   const stories=(journal.stories || []).map(s=>`<section class="letter"><h2>${escape(s.title)}</h2><p class="prose">${escape(s.body)}</p></section>`).join('');
-  app.innerHTML = `<section class="letter"><p class="kicker">The opening note</p><h1>${journal.title ? titleMarkup(journal.title) : 'A little<br><em>look back.</em>'}</h1><p class="intro">Hey ${escape(journal.name)}, we’re glad you’re here.</p><p class="prose">${escape(journal.note || 'We wanted to make a little space for the photos with a story behind them, the ordinary days worth remembering, and the people who make it all feel like home.')}</p><p class="signoff">With love, ${escape(journal.authors || 'Aditya & Angela')}</p>${!journal.title?'<p class="hint">These are illustrative samples while we test your invitation. Real memories will come later.</p>':''}</section>${hasPersonal?`<section class="personal-photos" aria-label="Photos selected for ${escape(journal.name)}"><div class="grid">${cards(true)}</div></section>`:''}<section class="shared-photos" aria-labelledby="shared-title"><h2 id="shared-title">${escape(sharedTitle)}</h2><div class="grid">${cards(false)}</div></section>${stories}`;
+  app.innerHTML = `<section class="letter"><p class="kicker">The opening note</p><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${escape(journal.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div><p class="prose">${escape(journal.note || 'We wanted to make a little space for the photos with a story behind them, the ordinary days worth remembering, and the people who make it all feel like home.')}</p><p class="signoff">With love, ${escape(journal.authors || 'Aditya & Angela')}</p>${!journal.title?'<p class="hint">These are illustrative samples while we test your invitation. Real memories will come later.</p>':''}</section>${hasPersonal?`<section class="personal-photos" aria-label="Photos selected for ${escape(journal.name)}"><div class="grid">${cards(true)}</div></section>`:''}<section class="shared-photos" aria-labelledby="shared-title"><h2 id="shared-title">${escape(sharedTitle)}</h2><div class="grid">${cards(false)}</div></section>${stories}`;
   const loadImage = image => {image.onload=()=>{image.classList.remove('pending-dimensions');layoutPhotoGrid(image.closest('.grid'));};image.src=image.dataset.src;delete image.dataset.src;};
   const images=app.querySelectorAll('img[data-src]');
   if ('IntersectionObserver' in window) {
@@ -84,16 +87,59 @@ function showJournal() {
   app.querySelectorAll('[data-photo]').forEach(button => button.onclick=()=>openPhoto(journal.photos.find(p=>p.id===button.dataset.photo)));
   window.scrollTo(0,0);
 }
-async function openPhoto(photo) {
+function openPhoto(photo) {
   if(dialog.open)return;
+  viewerPhotos=photoOrder(journal.photos);viewerIndex=viewerPhotos.findIndex(p=>p.id===photo.id);
+  if(viewerIndex<0)return;
+  viewerReturnFocus=document.activeElement;
   clearTimeout(closeTimer);dialog.classList.remove('is-closing');
+  showPhoto(photo);dialog.showModal();
+}
+function showPhoto(photo,direction=0){
+  originalRequest?.abort();originalRequest=null;
+  if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}
   selected=photo;preparedFile=null;saveMode='share';const current=++generation;
-  const image=dialog.querySelector('img');image.src=photo.src;image.alt=photo.alt;dialog.querySelector('p').textContent=photo.caption;
+  const image=dialog.querySelector('img');image.draggable=false;image.src=photo.src;image.alt=photo.alt;document.querySelector('#photo-caption').textContent=photo.caption;
   if(photo.viewerSrc&&photo.viewerSrc!==photo.src){
     const detailed=new Image();detailed.decoding='async';detailed.onload=()=>{if(current===generation&&!preparedFile)image.src=photo.viewerSrc;};detailed.src=photo.viewerSrc;
   }
-  document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full resolution';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');dialog.showModal();
+  document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full resolution';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');
+  previousPhoto.disabled=viewerIndex===0;nextPhoto.disabled=viewerIndex===viewerPhotos.length-1;
+  document.querySelector('#photo-count').textContent=`Photo ${viewerIndex+1} of ${viewerPhotos.length}`;
+  document.querySelector('#photo-navigation').hidden=viewerPhotos.length<2;
+  if(direction&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    photoStage.getAnimations().forEach(a=>a.cancel());
+    photoStage.animate([{opacity:.45,transform:`translateX(${direction*24}px)`},{opacity:1,transform:'translateX(0)'}],{duration:180,easing:'ease-out'});
+  }
 }
+function movePhoto(step){
+  if(!dialog.open||dialog.classList.contains('is-closing'))return;
+  const next=adjacentIndex(viewerIndex,step,viewerPhotos.length);if(next===viewerIndex)return;
+  viewerIndex=next;showPhoto(viewerPhotos[next],step);
+}
+previousPhoto.onclick=()=>movePhoto(-1);nextPhoto.onclick=()=>movePhoto(1);
+document.addEventListener('keydown',event=>{
+  if(!dialog.open||dialog.classList.contains('is-closing'))return;
+  if(event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
+  if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();movePhoto(event.key==='ArrowRight'?1:-1);}
+});
+let swipeStart=null;const pointers=new Set();
+photoStage.addEventListener('pointerdown',event=>{
+  pointers.add(event.pointerId);
+  if(pointers.size>1){swipeStart=null;return;}
+  if(event.button!==0||event.target.closest('button')||(window.visualViewport?.scale||1)>1)return;
+  swipeStart={id:event.pointerId,x:event.clientX,y:event.clientY};photoStage.setPointerCapture(event.pointerId);
+});
+photoStage.addEventListener('pointerup',event=>{
+  pointers.delete(event.pointerId);
+  if(!swipeStart||swipeStart.id!==event.pointerId)return;
+  const step=swipeStep(event.clientX-swipeStart.x,event.clientY-swipeStart.y);swipeStart=null;
+  if(step)movePhoto(step);
+});
+photoStage.addEventListener('pointercancel',event=>{pointers.delete(event.pointerId);swipeStart=null;});
+const wheelStep=wheelNavigation(movePhoto);
+dialog.addEventListener('wheel',event=>{if((window.visualViewport?.scale||1)===1&&wheelStep(event))event.preventDefault();},{passive:false});
+
 async function deliverOriginal(){
   if(!preparedFile)return;
   const file=preparedFile;
@@ -145,6 +191,6 @@ dialog.querySelector('.close').onclick=closePhoto;
 dialog.addEventListener('cancel',event=>{event.preventDefault();closePhoto();});
 dialog.addEventListener('animationend',event=>{if(event.target===dialog&&event.animationName==='photo-exit'&&dialog.classList.contains('is-closing'))dialog.close();});
 dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closePhoto();}});
-dialog.addEventListener('close',()=>{clearTimeout(closeTimer);dialog.classList.remove('is-closing');generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;selected=null;dialog.querySelector('img').removeAttribute('src');if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}});
+dialog.addEventListener('close',()=>{clearTimeout(closeTimer);dialog.classList.remove('is-closing');generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;selected=null;swipeStart=null;pointers.clear();viewerPhotos=[];viewerIndex=-1;dialog.querySelector('img').removeAttribute('src');if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}const restore=viewerReturnFocus;viewerReturnFocus=null;restore?.focus({preventScroll:true});});
 renderFooter();
 start();

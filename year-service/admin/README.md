@@ -87,10 +87,11 @@ The Home server row keeps its not-connected state; Articles is a not-set-up
 workspace with no editing or publishing backend yet.
 
 The Scrapbooks workspace contains the collection. New scrapbook asks
-for a year (2000–2100), title, and authors, then creates one private draft for that
+for a year (2000–2100) and authors, then creates one private draft for that
 year. Duplicate years are rejected atomically. It starts with default introductory
 text and no photos, stories, or invitations; nothing is copied from another year.
-Titles and authors stay editable; the year identifies the scrapbook.
+Authors stay editable; the year identifies the scrapbook. Titles are retained
+only as compatibility metadata for existing clients and stored editions.
 
 Opening a scrapbook reveals a year selector in the main content area and a guided flow: Write stories,
 Manage photos, Sharing, then Review & publish. Save & continue
@@ -108,7 +109,7 @@ throughout editing and creation.
 The collection shows each year's draft/publication status and content counts.
 Review links missing details back to the relevant task. Home server is explicitly
 not connected; service health, storage, and backup sections have no simulated data.
-Write stories edits the title, authors, introduction, opening note, shared chapter title,
+Write stories edits the authors, introduction, opening note, shared photo heading,
 and up to 20 stories. Manage photos supports original uploads, captions, accessible
 image descriptions, reordering, and shared or selected-recipient/group access.
 People is a persistent directory with name/phone search and explicit person
@@ -247,8 +248,8 @@ contact. A verification phone cannot be removed while invitations use it.
 Separate existing invitations are retained; a person may be included in multiple
 invitations. Each verification contact still has at most one invitation per year.
 
-Review & publish offers invitation previews (combined household access) and
-individual-person previews. Publication coverage checks everyone included in
+Every scrapbook task offers invitation previews (combined household access) and
+individual-person previews in an on-demand modal. Publication coverage checks everyone included in
 active, unexpired invitations. Removing a partner immediately removes their
 person-based access from the shared invitation; existing separately issued
 invitations are unaffected. Access/greeting changes apply immediately to the
@@ -319,3 +320,38 @@ fallback, and `web/apple-touch-icon.png` is the 180px iOS home-screen icon.
 All are original geometric artwork with no private content. These assets use
 the same Access/JWT gate as other admin assets. The guest scrapbook has a separate moss-and-cream album icon; the public
 portfolio retains its own favicon.
+
+## On-demand scrapbook preview
+
+Stories, Photos, Sharing, and Review & publish all offer Preview in their task
+header. With unsaved edits, the action reads Save & preview and saves the private
+draft before opening; validation failures preserve the editor and show the error.
+Publishing remains a separate, explicit action on Review & publish.
+
+Preview floats above the current task with a blurred, dimmed backdrop. Its
+recipient selector refreshes automatically for shared-only, whole-invitation,
+or individual-person views. Only the latest request can update the dialog;
+switching recipients or closing cancels obsolete requests. The desktop modal uses almost the full viewport with three photo columns on
+wide screens; phones retain two columns. The constrained content wrapper lets
+the body scroll independently, and close, Escape, or a backdrop click returns to the editor with
+focus restored. Motion and blur respect reduced-motion/transparency preferences.
+The existing authenticated saved-draft endpoint is unchanged; no SMS, guest
+session, original-file request, or publication is triggered by previewing.
+
+Browser validation used the local synthetic fixture at desktop and 440px phone
+widths, including save-before-preview, household switching, all four entry points,
+and Escape/focus return. Three unit tests cover recipient races, close/abort,
+and errors/retry.
+
+The large scrapbook title is removed from guest pages, invitation entry, and
+admin preview. The editor and creation flow no longer offer a title field;
+collections and selectors identify scrapbooks by year/authors. Existing stored
+titles remain as compatibility metadata, and new clients supply an internal
+year-based label when creating an edition. No content migration is required.
+The default shared heading is “Meanwhile, in our camera roll…”. Existing standard
+“A little of our year” headings render with the new wording, while custom
+headings remain editable and unchanged.
+
+The preview includes the scrapbook’s deep-moss closing footer, cream/peach
+credits, and links from `year-service/web/config.js`; the public portfolio’s
+footer remains separate.

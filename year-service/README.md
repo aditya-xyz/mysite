@@ -146,7 +146,7 @@ The guest scrapbook is a continuous page, with a compact opening note followed
 by a photo-library-style gallery. There are no chapter jump links or repeated
 personal-photo heading. Images keep their natural aspect ratio in a staggered
 grid: two columns on phones and three on desktop. Captions remain under each
-image, with source/keyboard order unchanged. The smaller A little of our year heading remains above the common-photo section.
+image, with source/keyboard order unchanged. The smaller “Meanwhile, in our camera roll…” heading introduces common photos.
 
 JPEG preview dimensions are read from a bounded 64 KiB header range when taking
 a publication snapshot and stored in the manifest. Older publications and the
@@ -232,3 +232,40 @@ peach heart. `web/favicon.svg` is scalable, `web/favicon-32.png` is the browser
 fallback, and `web/apple-touch-icon.png` is the 180px iOS home-screen icon. It
 contains no photos or personal data. Admin and the public portfolio keep their
 own distinct icons.
+
+The opening greeting is a personal dedication: a larger serif “Hey [addressed
+to],” with emphasized names, a soft moss rule, and the welcome on its own line.
+The admin preview uses matching treatment. Names remain escaped plain text,
+including custom household greetings, and long names wrap on phones.
+
+The personalized greeting is now the scrapbook’s main heading. The previous
+large edition title is no longer rendered in the scrapbook or invitation entry.
+The admin preview matches, and its title input is removed. The default shared
+photo heading is “Meanwhile, in our camera roll…”, with the former standard
+wording mapped at display time for compatibility. Custom shared headings remain
+unchanged. Existing invitation tokens, publications, and photos are not rewritten.
+
+## Footer and photo navigation
+
+The scrapbook ends with a full-width deep-moss footer, cream text, peach profile
+links, and “That’s our year. Glad you were in it.” The admin preview includes the
+same closing treatment and reads profile URLs from the shared scrapbook config.
+
+Opening a photo lets recipients move through their complete authorized gallery
+in page order: personal photos, then shared photos. Swipe/drag horizontally,
+use a horizontal trackpad gesture, click Previous/Next, or use Left/Right arrows.
+A counter announces the position, and navigation stops at either end. Vertical
+gestures and pinch zoom remain native. Motion respects reduced-motion settings.
+
+Each move loads only compressed previews, resets the original/download state,
+revokes the previous original’s object URL, and aborts an in-flight original
+request. Only photos already returned by the authenticated journal are included.
+Full resolution and download controls follow the current photo’s canSave flag;
+shared photos still have no download/original action. Loading an original remains
+explicit and subject to the existing per-invitation quota. Closing restores
+focus to the thumbnail that opened the viewer.
+
+Synthetic desktop/440px-phone checks cover keyboard and swipe navigation across
+personal/shared photos, both gallery boundaries, original-state reset, and footer
+contrast. Navigation helper tests cover gallery ordering, gesture intent, and
+trackpad momentum.
