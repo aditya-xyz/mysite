@@ -3,7 +3,7 @@ import { FiArrowDown } from "react-icons/fi";
 const Home = () => (
   <section id="home" className="hero shell" aria-labelledby="home-title">
     <div className="hero-copy">
-      <p className="eyebrow">Hi, I’m Aditya · Southern California</p>
+      <p className="eyebrow">Hi, I’m Aditya</p>
       <h1 id="home-title">
         Connecting the dots.
         <br />
