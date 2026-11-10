@@ -134,3 +134,70 @@ Migration 0004 preserves existing invitation tokens and published content while
 linking invitations to directory people. See admin/README.md for compatibility
 and phone-change behavior. Production migration/deployment is separate from the
 local design preview.
+
+One invitation/QR can include a couple or household, with one verification contact and a custom greeting. See
+admin/README.md for migration 0005 and compatibility and deployment details.
+
+## Guest scrapbook layout
+
+The guest scrapbook is a continuous page, with a compact opening note followed
+by a photo-library-style gallery. There are no chapter jump links or repeated
+personal-photo heading. Images keep their natural aspect ratio in a staggered
+grid: two columns on phones and three on desktop. Captions remain under each
+image, with source/keyboard order unchanged. The smaller A little of our year heading remains above the common-photo section.
+
+JPEG preview dimensions are read from a bounded 64 KiB header range when taking
+a publication snapshot and stored in the manifest. Older publications and the
+pilot resolve missing dimensions read-only for authorized photos. This requires
+no new schema migration or rewriting published content. Width/height reserve
+correct space before lazy loading, and grid spans recalculate on resize or image
+load. Original bytes and EXIF remain untouched. Previews are requested within
+200px of the viewport, using native lazy loading and async decoding.
+
+Opening a photo shows an image-only floating viewer with a transparent container,
+a blurred, dimmed page backdrop, and no card, glass panel, border, or shadow. Close
+and download icons sit on the image in 44px touch targets. Download appears only
+for authorized personal originals; mobile file sharing/download behavior and
+original-byte preservation are unchanged. Captions/status float below the photo.
+The guest-facing Close my edition button is removed; session expiry/revocation
+and the server logout endpoint remain available.
+
+The ignored aspect-ratio fixture includes synthetic 4:5 Instagram portrait,
+9:16 Story, 3:4 iPhone portrait, and 4:3 landscape images with diagnostic edge
+markers. Browser checks cover mixed-ratio scrolling, mobile resizing, and the
+floating viewer at 440px and 375px phone widths. The suite also covers JPEG
+header parsing, legacy dimension resolution, snapshot dimensions, and unchanged
+personal/shared authorization. All 34 tests pass. Run the ignored preview fixture
+with ASPECT_PREVIEW=1 to use these test images. The fixture remains local-only; no real personal photos are used.
+
+The viewer enters with a 280ms zoom/fade and closes with a 180ms retreat/fade;
+the background blur/dimming animates with it. Close icon, tap outside, and Escape
+all use the same dismissal path and restore focus to the thumbnail. A fallback
+handles suppressed animation events. Reduced-motion settings remove the motion
+and close immediately; reduced-transparency settings use dimming without blur.
+These paths were checked in the local iPhone preview, including temporary
+reduced-motion emulation (restored afterward). These checks used local test data.
+
+The local LONG_PREVIEW=1 fixture now has 5 personalized photos for Ben & Jerry
+(including assignments to either partner and to both) plus 20 common previews.
+It cycles through 4:5, 9:16, 3:4, and 4:3 synthetic images with unique photo IDs.
+Common photos have no original/download action. The fixture’s localhost-only
+/__preview/metrics endpoint counts unique guest preview requests without tokens
+or contact data. At 440px mobile width, the top requested 5 personal previews and
+0 common previews; approaching the common section increased this to 5 personal
+and 6 common, leaving 14 common previews deferred. The common viewer was checked
+without a download icon. The preview remains running locally for user review.
+
+
+The guest scrapbook now uses the fixed moss-and-cream palette (`#ecf0e5`
+background, `#20392f` text). Its footer palette controls, alternative palette CSS,
+and theme/localStorage script have been removed. Saved guest palette preferences
+no longer affect first paint or later rendering. The theme-color meta matches
+the moss background. This change is confined to year-service/web; the public
+portfolio’s palette controls and theme handling remain untouched.
+
+
+Scrapbook footer Instagram URLs live in `web/config.js`, separate from the public
+portfolio’s `src/socials.ts`. All three credit names link to their configured
+profiles in a new tab. An unset/invalid URL leaves that name as plain text. This
+is shared scrapbook presentation config; it does not need Worker vars or D1.

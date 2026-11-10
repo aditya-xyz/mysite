@@ -39,7 +39,7 @@ Use Node 22.13 or later. From year-service:
 - npm run deploy (guest compatibility with per-year publications)
 - npm run admin:deploy
 
-Apply migrations 0003 and 0004 first, then deploy the guest Worker before the admin Worker.
+Apply migrations 0003, 0004, and 0005 first, then deploy the guest Worker before the admin Worker.
 Migration 0003 adds year indexes. Migration 0004 creates persistent People and
 links invitations by phone, without rewriting existing content, tokens, or sessions. If preexisting duplicate
 phones block the index, investigate them rather than deleting records.
@@ -227,3 +227,54 @@ A local-only preview harness is in .private/preview-admin.mjs. It creates an
 ephemeral test identity and fake in-memory database, binds localhost only, and
 refuses external traffic apart from its mocked local issuer. It is ignored and
 must never be deployed. Production identity is still Cloudflare Access.
+
+## Shared invitations
+
+An invitation may include 1–20 People records (for example, Ben and Jerry), one
+included verification contact with a phone, and editable **Addressed to** text.
+People may omit their phone unless they are a verification contact. One link and
+QR code open the combined audience: personal photos assigned to either included
+person, plus shared previews. Personal originals retain their existing byte/EXIF
+and Save photo rules. The greeting appears on the invitation and inside the
+scrapbook; the verification screen names just the contact and masks their phone.
+
+Sharing lists invitations rather than duplicating a couple's invitation under
+each person. Edit invitation changes the people, contact, and greeting without
+rotating the token. A change to included people/contact ends this invitation's
+sessions and cancels pending codes immediately. Greeting-only changes retain
+sessions. Global phone changes still invalidate all invitations verified by that
+contact. A verification phone cannot be removed while invitations use it.
+Separate existing invitations are retained; a person may be included in multiple
+invitations. Each verification contact still has at most one invitation per year.
+
+Review & publish offers invitation previews (combined household access) and
+individual-person previews. Publication coverage checks everyone included in
+active, unexpired invitations. Removing a partner immediately removes their
+person-based access from the shared invitation; existing separately issued
+invitations are unaffected. Access/greeting changes apply immediately to the
+published scrapbook, while photo/content edits still require explicit publishing.
+
+Migration **0005_shared_invitations.sql** adds invitation members, greeting, and
+optimistic versions, and allows directory people without a phone. It preserves
+invitation IDs/hashes/expiry/revocation, sessions, content JSON, and media. The
+populated-table migration temporarily clears and restores directory foreign-key
+references inside the migration transaction while rebuilding People; it does not
+recreate invitations or sessions. Tests run it as one D1 batch and check foreign
+keys afterward. Existing invitations are backfilled with their original contact
+as their sole member and retain their original name through a fallback greeting.
+Legacy recipient IDs remain scoped to their scrapbook. Before any future rollout,
+back up D1, apply migration 0005, deploy the guest Worker, then deploy admin.
+The preview fixtures and mocked verification are local-only and must never be deployed.
+
+The new invitation endpoint accepts `memberIds`, `verificationContactId`, and
+`addressedTo`; legacy `{personId}` creation remains supported. Updating
+`POST /api/editions/{year}/invitations/{id}/details` also requires `version`.
+`GET /api/editions/{year}/preview?invitation={id}` previews the combined audience.
+Membership is stored as a validated JSON array on the invitation so contact,
+greeting, audience, and version can change in one atomic update.
+
+The ignored `.private/preview-admin-couples.mjs` fixture serves local admin on
+http://localhost:8794 and guest on http://localhost:8795. It uses fake people,
+illustrative samples, ephemeral identity, and mocked SMS (code **123456**), with
+external requests blocked. Run the usual check/test build first, then run this
+fixture with Node 22. Data resets when the fixture restarts. Never deploy it.

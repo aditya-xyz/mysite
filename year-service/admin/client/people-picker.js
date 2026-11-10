@@ -1,8 +1,8 @@
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-export function peoplePickerMarkup(photoId,label){
+export function peoplePickerMarkup(photoId,label,{hint="Select multiple people. Adding someone doesn’t invite them to this scrapbook.",allowAdd=true}={}){
   const id='recipients-'+photoId;
-  return `<div class="recipient-picker" data-picker="${escape(photoId)}"><span class="picker-label" id="${id}-label">${escape(label)}</span><div class="picker-control"><div class="picker-chips"></div><input type="text" class="picker-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-list" aria-labelledby="${id}-label" aria-describedby="${id}-hint" placeholder="Search people…" autocomplete="off"></div><div class="picker-menu" hidden><div role="listbox" aria-multiselectable="true" id="${id}-list" aria-labelledby="${id}-label" class="picker-options"></div><button type="button" class="picker-add">+ Add a new person…</button></div><p class="hint picker-hint" id="${id}-hint">Select multiple people. Adding someone doesn’t invite them to this scrapbook.</p><span class="sr-only picker-announcement" role="status" aria-live="polite"></span></div>`;
+  return `<div class="recipient-picker" data-picker="${escape(photoId)}"><span class="picker-label" id="${id}-label">${escape(label)}</span><div class="picker-control"><div class="picker-chips"></div><input type="text" class="picker-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-list" aria-labelledby="${id}-label" aria-describedby="${id}-hint" placeholder="Search people…" autocomplete="off"></div><div class="picker-menu" hidden><div role="listbox" aria-multiselectable="true" id="${id}-list" aria-labelledby="${id}-label" class="picker-options"></div><button type="button" class="picker-add" ${allowAdd?'':'hidden'}>+ Add a new person…</button></div><p class="hint picker-hint" id="${id}-hint">${escape(hint)}</p><span class="sr-only picker-announcement" role="status" aria-live="polite"></span></div>`;
 }
 
 export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
@@ -12,16 +12,16 @@ export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
   function renderChips(){
     chips.innerHTML=selected().map(id=>{
       const person=people().find(p=>p.id===id),name=person?.name||'Unknown person',access=status(id);
-      return `<span class="person-chip ${access==='Invited'?'':'needs-invitation'}"><span>${escape(name)}${access==='Invited'?'':`<small>${escape(access)}</small>`}</span><button type="button" data-remove="${escape(id)}" aria-label="Remove ${escape(name)}">×</button></span>`;
+      return `<span class="person-chip ${!access||access==='Invited'?'':'needs-invitation'}"><span>${escape(name)}${!access||access==='Invited'?'':`<small>${escape(access)}</small>`}</span><button type="button" data-remove="${escape(id)}" aria-label="Remove ${escape(name)}">×</button></span>`;
     }).join('');
     chips.querySelectorAll('[data-remove]').forEach(button=>button.onclick=()=>{
       const name=people().find(p=>p.id===button.dataset.remove)?.name||'Person';toggle(button.dataset.remove);renderChips();paint();input.focus();root.querySelector('.picker-announcement').textContent=name+' removed.';
     });
   }
   function paint(){
-    const query=input.value.trim().toLocaleLowerCase();matches=people().filter(p=>(p.name+' '+p.phone).toLocaleLowerCase().includes(query));
+    const query=input.value.trim().toLocaleLowerCase();matches=people().filter(p=>(p.name+' '+(p.phone||'')).toLocaleLowerCase().includes(query));
     if(active>=matches.length)active=matches.length-1;
-    options.innerHTML=matches.map((person,i)=>`<div role="option" id="${options.id}-${i}" aria-selected="${selected().includes(person.id)}" class="picker-option ${i===active?'highlighted':''}" data-option="${i}"><span><strong>${escape(person.name)}</strong><small>•••• ${escape(person.phone.slice(-4))} · ${escape(status(person.id))}</small></span><span aria-hidden="true">${selected().includes(person.id)?'✓':'+'}</span></div>`).join('')||'<p class="picker-no-results">No matching people.</p>';
+    options.innerHTML=matches.map((person,i)=>`<div role="option" id="${options.id}-${i}" aria-selected="${selected().includes(person.id)}" class="picker-option ${i===active?'highlighted':''}" data-option="${i}"><span><strong>${escape(person.name)}</strong><small>${person.phone?'•••• '+escape(person.phone.slice(-4)):'No phone needed'}${status(person.id)?' · '+escape(status(person.id)):''}</small></span><span aria-hidden="true">${selected().includes(person.id)?'✓':'+'}</span></div>`).join('')||'<p class="picker-no-results">No matching people.</p>';
     options.querySelectorAll('[data-option]').forEach(option=>{
       option.onpointerdown=event=>event.preventDefault();
       option.onclick=()=>choose(Number(option.dataset.option));

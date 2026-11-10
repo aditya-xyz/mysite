@@ -1,3 +1,5 @@
+import { previewDimensions } from "../../src/image-dimensions.ts";
+import { invitationAudience, invitationName, type InvitationAudience } from "../../src/invitations.ts";
 import { canonicalDraft, type Contact } from "./people.ts";
 import { adminIdentity, type AuthConfig } from "./auth.ts";
 import { token, digest, now, sameOrigin } from "../../src/security.ts";
@@ -58,7 +60,7 @@ async function snapshot(draft: Draft, env: Env, year: number): Promise<Published
   const photos: PublishedPhoto[] = [];
   for (const p of draft.photos) {
     const m = objects.get(p.id); if (!m) return fail("An uploaded photo is missing. Save the draft again.");
-    photos.push({...p,preview_key:m.preview_key,original_key:m.original_key,filename:m.filename,mime:m.mime});
+    photos.push({...p,...await previewDimensions(env.MEDIA,m.preview_key),preview_key:m.preview_key,original_key:m.original_key,filename:m.filename,mime:m.mime});
   }
   return {...draft,photos};
 }
@@ -78,8 +80,8 @@ async function route(request: Request, env: Env, actor: string) {
       return json({people:people.results});
     }
     if(request.method === "POST") {
-      const data=await body(request),name=text(data.name,"name",100),phone=text(data.phone,"phone number",20);
-      if(!/^\+[1-9]\d{7,14}$/.test(phone)) return fail("Use a full phone number including country code.");
+      const data=await body(request),name=text(data.name,"name",100),phone=text(data.phone??"","phone number",20,false)||null;
+      if(phone && !/^\+[1-9]\d{7,14}$/.test(phone)) return fail("Use a full phone number including country code.");
       const id="contact-"+token().slice(0,24);
       const person=await env.DB.prepare("INSERT INTO people(id,name,phone) VALUES(?1,?2,?3) ON CONFLICT(phone) DO NOTHING RETURNING id,name,phone,version")
         .bind(id,name,phone).first<Contact>();
@@ -90,8 +92,8 @@ async function route(request: Request, env: Env, actor: string) {
   }
   const contactRoute=/^\/api\/contacts\/([a-z0-9-]{1,100})\/details$/.exec(path);
   if(contactRoute && request.method === "POST") {
-    const data=await body(request),name=text(data.name,"name",100),phone=text(data.phone,"phone number",20);
-    if(!/^\+[1-9]\d{7,14}$/.test(phone))return fail("Use a full phone number including country code.");
+    const data=await body(request),name=text(data.name,"name",100),phone=text(data.phone??"","phone number",20,false)||null;
+    if(phone && !/^\+[1-9]\d{7,14}$/.test(phone))return fail("Use a full phone number including country code.");
     if(!Number.isInteger(data.version))return fail("Missing person version.");
     const person=await env.DB.prepare("UPDATE people SET name=?1,phone=?2,version=version+1,updated_at=unixepoch() WHERE id=?3 AND version=?4 RETURNING id,name,phone,version")
       .bind(name,phone,contactRoute[1],data.version as number).first<Contact>();
@@ -102,7 +104,7 @@ async function route(request: Request, env: Env, actor: string) {
   if (path === "/api/editions") {
     if (request.method === "GET") {
       const rows = await env.DB.prepare(`SELECT year,draft_json,draft_version,published_version,published_at,updated_at,
-        (SELECT count(*) FROM invites WHERE edition_year=editions.year) AS people_count
+        (SELECT count(DISTINCT m.value) FROM invites i,json_each(i.member_ids) m WHERE i.edition_year=editions.year) AS people_count
         FROM editions ORDER BY year DESC`).all<EditionRow & {year:number;updated_at:number;people_count:number}>();
       return json({editions:rows.results.map(row=>{
         const draft=JSON.parse(row.draft_json) as Draft;
@@ -135,9 +137,9 @@ async function route(request: Request, env: Env, actor: string) {
   if (path.startsWith("/api/")) await edition(env,year);
   if (path === "/api/state" && request.method === "GET") {
     const row = await edition(env,year);
-    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
+    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,original_key IS NOT NULL AS has_original FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
-    return json({actor,year,draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,people:people.results,media:media.results});
+    return json({actor,year,draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
     const data = await body(request), draft = await validDraft(data.draft,env,year);
@@ -153,7 +155,7 @@ async function route(request: Request, env: Env, actor: string) {
     if (data.version !== row.draft_version) throw new Problem(409,"Save and review the latest draft before publishing.");
     const draft = await validDraft(JSON.parse(row.draft_json),env,year), published = await snapshot(draft,env,year);
     if (!published.photos.length) return fail("Add at least one photo before publishing.");
-    const invitations=await env.DB.prepare("SELECT person_id FROM invites WHERE edition_year=?1 AND revoked_at IS NULL AND expires_at>?2").bind(year,now()).all<{person_id:string}>();
+    const invitations=await env.DB.prepare("SELECT m.value AS person_id FROM invites i,json_each(i.member_ids) m WHERE i.edition_year=?1 AND i.revoked_at IS NULL AND i.expires_at>?2").bind(year,now()).all<{person_id:string}>();
     const active=new Set(invitations.results.map(i=>i.person_id));
     if(draft.photos.some(p=>p.recipients.some(id=>!active.has(id))))return fail("Invite every selected photo recipient to this scrapbook before publishing.");
     const result = await env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch() WHERE year=?3 AND draft_version=?2 RETURNING published_version")
@@ -168,23 +170,46 @@ async function route(request: Request, env: Env, actor: string) {
       .bind(id,year).first<{id:string;name:string}>() : null;
     if (id && !person) throw new Problem(404,"Recipient not found.");
     const row = await edition(env,year), draft=await canonicalDraft(JSON.parse(row.draft_json),env.DB,year), published = await snapshot(draft,env,year);
-    const data = clientEdition(published,id,person?.name || "friend",year,person?.id);
+    const invitationId=url.searchParams.get("invitation");
+    const invite=invitationId?await env.DB.prepare("SELECT * FROM invites WHERE id=?1 AND edition_year=?2").bind(invitationId,year).first<InvitationAudience>():null;
+    if(invitationId && !invite)throw new Problem(404,"Invitation not found.");
+    const data = invite ? clientEdition(published,invite.id,invitationName(invite),year,await invitationAudience(env.DB,invite)) : clientEdition(published,id,person?.name || "friend",year,person?.id);
     data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`}));
     return json(data);
   }
-  if (path === "/api/invitations" && request.method === "POST") {
-    const data=await body(request),personId=text(data.personId,"person",100);
-    const person=await env.DB.prepare("SELECT id,name,phone FROM people WHERE id=?1").bind(personId).first<Contact>();
-    if(!person)throw new Problem(404,"Person not found. Add them in People first.");
+  const invitationRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/details$/.exec(path);
+  if ((path === "/api/invitations" || invitationRoute) && request.method === "POST") {
+    const data=await body(request),personId=text(data.verificationContactId??data.personId,"verification contact",100);
+    const members=data.memberIds??[personId];
+    if(!Array.isArray(members)||!members.length||members.length>20||members.some(id=>typeof id!=="string")||new Set(members).size!==members.length)
+      return fail("Choose between 1 and 20 different people for the invitation.");
+    if(!members.includes(personId))return fail("The verification contact must be included in this invitation.");
+    const people=await env.DB.prepare("SELECT id,name,phone,version FROM people WHERE id IN (SELECT value FROM json_each(?1))")
+      .bind(JSON.stringify(members)).all<Contact>();
+    if(people.results.length!==members.length)throw new Problem(404,"Person not found. Add them in People first.");
+    const contact=people.results.find(p=>p.id===personId)!;
+    if(!contact.phone)return fail("Choose a verification contact with a phone number.");
+    const addressedTo=data.addressedTo===undefined?null:text(data.addressedTo,"addressed to",200);
+    if(invitationRoute){
+      if(!Number.isInteger(data.version))return fail("Missing invitation version.");
+      const id=invitationRoute[1];
+      const saved=await env.DB.prepare(`UPDATE invites SET person_id=?1,name=?2,phone=?3,addressed_to=?4,member_ids=?5,version=version+1,
+        challenge_expires_at=CASE WHEN person_id<>?1 OR member_ids<>?5 THEN 0 ELSE challenge_expires_at END
+        WHERE id=?6 AND edition_year=?7 AND version=?8 AND EXISTS(SELECT 1 FROM people WHERE id=?1 AND version=?9) RETURNING id`)
+        .bind(contact.id,contact.name,contact.phone,addressedTo,JSON.stringify(members),id,year,data.version as number,contact.version).first();
+      if(!saved)throw new Problem(409,"This invitation changed in another window. Refresh before editing again.");
+      await audit(env,actor,"edit-invitation",id).run();
+      return json({saved:true});
+    }
     const count=await env.DB.prepare("SELECT count(*) n FROM invites WHERE edition_year=?1").bind(year).first<{n:number}>();
     if(count && count.n>=100)return fail("This scrapbook supports up to 100 invitations.");
     const id="person-"+token().slice(0,24),raw=token();
-    const created=await env.DB.prepare(`INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,edition_year)
-      VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(edition_year,person_id) WHERE person_id IS NOT NULL DO NOTHING RETURNING id`)
-      .bind(id,person.id,await digest(raw),person.name,person.phone,now()+90*86400,year).first();
-    if(!created)throw new Problem(409,"This person already has an invitation here. Manage their existing invitation instead.");
+    const created=await env.DB.prepare(`INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,edition_year,addressed_to,member_ids)
+      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9 FROM people WHERE id=?2 AND version=?10 AND phone IS NOT NULL ON CONFLICT(edition_year,person_id) WHERE person_id IS NOT NULL DO NOTHING RETURNING id`)
+      .bind(id,contact.id,await digest(raw),contact.name,contact.phone,now()+90*86400,year,addressedTo,JSON.stringify(members),contact.version).first();
+    if(!created)throw new Problem(409,"This verification contact already has an invitation here. Edit their existing invitation to include both people.");
     await audit(env,actor,"create-invitation",id).run();
-    return json({id,personId:person.id,url:env.JOURNAL_ORIGIN+"/#"+raw},201);
+    return json({id,personId:contact.id,url:env.JOURNAL_ORIGIN+"/#"+raw},201);
   }
   if (path === "/api/people" && request.method === "POST") {
     const data = await body(request), name = text(data.name,"name",100), phone = text(data.phone,"phone number",20);
@@ -202,8 +227,8 @@ async function route(request: Request, env: Env, actor: string) {
   }
   const detailsRoute = /^\/api\/people\/(person-[a-f0-9]{24}|angela)\/details$/.exec(path);
   if (detailsRoute && request.method === "POST") {
-    const id=detailsRoute[1],data=await body(request),name=text(data.name,"name",100),phone=text(data.phone,"phone number",20);
-    if (!/^\+[1-9]\d{7,14}$/.test(phone)) return fail("Use a full phone number including country code.");
+    const id=detailsRoute[1],data=await body(request),name=text(data.name,"name",100),phone=text(data.phone??"","phone number",20,false)||null;
+    if (!phone || !/^\+[1-9]\d{7,14}$/.test(phone)) return fail("Use a full phone number including country code.");
     const current=await env.DB.prepare("SELECT phone,person_id FROM invites WHERE id=?1 AND edition_year=?2").bind(id,year).first<{phone:string;person_id:string}>();
     if (!current) throw new Problem(404,"Recipient not found.");
     const duplicate=await env.DB.prepare("SELECT id FROM invites WHERE phone=?1 AND id<>?2 AND edition_year=?3").bind(phone,id,year).first();
@@ -221,8 +246,8 @@ async function route(request: Request, env: Env, actor: string) {
     if (!person) throw new Problem(404,"Recipient not found.");
     const raw = token(), revoke = personRoute[2] === "revoke";
     await env.DB.batch([
-      revoke ? env.DB.prepare("UPDATE invites SET revoked_at=?1,challenge_expires_at=0 WHERE id=?2").bind(now(),id) :
-        env.DB.prepare("UPDATE invites SET token_hash=?1,revoked_at=NULL,expires_at=?2,last_sent_at=0,challenge_expires_at=0,attempts=0 WHERE id=?3").bind(await digest(raw),now()+90*86400,id),
+      revoke ? env.DB.prepare("UPDATE invites SET version=version+1,revoked_at=?1,challenge_expires_at=0 WHERE id=?2").bind(now(),id) :
+        env.DB.prepare("UPDATE invites SET version=version+1,token_hash=?1,revoked_at=NULL,expires_at=?2,last_sent_at=0,challenge_expires_at=0,attempts=0 WHERE id=?3").bind(await digest(raw),now()+90*86400,id),
       env.DB.prepare("DELETE FROM sessions WHERE invite_id=?1").bind(id), audit(env,actor,revoke?"revoke-invite":"rotate-invite",id)
     ]);
     return json(revoke ? {revoked:true} : {url:env.JOURNAL_ORIGIN+"/#"+raw});
@@ -267,6 +292,10 @@ export default {
       if (error instanceof Problem) response=json({error:error.message},error.status);
       else if (error instanceof Error && error.message.includes("UNIQUE constraint failed: invites.edition_year, invites.phone"))
         response=json({error:"That phone number is already in this scrapbook. Refresh to see the latest invitations."},409);
+      else if(error instanceof Error && error.message.includes("verification contact needs a phone"))
+        response=json({error:"This person is a verification contact. Choose another contact on their invitations before removing the phone number."},400);
+      else if(error instanceof Error && error.message.includes("UNIQUE constraint failed: invites.edition_year, invites.person_id"))
+        response=json({error:"This verification contact already has an invitation here. Edit the existing invitation instead."},409);
       else if(error instanceof Error && error.message.includes("UNIQUE constraint failed: people.phone"))
         response=json({error:"That phone number belongs to another person in People."},409);
       else response=json({error:"Something went wrong. Please try again."},500);

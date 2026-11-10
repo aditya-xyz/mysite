@@ -1,19 +1,18 @@
 <!doctype html>
-<html lang="en" data-palette="night">
+<html lang="en" data-palette="moss">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex,nofollow" />
-  <meta name="theme-color" content="#202529" />
+  <meta name="theme-color" content="#ecf0e5" />
   <title>A private scrapbook · Aditya & Angela</title>
-  <script src="/theme.js"></script>
   <link rel="stylesheet" href="/style.css" />
   <script src="/app.js" type="module"></script>
 </head>
 <body>
   <header><a href="https://adityapatil.xyz" class="signature" aria-label="Aditya’s public website">aditya & angela<span>.</span></a><span>A private edition</span></header>
   <main id="app" aria-live="polite"><p>Opening your invitation…</p></main>
-  <dialog id="photo"><button type="button" class="close" aria-label="Close photo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button><img alt="" /><p></p><button id="save" class="button">Save photo</button><p id="save-status" role="status"></p></dialog>
-  <footer><span>Made with love, Aditya & Angela · Illustrative samples</span><div class="palette" role="group" aria-label="Color palette"><button type="button" data-palette="paper" aria-label="Paper & clay" title="Paper & clay" aria-pressed="false"></button><button type="button" data-palette="moss" aria-label="Moss & cream" title="Moss & cream" aria-pressed="false"></button><button type="button" data-palette="night" aria-label="After hours" title="After hours" aria-pressed="true"></button></div></footer>
+  <dialog id="photo" aria-label="Photo viewer"><div class="photo-stage"><img alt="" /><button type="button" class="close photo-control" aria-label="Close photo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button><button id="save" class="photo-control" aria-label="Save original photo" title="Save photo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" /></svg></button></div><p class="photo-caption"></p><p id="save-status" role="status"></p></dialog>
+  <footer><span>By Aditya &amp; Angela, with help from Pixel</span></footer>
 </body>
 </html>

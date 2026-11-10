@@ -9,4 +9,4 @@ export async function canonicalDraft(draft: Draft, db: D1Database, year: number)
   return {...draft,photos:draft.photos.map(p=>p && Array.isArray(p.recipients)?
     {...p,recipients:[...new Set(p.recipients.map(id=>aliases.get(id)||id))]}:p)};
 }
-export interface Contact { id:string; name:string; phone:string; version:number }
+export interface Contact { id:string; name:string; phone:string|null; version:number }

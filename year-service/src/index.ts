@@ -1,4 +1,6 @@
 import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionCookie } from "./security.ts";
+import { previewDimensions } from "./image-dimensions.ts";
+import { invitationAudience, invitationName, type InvitationAudience } from "./invitations.ts";
 import { publishedEdition, clientEdition, visiblePhotos } from "./edition.ts";
 
 interface Env {
@@ -11,7 +13,7 @@ interface Env {
   TWILIO_API_KEY_SECRET: string;
   TWILIO_VERIFY_SERVICE_SID: string;
 }
-interface Invite { person_id: string | null; edition_year: number; id: string; name: string; phone: string; expires_at: number; challenge_expires_at: number }
+interface Invite extends InvitationAudience { version:number; person_id: string | null; edition_year: number; id: string; name: string; phone: string; expires_at: number; challenge_expires_at: number }
 interface Photo { id: string; invite_id: string | null; preview_key: string; original_key: string | null; filename: string | null; caption: string; alt: string }
 const INVITE = "__Host-year_invite", SESSION = "__Host-year_session";
 class Failure extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -83,18 +85,18 @@ async function route(request: Request, env: Env) {
   if (path === "/api/open" && request.method === "POST") {
     const data = await body(request);
     if (!validToken(data.token)) throw new Failure(401, "This invitation link is not valid.");
-    const row = await env.DB.prepare("SELECT name FROM invites WHERE token_hash=?1 AND revoked_at IS NULL AND expires_at>?2")
-      .bind(await digest(data.token), now()).first<{ name: string }>();
+    const row = await env.DB.prepare("SELECT name,addressed_to FROM invites WHERE token_hash=?1 AND revoked_at IS NULL AND expires_at>?2")
+      .bind(await digest(data.token), now()).first<{ name: string; addressed_to:string|null }>();
     if (!row) throw new Failure(401, "This invitation link is not valid or has expired.");
     const headers=new Headers();headers.append("Set-Cookie",sessionCookie(INVITE,data.token,86400));
     headers.append("Set-Cookie",sessionCookie(SESSION,"",0));
-    return json({ name: row.name }, 200, headers);
+    return json({ name: invitationName(row) }, 200, headers);
   }
   if (path === "/api/invitation" && request.method === "GET") {
     const i = await invitation(request, env);
     const edition = await publishedEdition(env.DB,i.edition_year);
     if (!edition && i.edition_year !== 2026) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
-    return json({ year:i.edition_year,name: i.name, phoneHint: i.phone.slice(-4), smsEnabled: env.SMS_ENABLED === "true",
+    return json({ year:i.edition_year,name: invitationName(i), verificationName:i.name, phoneHint: i.phone.slice(-4), smsEnabled: env.SMS_ENABLED === "true",
       ...(edition ? { title:edition.title,authors:edition.authors,intro:edition.intro } : {}) });
   }
   if (path === "/api/send" && request.method === "POST") {
@@ -104,13 +106,13 @@ async function route(request: Request, env: Env) {
     await limited(env, `send:${i.id}`, 5, 3600);
     const stamp = now();
     const reserved = await env.DB.prepare(`UPDATE invites SET last_sent_at=?1, challenge_expires_at=0, attempts=0
-      WHERE id=?2 AND last_sent_at<=?3 AND revoked_at IS NULL AND expires_at>?1 RETURNING id`)
-      .bind(stamp, i.id, stamp - 60).first();
+      WHERE id=?2 AND last_sent_at<=?3 AND revoked_at IS NULL AND expires_at>?1 AND version=?4 RETURNING id`)
+      .bind(stamp, i.id, stamp - 60,i.version).first();
     if (!reserved) throw new Failure(429, "Please wait a minute before requesting another code.");
     const result = await twilio(env, "Verifications", { To: i.phone, Channel: "sms" });
     if (result.status !== "pending") throw new Failure(503, "The text could not be sent. Please try again later.");
-    await env.DB.prepare("UPDATE invites SET challenge_expires_at=?1 WHERE id=?2 AND last_sent_at=?3")
-      .bind(stamp + 600, i.id, stamp).run();
+    await env.DB.prepare("UPDATE invites SET challenge_expires_at=?1 WHERE id=?2 AND last_sent_at=?3 AND version=?4")
+      .bind(stamp + 600, i.id, stamp,i.version).run();
     return json({ sent: true, retryAfter: 60 });
   }
   if (path === "/api/verify" && request.method === "POST") {
@@ -118,15 +120,15 @@ async function route(request: Request, env: Env) {
     if (!validCode(data.code)) throw new Failure(400, "Enter the six-digit code from your text.");
     await limited(env, `check:${i.id}`, 15, 3600);
     const claim = await env.DB.prepare(`UPDATE invites SET attempts=attempts+1 WHERE id=?1 AND attempts<5
-      AND challenge_expires_at>?2 AND revoked_at IS NULL AND expires_at>?2 RETURNING last_sent_at`)
-      .bind(i.id, now()).first<{ last_sent_at: number }>();
+      AND challenge_expires_at>?2 AND revoked_at IS NULL AND expires_at>?2 AND version=?3 RETURNING last_sent_at`)
+      .bind(i.id, now(),i.version).first<{ last_sent_at: number }>();
     if (!claim) throw new Failure(429, "Please request a fresh code before trying again.");
     const result = await twilio(env, "VerificationCheck", { To: i.phone, Code: data.code });
     if (result.status !== "approved") throw new Failure(400, "That code didn’t match. Please try again.");
     // Only one successful request may consume this challenge, including concurrent checks.
     const consumed = await env.DB.prepare(`UPDATE invites SET challenge_expires_at=0
-      WHERE id=?1 AND last_sent_at=?2 AND challenge_expires_at>?3 AND revoked_at IS NULL AND expires_at>?3 RETURNING id`)
-      .bind(i.id, claim.last_sent_at, now()).first();
+      WHERE id=?1 AND last_sent_at=?2 AND challenge_expires_at>?3 AND revoked_at IS NULL AND expires_at>?3 AND version=?4 RETURNING id`)
+      .bind(i.id, claim.last_sent_at, now(),i.version).first();
     if (!consumed) throw new Failure(400, "This code has already been used or expired. Request a new code.");
     const raw = token(), expiry = Math.min(now() + 7 * 86400, i.expires_at);
     await env.DB.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?1,?2,?3)")
@@ -141,19 +143,26 @@ async function route(request: Request, env: Env) {
   if (path === "/api/journal" && request.method === "GET") {
     const i = await authenticated(request, env);
     const edition = await publishedEdition(env.DB,i.edition_year);
-    if (edition) return json(clientEdition(edition,i.id,i.name,i.edition_year,i.person_id||i.id));
+    if (edition) {
+      const data=clientEdition(edition,i.id,invitationName(i),i.edition_year,await invitationAudience(env.DB,i));
+      // Old publications remain unchanged; resolve missing preview dimensions read-only.
+      for(let offset=0;offset<data.photos.length;offset+=8)await Promise.all(data.photos.slice(offset,offset+8).map(async photo=>{
+        if(!photo.width||!photo.height)Object.assign(photo,await previewDimensions(env.MEDIA,edition.photos.find(p=>p.id===photo.id)!.preview_key));
+      }));
+      return json(data);
+    }
     if (i.edition_year !== 2026) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
-    const photos = await env.DB.prepare(`SELECT id,caption,alt,invite_id,original_key FROM photos
-      WHERE invite_id IS NULL OR invite_id=?1 ORDER BY invite_id IS NULL,sort_order,id`).bind(i.id).all<Photo>();
-    return json({ year:i.edition_year,name: i.name, photos: photos.results.map(p => ({ id: p.id, caption: p.caption, alt: p.alt,
-      personal: p.invite_id !== null, src: `/api/media/${p.id}`, canSave: !!p.invite_id && !!p.original_key })) });
+    const photos = await env.DB.prepare(`SELECT id,caption,alt,invite_id,preview_key,original_key FROM photos
+      WHERE invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?1)) ORDER BY invite_id IS NULL,sort_order,id`).bind(JSON.stringify(await invitationAudience(env.DB,i))).all<Photo>();
+    return json({ year:i.edition_year,name: invitationName(i), verificationName:i.name, photos: await Promise.all(photos.results.map(async p => ({ id: p.id, caption: p.caption, alt: p.alt,...await previewDimensions(env.MEDIA,p.preview_key),
+      personal: p.invite_id !== null, src: `/api/media/${p.id}`, canSave: !!p.invite_id && !!p.original_key }))) });
   }
   const media = /^\/api\/media\/([a-z0-9-]+)(\/original)?$/.exec(path);
   if (media && request.method === "GET") {
     const i = await authenticated(request, env);
     const edition = await publishedEdition(env.DB,i.edition_year);
     if (edition) {
-      const p = visiblePhotos(edition,i.id,i.person_id||i.id).find(p => p.id === media[1]);
+      const p = visiblePhotos(edition,i.id,await invitationAudience(env.DB,i)).find(p => p.id === media[1]);
       if (!p || (media[2] && (!p.recipients.length || !p.original_key))) throw new Failure(404,"Photo not found.");
       const file = await env.MEDIA.get(media[2] ? p.original_key! : p.preview_key);
       if (!file) throw new Failure(404,"Photo not found.");
@@ -162,8 +171,8 @@ async function route(request: Request, env: Env) {
       return new Response(file.body,{headers});
     }
     if (i.edition_year !== 2026) throw new Failure(404,"Photo not found.");
-    const p = await env.DB.prepare("SELECT * FROM photos WHERE id=?1 AND (invite_id IS NULL OR invite_id=?2)")
-      .bind(media[1], i.id).first<Photo>();
+    const p = await env.DB.prepare("SELECT * FROM photos WHERE id=?1 AND (invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?2)))")
+      .bind(media[1], JSON.stringify(await invitationAudience(env.DB,i))).first<Photo>();
     if (!p || (media[2] && (!p.invite_id || !p.original_key))) throw new Failure(404, "Photo not found.");
     const file = await env.MEDIA.get(media[2] ? p.original_key! : p.preview_key);
     if (!file) throw new Failure(404, "Photo not found.");

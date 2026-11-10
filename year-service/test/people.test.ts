@@ -11,10 +11,17 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
   const issuer='https://people-test.cloudflareaccess.com',aud='people-test',email='owner@example.com';
   const jwk={...await exportJWK(publicKey),kid:'people-key',alg:'RS256',use:'sig'};
   const jwt=await new SignJWT({email}).setProtectedHeader({alg:'RS256',kid:'people-key'}).setSubject('owner').setIssuedAt().setIssuer(issuer).setAudience(aud).setExpirationTime('10m').sign(privateKey);
-  const outbound=async(request:{url:string})=>{assert.equal(request.url,issuer+'/cdn-cgi/access/certs','People and invitations must never send SMS');return Response.json({keys:[jwk]});};
+  const verificationPhones:string[]=[];
+  const outbound=async(request:{url:string;text():Promise<string>})=>{
+    if(request.url.startsWith('https://verify.twilio.com/')){
+      const body=new URLSearchParams(await request.text());verificationPhones.push(body.get('To')!);
+      return Response.json({status:request.url.endsWith('VerificationCheck')?'approved':'pending'});
+    }
+    assert.equal(request.url,issuer+'/cdn-cgi/access/certs');return Response.json({keys:[jwk]});
+  };
   const mf=new Miniflare(convertV4MiniflareOptions({workers:[
     {name:'admin',routes:['admin.test/*'],modules:true,scriptPath:'.wrangler/admin-test-bundle/index.js',compatibilityDate:'2026-08-06',d1Databases:{DB:'people-db'},r2Buckets:{MEDIA:'people-media'},bindings:{ADMIN_EMAIL:email,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:aud,JOURNAL_ORIGIN:'https://guest.test'},outboundService:outbound},
-    {name:'guest',routes:['guest.test/*'],modules:true,scriptPath:'.wrangler/test-bundle/index.js',compatibilityDate:'2026-08-06',d1Databases:{DB:'people-db'},r2Buckets:{MEDIA:'people-media'},bindings:{SMS_ENABLED:'false'},outboundService:outbound}
+    {name:'guest',routes:['guest.test/*'],modules:true,scriptPath:'.wrangler/test-bundle/index.js',compatibilityDate:'2026-08-06',d1Databases:{DB:'people-db'},r2Buckets:{MEDIA:'people-media'},bindings:{SMS_ENABLED:'true',TWILIO_API_KEY_SID:'SK'+'0'.repeat(32),TWILIO_API_KEY_SECRET:'local-test-only',TWILIO_VERIFY_SERVICE_SID:'VA'+'0'.repeat(32)},outboundService:outbound}
   ]}));
   const req=(path:string,data?:unknown,origin='https://admin.test',assertion=jwt)=>mf.dispatchFetch('https://admin.test/api/'+path,{method:data===undefined?'GET':'POST',headers:{Origin:origin,'Content-Type':'application/json','Cf-Access-Jwt-Assertion':assertion},...(data===undefined?{}:{body:JSON.stringify(data)})});
   const guest=(path:string,session:string)=>mf.dispatchFetch('https://guest.test/api/'+path,{headers:{Cookie:'__Host-year_session='+session}});
@@ -30,7 +37,7 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
       await db.prepare('INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)').bind(await digest(raw),id,expiry).run();
     }
     const original=new Uint8Array([255,216,255,225,69,88,73,70,255,217]);
-    await bucket.put('legacy-preview','sample');await bucket.put('legacy-original',original);
+    await bucket.put('legacy-preview',new Uint8Array([255,216,255,192,0,11,8,7,128,4,56,1,1,17,0,255,217]));await bucket.put('legacy-original',original);
     await db.prepare("INSERT INTO media_objects(id,year,preview_key,original_key,filename,mime,bytes) VALUES('legacy-photo',2026,'legacy-preview','legacy-original','original.jpg','image/jpeg',10)").run();
     const oldDraft:Draft={...JSON.parse(draft.draft_json),photos:[{id:'legacy-photo',caption:'Memory',alt:'Sample',recipients:['angela']}]};
     const oldPublished={...oldDraft,photos:[{...oldDraft.photos[0],preview_key:'legacy-preview',original_key:'legacy-original',filename:'original.jpg',mime:'image/jpeg'}]};
@@ -40,6 +47,7 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
     await db.prepare('UPDATE editions SET published_json=?,published_version=1 WHERE year=2027').bind(JSON.stringify(second)).run();
     const before=(await db.prepare('SELECT id,token_hash,name,phone,expires_at,revoked_at,challenge_expires_at FROM invites ORDER BY id').all()).results;
     await migrate('0004_people.sql');
+    await db.batch((await readFile('migrations/0005_shared_invitations.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     let oldPerson='',newPerson='',version=1,inviteId='',newRaw='';
     await t.test('migration links existing invitations without changing tokens, sessions, or manifests',async()=>{
       const contacts=await (await req('contacts')).json() as {people:{id:string;name:string;version:number}[]};
@@ -97,6 +105,73 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
       const after=(await db.prepare('SELECT id,token_hash,phone,challenge_expires_at FROM invites WHERE person_id=? ORDER BY id').bind(oldPerson).all<{id:string;token_hash:string;phone:string;challenge_expires_at:number}>()).results;
       assert.equal(after.length,2);for(const row of after){assert.equal(row.token_hash,before.find(i=>i.id===row.id)!.token_hash);assert.equal(row.phone,'+15555550109');assert.equal(row.challenge_expires_at,0);}
       assert.equal((await guest('journal',newRaw)).status,200,'Another person retains their session');
+    });
+
+    let ben='',jerry='',coupleId='',coupleRaw='',coupleVersion=1;
+    const inviteCookie=()=>({'Cookie':'__Host-year_invite='+coupleRaw,Origin:'https://guest.test','Content-Type':'application/json'});
+    await t.test('couples include a person without a phone, but need exactly one included verification contact',async()=>{
+      ben=(await (await req('contacts',{name:'Ben',phone:'+15555550110'})).json() as {person:{id:string}}).person.id;
+      jerry=(await (await req('contacts',{name:'Jerry'})).json() as {person:{id:string}}).person.id;
+      assert.equal((await req('contacts',{name:'Another partner',phone:''})).status,201,'Multiple people may have no phone');
+      for(const data of [
+        {memberIds:[ben,jerry],verificationContactId:jerry,addressedTo:'Ben & Jerry'},
+        {memberIds:[jerry],verificationContactId:ben,addressedTo:'Ben & Jerry'},
+        {memberIds:[ben,ben],verificationContactId:ben,addressedTo:'Ben & Ben'},
+        {memberIds:[ben,'missing'],verificationContactId:ben,addressedTo:'Friends'},
+        {memberIds:[ben,jerry],verificationContactId:ben,addressedTo:' '}
+      ])assert.ok([400,404].includes((await req('editions/2026/invitations',data)).status));
+      const created=await req('editions/2026/invitations',{memberIds:[ben,jerry],verificationContactId:ben,addressedTo:'Ben & Jerry'});
+      assert.equal(created.status,201);const data=await created.json() as {id:string;url:string};coupleId=data.id;coupleRaw=data.url.split('#')[1];
+      assert.equal(verificationPhones.length,0,'Admin creation must never send a text');
+      const opened=await mf.dispatchFetch('https://guest.test/api/open',{method:'POST',headers:{Origin:'https://guest.test','Content-Type':'application/json'},body:JSON.stringify({token:coupleRaw})});
+      assert.equal((await opened.json() as {name:string}).name,'Ben & Jerry');
+      const entry=await (await mf.dispatchFetch('https://guest.test/api/invitation',{headers:inviteCookie()})).json() as {name:string;verificationName:string;phoneHint:string;phone?:string};
+      assert.equal(entry.name,'Ben & Jerry');assert.equal(entry.verificationName,'Ben');assert.equal(entry.phoneHint,'0110');assert.equal(entry.phone,undefined);
+      assert.equal((await req(`contacts/${ben}/details`,{version:1,name:'Ben',phone:''})).status,400,'Cannot remove an in-use verification phone');
+    });
+    await t.test('shared invitation SMS verification uses only its chosen contact',async()=>{
+      assert.equal((await mf.dispatchFetch('https://guest.test/api/send',{method:'POST',headers:inviteCookie(),body:'{}'})).status,200);
+      const verified=await mf.dispatchFetch('https://guest.test/api/verify',{method:'POST',headers:inviteCookie(),body:JSON.stringify({code:'123456'})});
+      assert.equal(verified.status,200);assert.deepEqual(verificationPhones,['+15555550110','+15555550110']);
+      const session=verified.headers.get('Set-Cookie')!.match(/__Host-year_session=([^;]+)/)![1];
+      assert.equal((await guest('journal',session)).status,200);
+    });
+    await t.test('one QR exposes either partner’s personal photos and originals, with shared and year isolation',async()=>{
+      const photo=(id:string,recipients:string[])=>({id,caption:id,alt:'Sample',recipients,preview_key:'legacy-preview',original_key:'legacy-original',filename:'original.jpg',mime:'image/jpeg'});
+      const grouped={...oldPublished,photos:[photo('for-ben',[ben]),photo('for-jerry',[jerry]),photo('unrelated',[newPerson]),{...photo('shared',[]),original_key:null}]};
+      await db.prepare('UPDATE editions SET published_json=? WHERE year=2026').bind(JSON.stringify(grouped)).run();
+      await db.prepare('INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)').bind(await digest(coupleRaw),coupleId,expiry).run();
+      const journal=await (await guest('journal',coupleRaw)).json() as {name:string;photos:{id:string}[]};
+      assert.equal(journal.name,'Ben & Jerry');assert.equal((journal.photos[0] as {width?:number}).width,1080);assert.equal((journal.photos[0] as {height?:number}).height,1920);assert.deepEqual(journal.photos.map(p=>p.id),['for-ben','for-jerry','shared']);
+      for(const id of ['for-ben','for-jerry'])assert.deepEqual(new Uint8Array(await (await guest('media/'+id+'/original',coupleRaw)).arrayBuffer()),original);
+      for(const path of ['media/unrelated','media/unrelated/original','media/shared/original','media/legacy-photo'])assert.equal((await guest(path,coupleRaw)).status,404);
+      assert.equal((await guest('media/for-jerry',newRaw)).status,404);
+      const editable={...oldDraft,photos:[{id:'legacy-photo',caption:'For Jerry',alt:'Sample',recipients:[jerry]}]};
+      const saved=await req('editions/2026/draft',{version,draft:editable});version=(await saved.json() as {version:number}).version;
+      assert.equal((await req('editions/2026/publish',{version})).status,200,'Partner is covered by the couple invitation');
+      const manifest=JSON.parse((await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<{published_json:string}>())!.published_json);assert.equal(manifest.photos[0].width,1080);assert.equal(manifest.photos[0].height,1920);
+      const preview=await (await req('editions/2026/preview?invitation='+coupleId)).json() as {name:string;photos:{id:string}[]};
+      assert.equal(preview.name,'Ben & Jerry');assert.equal(preview.photos[0].id,'legacy-photo');
+      assert.equal((await req('editions/2027/preview?invitation='+coupleId)).status,404);
+    });
+    await t.test('editable greeting retains sessions and tokens; audience changes end sessions and pending codes',async()=>{
+      const update=(memberIds:string[],verificationContactId:string,addressedTo:string,v=coupleVersion)=>req(`editions/2026/invitations/${coupleId}/details`,{memberIds,verificationContactId,addressedTo,version:v});
+      assert.equal((await update([ben,jerry],ben,'Ben and Jerry')).status,200);coupleVersion++;
+      assert.equal((await guest('journal',coupleRaw)).status,200,'Greeting-only edits retain sessions');
+      assert.equal((await update([ben,jerry],ben,'Stale',1)).status,409);
+      await db.prepare('UPDATE invites SET challenge_expires_at=? WHERE id=?').bind(expiry,coupleId).run();
+      assert.equal((await update([ben],ben,'Ben')).status,200);coupleVersion++;
+      assert.equal((await guest('journal',coupleRaw)).status,401);
+      const record=(await db.prepare('SELECT token_hash,challenge_expires_at FROM invites WHERE id=?').bind(coupleId).first<{token_hash:string;challenge_expires_at:number}>())!;
+      assert.equal(record.token_hash,await digest(coupleRaw));assert.equal(record.challenge_expires_at,0);
+      const opened=await mf.dispatchFetch('https://guest.test/api/open',{method:'POST',headers:{Origin:'https://guest.test','Content-Type':'application/json'},body:JSON.stringify({token:coupleRaw})});assert.equal(opened.status,200,'Same QR remains valid');
+      assert.equal((await req('editions/2026/publish',{version})).status,400,'Removed partner needs an active invitation again');
+      await db.prepare('UPDATE people SET phone=? WHERE id=?').bind('+15555550111',jerry).run();
+      assert.equal((await update([ben,jerry],jerry,'The two of you')).status,200);coupleVersion++;
+      const entry=await (await mf.dispatchFetch('https://guest.test/api/invitation',{headers:inviteCookie()})).json() as {verificationName:string;phoneHint:string};assert.equal(entry.verificationName,'Jerry');assert.equal(entry.phoneHint,'0111');
+      assert.equal((await req(`editions/2026/people/${coupleId}/revoke`,{})).status,200);
+      assert.equal((await mf.dispatchFetch('https://guest.test/api/invitation',{headers:inviteCookie()})).status,401);
+      assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
     });
   }finally{await mf.dispose();}
 });
