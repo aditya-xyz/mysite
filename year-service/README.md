@@ -153,12 +153,17 @@ a publication snapshot and stored in the manifest. Older publications and the
 pilot resolve missing dimensions read-only for authorized photos. This requires
 no new schema migration or rewriting published content. Width/height reserve
 correct space before lazy loading, and grid spans recalculate on resize or image
-load. Original bytes and EXIF remain untouched. Previews are requested within
-200px of the viewport, using native lazy loading and async decoding.
+load. Original bytes and EXIF remain untouched. Previews are queued within 1200px of the viewport, with four requests in flight
+at most and visible images prioritized. A single observer owns lazy loading;
+native loading does not add a second delay. Distant photos stay deferred. Images
+decode asynchronously before a 480ms opacity/8px entrance; reduced motion skips
+the effect. Grid measurements and span writes are batched to avoid repeated layout
+flushes as previews finish.
 
 Opening a photo shows an image-only floating viewer with a transparent container,
-a blurred, dimmed page backdrop, and no card, glass panel, border, or shadow. Close
-and download icons sit on the image in 44px touch targets. Download appears only
+a blurred, dimmed page backdrop, and no card, glass panel, border, or shadow. Close sits on the image in a 44px touch target. Previous/count/next and
+Full resolution/Download sit below it, with download actions aligned to the
+image’s right edge; narrow images can wrap the controls onto two rows. Download appears only
 for authorized personal originals; mobile file sharing/download behavior and
 original-byte preservation are unchanged. Captions/status float below the photo.
 The guest-facing Close my edition button is removed; session expiry/revocation
@@ -331,3 +336,24 @@ feature. Reference: https://webkit.org/blog/18541/introducing-adaptive-dark-mode
 The photo viewer uses a 90% dark backdrop (96% with reduced transparency), with
 white captions and dark native controls in both palettes. The enter/exit animation
 uses the same opacity so it never settles on the older brighter overlay.
+
+
+## Gallery loading and viewer toolbar
+
+The header shows the year without “A private edition”. Preview loading now starts
+1200px ahead instead of 200px, with a four-request queue ordered by distance from
+the visible viewport. Only compressed grid previews are prefetched; viewer previews
+and originals retain their existing explicit access behavior. A decoded image
+fades/moves into its reserved space, inspired by the soft transitions observed on
+america.gov. Reduced motion removes that effect. Layout reads precede writes, and
+image-completion updates coalesce into one frame per affected grid.
+
+These changes address late requests and repeated layout work found in the client.
+They do not establish the exact production latency split: private media still
+requires live authorization and R2 retrieval on every request, with no-store
+responses. No shared/public photo cache or relaxed access gate is introduced.
+
+The viewer toolbar stays below the image: navigation at left, Full resolution and
+Download snapped to its right edge. Shared photos have navigation only. Small
+images can wrap the two groups without shrinking the 44px touch targets. Original
+quotas, cancellation, download behavior, keyboard and swipe controls are unchanged.

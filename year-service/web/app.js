@@ -15,7 +15,7 @@ async function api(path, data) {
   if (!response.ok) throw new Error(result.error || 'Please try again.');
   return result;
 }
-function applyBrand(authors='Aditya & Angela',year) { document.querySelector('.signature').textContent=authors.toLowerCase()+'.'; document.title=(year?year+' · ':'')+authors; document.querySelector('.edition-label').textContent=(year?year+' · ':'')+'A private edition'; }
+function applyBrand(authors='Aditya & Angela',year) { document.querySelector('.signature').textContent=authors.toLowerCase()+'.'; document.title=(year?year+' · ':'')+authors; document.querySelector('.edition-label').textContent=year||''; }
 function footerProfile(name,profileUrl){
   if(!profileUrl)return document.createTextNode(name);
   try{
@@ -59,27 +59,48 @@ function layoutPhotoGrid(grid){
   if(!grid)return;
   const style=getComputedStyle(grid),unit=parseFloat(style.gridAutoRows),gap=parseFloat(style.rowGap);
   if(!Number.isFinite(unit))return;
-  grid.querySelectorAll('.card').forEach(card=>{
-    const span='span '+Math.ceil((card.getBoundingClientRect().height+gap)/(unit+gap));
-    if(card.style.gridRowEnd!==span)card.style.gridRowEnd=span;
-  });
+  // Read all heights before writing spans to avoid a layout flush per card.
+  const spans=[...grid.querySelectorAll('.card')].map(card=>[card,'span '+Math.ceil((card.getBoundingClientRect().height+gap)/(unit+gap))]);
+  spans.forEach(([card,span])=>{if(card.style.gridRowEnd!==span)card.style.gridRowEnd=span;});
 }
 function showJournal() {
   renderFooter(journal.shareSocials===true);
   imageObserver?.disconnect();layoutObserver?.disconnect();
   applyBrand(journal.authors,journal.year);
-  const cards = personal => journal.photos.filter(p=>p.personal===personal).map(p=>`<button class="card" data-photo="${escape(p.id)}" aria-label="Open photo: ${escape(p.caption)}"><img data-src="${escape(p.src)}" alt="${escape(p.alt)}" loading="lazy" decoding="async" ${p.width&&p.height?`width="${p.width}" height="${p.height}"`:'class="pending-dimensions"'}/><span>${escape(p.caption)}</span></button>`).join('');
+  const cards = personal => journal.photos.filter(p=>p.personal===personal).map(p=>`<button class="card" data-photo="${escape(p.id)}" aria-label="Open photo: ${escape(p.caption)}"><img data-src="${escape(p.src)}" alt="${escape(p.alt)}" loading="eager" decoding="async" ${p.width&&p.height?`width="${p.width}" height="${p.height}"`:'class="pending-dimensions"'}/><span>${escape(p.caption)}</span></button>`).join('');
   const hasPersonal=journal.photos.some(p=>p.personal), sharedTitle=sharedHeading(journal.sharedTitle);
   const stories=(journal.stories || []).map(s=>`<section class="letter"><h2>${escape(s.title)}</h2><p class="prose">${escape(s.body)}</p></section>`).join('');
   app.innerHTML = `<section class="letter"><div class="opening-note-top"><p class="kicker">The opening note</p>${winterLights}</div><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${escape(journal.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div><p class="prose">${escape(journal.note || 'We wanted to make a little space for the photos with a story behind them, the ordinary days worth remembering, and the people who make it all feel like home.')}</p><p class="signoff">With love, ${escape(journal.authors || 'Aditya & Angela')}</p>${!journal.title?'<p class="hint">These are illustrative samples while we test your invitation. Real memories will come later.</p>':''}</section>${hasPersonal?`<section class="personal-photos" aria-label="Photos selected for ${escape(journal.name)}"><div class="grid">${cards(true)}</div></section>`:''}<section class="shared-photos" aria-labelledby="shared-title"><h2 id="shared-title">${escape(sharedTitle)}</h2><div class="grid">${cards(false)}</div></section>${stories}`;
-  const loadImage = image => {image.onload=()=>{image.classList.remove('pending-dimensions');layoutPhotoGrid(image.closest('.grid'));};image.src=image.dataset.src;delete image.dataset.src;};
+  const pending=new Set(),dirtyGrids=new Set();let active=0,layoutFrame;
+  const scheduleLayout=grid=>{
+    if(grid)dirtyGrids.add(grid);
+    if(!layoutFrame)layoutFrame=requestAnimationFrame(()=>{layoutFrame=null;dirtyGrids.forEach(layoutPhotoGrid);dirtyGrids.clear();});
+  };
+  const pumpImages=()=>{
+    // Start a few previews ahead, without downloading the whole scrapbook.
+    const distance=image=>{const r=image.getBoundingClientRect();return Math.max(0,r.top-innerHeight,-r.bottom);};
+    const next=[...pending].filter(image=>image.isConnected).sort((a,b)=>distance(a)-distance(b));
+    while(active<4&&next.length){
+      const image=next.shift();pending.delete(image);imageObserver?.unobserve(image);active++;
+      const finish=()=>{active--;image.onload=null;image.onerror=null;scheduleLayout(image.closest('.grid'));pumpImages();};
+      image.onload=async()=>{
+        try{await image.decode();}catch{}
+        if(image.isConnected){image.classList.remove('pending-dimensions');image.classList.add('is-ready');}
+        finish();
+      };
+      image.onerror=()=>{image.classList.add('is-ready');finish();};
+      image.fetchPriority=distance(image)===0?'high':'low';
+      image.src=image.dataset.src;delete image.dataset.src;
+    }
+  };
   const images=app.querySelectorAll('img[data-src]');
   if ('IntersectionObserver' in window) {
     imageObserver=new IntersectionObserver(entries=>{
-      entries.forEach(entry=>{if(entry.isIntersecting){loadImage(entry.target);imageObserver.unobserve(entry.target);}});
-    },{rootMargin:'200px 0px'});
+      entries.forEach(({target,isIntersecting})=>{if(!target.dataset.src)return;if(isIntersecting)pending.add(target);else pending.delete(target);});
+      pumpImages();
+    },{rootMargin:'1200px 0px'});
     images.forEach(image=>imageObserver.observe(image));
-  } else images.forEach(loadImage);
+  } else {images.forEach(image=>pending.add(image));pumpImages();}
   const grids=app.querySelectorAll('.grid');
   if('ResizeObserver' in window){
     const widths=new WeakMap();
@@ -111,7 +132,7 @@ function showPhoto(photo,direction=0){
   document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full resolution';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');
   previousPhoto.disabled=viewerIndex===0;nextPhoto.disabled=viewerIndex===viewerPhotos.length-1;
   document.querySelector('#photo-count').textContent=`Photo ${viewerIndex+1} of ${viewerPhotos.length}`;
-  document.querySelector('#photo-navigation').hidden=viewerPhotos.length<2;
+  previousPhoto.hidden=nextPhoto.hidden=viewerPhotos.length<2;
   if(direction&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
     photoStage.getAnimations().forEach(a=>a.cancel());
     photoStage.animate([{opacity:.45,transform:`translateX(${direction*24}px)`},{opacity:1,transform:'translateX(0)'}],{duration:180,easing:'ease-out'});

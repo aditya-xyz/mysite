@@ -103,3 +103,17 @@ header .header-pixel{display:block;width:auto;height:64px;max-width:66px;object-
 
 /* Keep both root schemes advertised to Safari; native form controls follow the reader. */
 :root[data-palette="moss"] input{color-scheme:light}:root[data-palette="night"] input{color-scheme:dark}
+
+/* Decode nearby previews before a quiet reveal; keep the photo's reserved space. */
+.grid .card img{opacity:0;transform:translateY(8px);transition:opacity 480ms cubic-bezier(.22,1,.36,1),transform 480ms cubic-bezier(.22,1,.36,1)}
+.grid .card img.is-ready{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){.grid .card img{transform:none;transition:none}}
+/* Controls live below the image, with actions anchored to its right edge. */
+#photo .photo-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;width:0;min-width:100%;margin-top:12px}
+#photo .photo-navigation{flex:none;gap:4px;margin:0}
+#photo-count{min-width:82px}
+#photo .photo-actions{position:static;display:flex;flex:0 0 auto;justify-content:flex-end;gap:6px;margin-left:auto}
+#photo .photo-actions:not(:has(button:not([hidden]))){display:none}
+#photo .photo-actions .resolution-control{font-size:11px;padding:8px 10px}
+#photo .photo-navigation .photo-control[hidden]{display:none}
+@media(max-width:359px){#photo .photo-toolbar{gap:6px}#photo .photo-actions .resolution-control{max-width:100px}}
