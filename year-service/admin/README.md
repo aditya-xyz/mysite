@@ -303,8 +303,10 @@ photos or invitations were changed for this work.
 The current client starts a private upload session, sends the unchanged original
 in sequential 8 MiB pieces, then submits the 800px grid and 2400px viewer JPEGs
 separately. Per-photo progress is shown while uploading. No request contains the
-whole large original and previews. Original pieces stream to R2 with backpressure;
-only their image-type header is inspected in memory. Preview requests remain bounded.
+whole large original and previews. The runtime-known-length request body passes
+directly to R2 without a JavaScript reader, copying loop, or TransformStream.
+Unknown-length pieces are rejected; browser File/Blob uploads supply the length.
+Preview requests require a bounded known length and use native multipart parsing.
 JPEG, PNG, and WebP must be strictly smaller than 100,000,000 bytes; HEIC remains
 unsupported. The legacy `/api/upload` endpoint retains its 25 MiB limit for older
 clients. Picker and drop uploads use the new path at every size.
@@ -312,8 +314,10 @@ clients. Picker and drop uploads use the new path at every size.
 Migration **0007_photo_uploads.sql** adds temporary upload state, scoped to the
 authenticated owner and scrapbook year. It does not modify invitations, photos,
 publications, or download counters. Apply it before deploying the updated admin.
-Each piece is size-checked on the server, the first piece is checked for image
-type, and R2 assembles only the recorded pieces. The original becomes a media
+Each piece is size-checked on the server and R2 assembles only the recorded pieces.
+Before registration, the actual stored original's image type is checked with a
+12-byte range read. Invalid or mismatched originals are discarded without creating
+a library item. The original becomes a media
 library item only after both validated previews are stored and the D1 transaction
 commits. Saving and publishing remain separate actions.
 
@@ -375,6 +379,11 @@ another tab from adding a photo after deletion starts. Shared legacy storage key
 still referenced by another photo/publication are retained. Failed deletions remain
 unavailable for reuse and offer Retry deletion until cleanup finishes. There is no
 automatic deletion of duplicate photos and no bulk erasure of production content.
+
+The native body-transfer path replaces an earlier JavaScript stream pump that
+exceeded the production Worker's CPU-time limit during real bulk uploads. Local
+integration tests do not emulate that platform CPU limit; they verify byte
+preservation, native body forwarding, length/type enforcement, and retry behavior.
 
 ## Rendition maintenance and original limits
 

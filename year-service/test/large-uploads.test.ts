@@ -77,8 +77,9 @@ test('private bounded uploads of originals under 100 MB',async t=>{
       assert.equal((await req(`uploads/${s.id}/parts/2`,new Uint8Array(20))).status,409);
       assert.equal((await req(`uploads/${s.id}/parts/1`,new Uint8Array(21))).status,413);
       assert.equal((await req(`uploads/${s.id}/parts/1`,new Uint8Array(19))).status,400);
-      assert.equal((await req(`uploads/${s.id}/parts/1`,new Uint8Array(20))).status,400);
-      assert.equal((await req(`uploads/${s.id}/abort`)).status,200);
+      assert.equal((await req(`uploads/${s.id}/parts/1`,new Uint8Array(20))).status,200,'Raw transfer does not decode the original in JS');
+      assert.equal((await req(`uploads/${s.id}/complete`,previews())).status,400,'Actual stored image type must be validated before a library item exists');
+      assert.equal((await req(`uploads/${s.id}/abort`)).status,404,'Invalid originals are cleaned up automatically');
       assert.equal(await db.prepare('SELECT id FROM photo_uploads WHERE id=?').bind(s.id).first(),null);
       assert.equal(await bucket.head(`2026/${s.id}/original`),null);
     });
@@ -99,6 +100,14 @@ test('private bounded uploads of originals under 100 MB',async t=>{
       assert.equal((await req(`uploads/${s.id}/abort`)).status,410);
       assert.ok(await bucket.head(`2026/${s.id}/original`));
       assert.equal(await db.prepare('SELECT id FROM photo_uploads WHERE id=?').bind(s.id).first(),null);
+    });
+    await t.test('stored original magic bytes must match the declared image type before registration',async()=>{
+      const bytes=new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0,0,0,0,0]),s=await start(bytes.length,'image/jpeg');
+      assert.equal((await req(`uploads/${s.id}/parts/1`,bytes)).status,200);
+      assert.equal((await req(`uploads/${s.id}/complete`,previews())).status,400);
+      assert.equal(await db.prepare('SELECT id FROM media_objects WHERE id=?').bind(s.id).first(),null);
+      assert.equal(await db.prepare('SELECT id FROM photo_uploads WHERE id=?').bind(s.id).first(),null);
+      assert.equal(await bucket.head(`2026/${s.id}/original`),null);
     });
     await t.test('a killed part request leaves no busy lock and its physical part cannot overwrite a retry',async()=>{
       const value=jpeg(640,800),s=await start(value.length);

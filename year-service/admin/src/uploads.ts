@@ -1,6 +1,7 @@
 import { token, now } from '../../src/security.ts';
 import { UploadProblem } from './media-errors.ts';
 import { mediaByHash,mediaResult,type LibraryMedia,validHash } from './media-library.ts';
+import {forwardOriginalPart,uploadBodyLength} from './original-upload.ts';
 export { UploadProblem } from './media-errors.ts';
 
 const MAX_BYTES = 100_000_000; // Decimal MB, strictly under 100 MB.
@@ -34,48 +35,6 @@ async function boundedBody(request: Request, max: number) {
   const bytes = new Uint8Array(size); let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk,offset); offset += chunk.byteLength; }
   return bytes;
-}
-// R2 requires a known-length stream. Forward each piece with backpressure rather
-// than buffering/copying megabytes in the Worker's small CPU and memory budget.
-async function streamOriginalPart(request: Request, expected: number, mime: string, partNumber: number, upload: R2MultipartUpload,physicalPart=partNumber) {
-  const length = request.headers.get('Content-Length');
-  if (length !== null && Number(length) !== expected) throw new UploadProblem(Number(length)>expected?413:400,'The photo part has the wrong size. Please try again.');
-  const reader = request.body?.getReader();
-  if (!reader) throw new UploadProblem(400,'Missing upload data.');
-  const prefix: Uint8Array[] = [], header = new Uint8Array(12); let headerSize = 0;
-  try {
-    if (partNumber === 1) {
-      while (headerSize < header.length) {
-        const {value,done} = await reader.read(); if (done) break;
-        prefix.push(value);
-        const length = Math.min(value.length,header.length-headerSize);
-        header.set(value.subarray(0,length),headerSize); headerSize += length;
-      }
-      if (detectPhoto(header.subarray(0,headerSize)) !== mime) throw new UploadProblem(400,'The photo contents do not match its type.');
-    }
-  } catch (error) { await reader.cancel(); throw error; }
-  const stream = new FixedLengthStream(expected), writer = stream.writable.getWriter();
-  const pumping = (async()=>{
-    let size = 0;
-    async function write(value: Uint8Array) {
-      size += value.byteLength;
-      if (size > expected) throw new UploadProblem(413,'This photo part is too large.');
-      await writer.write(value);
-    }
-    try {
-      for (const value of prefix) await write(value);
-      for (;;) { const {value,done} = await reader.read(); if (done) break; await write(value); }
-      if (size !== expected) throw new UploadProblem(400,'The photo part was incomplete. Please try again.');
-      await writer.close();
-    } catch (error) { await writer.abort(error); throw error; }
-  })();
-  try {
-    const [part] = await Promise.all([upload.uploadPart(physicalPart,stream.readable),pumping]);
-    return part;
-  } catch (error) {
-    await Promise.allSettled([reader.cancel(),writer.abort(error)]);
-    throw error;
-  }
 }
 async function discard(env: UploadEnv, u: Upload) {
   // Stop any concurrent finalization from registering these objects before checking.
@@ -178,7 +137,7 @@ export async function photoUploadRoute(request: Request, env: UploadEnv, actor: 
     };
     if (!claimed) return acknowledge();
     try {
-      const part = await streamOriginalPart(request,expected,u.mime,partNumber,env.MEDIA.resumeMultipartUpload(keys(u)[0],u.upload_id),claimed.part_counter);
+      const part = await forwardOriginalPart(request,expected,env.MEDIA.resumeMultipartUpload(keys(u)[0],u.upload_id),claimed.part_counter);
       const saved=await env.DB.prepare("UPDATE photo_uploads SET parts_json=?1 WHERE id=?2 AND status='open' AND parts_json=?3 RETURNING id").bind(JSON.stringify([...parts,part]),u.id,u.parts_json).first();
       if(!saved)return acknowledge();
       return json({uploaded:Math.min(partNumber*CHUNK_BYTES,u.bytes)});
@@ -193,8 +152,8 @@ export async function photoUploadRoute(request: Request, env: UploadEnv, actor: 
     await discard(env,u); return json({aborted:true});
   }
   if (parts.length !== Math.ceil(u.bytes/CHUNK_BYTES)) throw new UploadProblem(409,'Finish uploading the original photo first.');
-  const bytes = await boundedBody(request,11*1024*1024);
-  const form = await new Response(bytes,{headers:{'Content-Type':request.headers.get('Content-Type') || ''}}).formData();
+  uploadBodyLength(request,11*1024*1024);
+  const form = await request.formData();
   const preview = form.get('preview'), viewer = form.get('viewer');
   if (!(preview instanceof File) || !(viewer instanceof File)) throw new UploadProblem(400,'Include both photo previews.');
   await validatePreviews(preview,viewer);
@@ -208,6 +167,11 @@ export async function photoUploadRoute(request: Request, env: UploadEnv, actor: 
       catch(error){original=await env.MEDIA.head(originalKey);if(!original)throw error;}
     }
     if (original.size !== u.bytes) throw new Error('Original size mismatch');
+    // Validate actual stored bytes before registering any media. The original's
+    // image-type check reads only 12 bytes, regardless of its full size.
+    const header=await env.MEDIA.get(originalKey,{range:{offset:0,length:12}});
+    if(!header)throw new Error('Original missing');
+    if(detectPhoto(new Uint8Array(await header.arrayBuffer()))!==u.mime)throw new UploadProblem(400,'The photo contents do not match its type.');
     await env.MEDIA.put(previewKey,preview.stream(),{httpMetadata:{contentType:'image/jpeg'},onlyIf:{etagDoesNotMatch:'*'}});
     await env.MEDIA.put(viewerKey,viewer.stream(),{httpMetadata:{contentType:'image/jpeg'},onlyIf:{etagDoesNotMatch:'*'}});
     await env.DB.batch([
@@ -222,7 +186,8 @@ export async function photoUploadRoute(request: Request, env: UploadEnv, actor: 
     const reused=u.content_hash?await mediaByHash(env,year,u.content_hash,u.bytes):null;
     if(reused){await discard(env,u);return json({...await mediaResult(env,reused),reused:true},201);}
     throw new Error('Upload state changed');
-  } catch {
+  } catch (error) {
+    if(error instanceof UploadProblem&&error.status===400){await discard(env,u);throw error;}
     // Preserve pending state and completed objects so retries can finish after a
     // lost response or transient D1/R2 failure. Expiry still clears abandoned work.
     throw new UploadProblem(503,'The upload did not finish. Please try again.');
