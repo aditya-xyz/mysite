@@ -308,3 +308,23 @@ Only one scrapbook is active for guests. Publishing activates the chosen year an
 closes older invitation/session access while retaining their content in admin.
 Migration 0009 and the private-admin encrypted link recovery setup are documented
 in admin/README.md. No scrapbook is published by a code deployment.
+
+## Reader colors and Safari Adaptive Dark Mode
+
+The guest scrapbook declares `color-scheme: light dark` in HTML before styles load,
+matching the portfolio's Safari fix. Moss and cream remain the default even when
+the operating system prefers dark colors. The header's sun/moon icon button is an
+explicit opt-in to a dark moss palette, and remembers the reader's choice on that
+browser/hostname. The small same-origin theme.js runs before CSS to restore that
+choice before paint; blocked local storage falls back safely to the default.
+Palette CSS selects light (with an `only light` progressive enhancement) or dark
+native controls. Photos and the photo viewer are not recolored.
+
+WebKit's Safari 27.3 Adaptive Dark Mode documentation says declaring support for
+both schemes opts the page out of its automatic recoloring. Verify the beta's
+actual behavior on the iOS device; desktop checks cannot reproduce that engine
+feature. Reference: https://webkit.org/blog/18541/introducing-adaptive-dark-mode/
+
+The photo viewer uses a 90% dark backdrop (96% with reduced transparency), with
+white captions and dark native controls in both palettes. The enter/exit animation
+uses the same opacity so it never settles on the older brighter overlay.

@@ -1,5 +1,5 @@
-/* Scrapbook uses a fixed moss-and-cream palette, independently of the public site. */
-:root{color-scheme:light;--paper:#ecf0e5;--surface:#e0e6d7;--ink:#20392f;--muted:#526559;--line:#becbb8;--accent:#80502f;--button:#234a3a;--button-ink:#fffdf8;--error:#a03d2f}
+/* Moss and cream are the default; dark colors are an explicit reader choice. */
+:root{color-scheme:light dark;--paper:#ecf0e5;--surface:#e0e6d7;--ink:#20392f;--muted:#526559;--line:#becbb8;--accent:#80502f;--button:#234a3a;--button-ink:#fffdf8;--error:#a03d2f}
 :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:var(--paper);font-synthesis:none}*{box-sizing:border-box}body{margin:0;font-size:15px}header,footer{max-width:1160px;margin:auto;padding:30px 32px;display:flex;justify-content:space-between;align-items:center;font-size:12px;letter-spacing:.04em}header{border-bottom:1px solid var(--line)}.signature{font-family:Georgia,serif;font-size:28px;letter-spacing:-1.4px;text-decoration:none;color:inherit}.signature span{color:var(--accent)}main{max-width:1096px;margin:48px auto;padding:0 32px;min-height:65vh}h1,h2{font-family:Georgia,"Times New Roman",serif;font-weight:400;letter-spacing:-.045em;line-height:1.06}h1{font-size:clamp(38px,5.5vw,64px);margin:24px 0}h2{font-size:clamp(26px,3vw,36px);margin:48px 0 20px}em{font-weight:400;color:var(--accent)}p{line-height:1.8;max-width:570px}.kicker{font-size:11px;letter-spacing:.17em;text-transform:uppercase;color:var(--accent)}.intro{font-size:16px;color:var(--muted)}.button{display:inline-flex;align-items:center;justify-content:center;border:0;background:var(--button);color:var(--button-ink);padding:17px 25px;min-height:52px;border-radius:3px;font:inherit;cursor:pointer;margin:18px 0}.button:disabled{opacity:.55;cursor:wait}.text-button{background:none;border:0;border-bottom:1px solid var(--line);padding:8px 0;color:inherit;cursor:pointer;font:inherit}.entry{max-width:560px;margin:20px auto 100px}.entry h1{font-size:clamp(38px,5.5vw,60px)}label{display:block;margin-top:24px;font-size:14px}input{display:block;width:100%;border:1px solid var(--line);background:var(--surface);border-radius:3px;padding:18px;margin:12px 0;font-size:25px;letter-spacing:.3em;color:inherit}input:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:5px}.error{color:var(--error);font-size:14px}.hint{font-size:13px;color:var(--muted)}.letter{max-width:600px}.personal-photos{margin-top:32px}.grid{display:grid;align-items:start;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.card{padding:0;border:0;text-align:left;background:transparent;color:inherit;cursor:pointer;min-width:0}.card img{display:block;width:100%;height:auto;background:var(--surface);object-fit:contain;border-radius:10px}.card span{overflow-wrap:anywhere;display:block;font-size:12px;line-height:1.5;margin:8px 0 2px}.signoff{font-family:Georgia,serif;font-style:italic;font-size:18px}.section-top{display:flex;justify-content:space-between;align-items:baseline}footer{justify-content:center;gap:10px;color:var(--muted);font-size:11px;text-align:center;border-top:1px solid var(--line)}@media(max-width:600px){header{padding:20px}header>span{font-size:10px}main{padding:0 20px;margin:32px auto}.entry{margin:12px auto 60px}.entry h1{font-size:42px}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}h1{margin:18px 0 22px}h2{margin-top:36px}.personal-photos{margin-top:28px}.section-top h2{font-size:28px}footer{flex-wrap:wrap;padding:24px}.intro{font-size:15px}}
 
 footer{flex-wrap:wrap;row-gap:20px}
@@ -13,12 +13,12 @@ footer{flex-wrap:wrap;row-gap:20px}
 /* A transparent lightbox: the image floats over the page, with controls on the image. */
 :root{scrollbar-gutter:stable}
 .card img.pending-dimensions{min-height:180px}
-#photo{padding:4px;width:fit-content;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);border:0;border-radius:0;background:transparent;color:#fff;overflow:auto;overscroll-behavior:contain;box-shadow:none}
-#photo::backdrop{background:rgb(8 13 12 / .56);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);animation:photo-backdrop-in 280ms ease-out both}
+#photo{padding:4px;width:fit-content;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);border:0;border-radius:0;background:transparent;color:#fff;color-scheme:dark;overflow:auto;overscroll-behavior:contain;box-shadow:none}
+#photo::backdrop{background:rgb(4 9 7 / .9);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);animation:photo-backdrop-in 280ms ease-out both}
 .photo-stage{position:relative;width:fit-content;margin:auto}
 #photo img{display:block;width:auto;height:auto;max-width:min(900px,calc(100vw - 40px));max-height:calc(100dvh - 110px);object-fit:contain;border-radius:5px}
 #photo p{font-size:13px;line-height:1.6;margin:10px auto 0;max-width:560px;text-align:center;overflow-wrap:anywhere;text-shadow:0 1px 5px #000,0 0 15px #000}
-#photo .photo-control{position:absolute;z-index:1;right:10px;display:grid;place-items:center;width:44px;height:44px;margin:0;padding:0;border:1px solid rgb(255 255 255 / .35);border-radius:50%;background:rgb(18 25 23 / .65);color:#fff;cursor:pointer;-webkit-appearance:none;appearance:none}
+#photo .photo-control{position:absolute;z-index:1;right:10px;display:grid;place-items:center;width:44px;height:44px;margin:0;padding:0;border:1px solid rgb(255 255 255 / .35);border-radius:50%;background:rgb(18 25 23 / .85);color:#fff;cursor:pointer;-webkit-appearance:none;appearance:none}
 #photo .close{top:10px}
 #photo .photo-actions{position:absolute;z-index:1;right:10px;bottom:10px;left:10px;display:flex;align-items:center;justify-content:flex-end;gap:8px}
 #photo .photo-actions .photo-control{position:static;flex:0 0 44px}
@@ -38,10 +38,10 @@ html:has(#photo[open]){overflow:hidden}
 #photo.is-closing::backdrop{animation:photo-backdrop-out 180ms ease-in both}
 @keyframes photo-enter{from{opacity:0;transform:translateY(14px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes photo-exit{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(8px) scale(.97)}}
-@keyframes photo-backdrop-in{from{background:rgb(8 13 12 / 0);-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0)}to{background:rgb(8 13 12 / .56);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}}
-@keyframes photo-backdrop-out{from{background:rgb(8 13 12 / .56);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}to{background:rgb(8 13 12 / 0);-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0)}}
+@keyframes photo-backdrop-in{from{background:rgb(8 13 12 / 0);-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0)}to{background:rgb(4 9 7 / .9);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}}
+@keyframes photo-backdrop-out{from{background:rgb(4 9 7 / .9);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}to{background:rgb(8 13 12 / 0);-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0)}}
 @media(prefers-reduced-motion:reduce){#photo[open],#photo[open].is-closing,#photo::backdrop,#photo.is-closing::backdrop{animation:none}}
-@media(prefers-reduced-transparency:reduce){#photo::backdrop,#photo.is-closing::backdrop{background:rgb(8 13 12 / .72);-webkit-backdrop-filter:none;backdrop-filter:none;animation:none}}
+@media(prefers-reduced-transparency:reduce){#photo::backdrop,#photo.is-closing::backdrop{background:rgb(4 9 7 / .96);-webkit-backdrop-filter:none;backdrop-filter:none;animation:none}}
 
 footer a{color:inherit;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}footer a:hover{color:var(--accent);text-decoration-color:currentColor}footer>span{line-height:1.9}
 
@@ -89,3 +89,14 @@ footer .winter-snowflake{display:block;width:30px;height:30px}
 /* Pixel's approved holiday portrait is a transparent header cutout. */
 header .header-pixel{display:block;width:auto;height:64px;max-width:66px;object-fit:contain;-webkit-mask-image:linear-gradient(#000 88%,transparent);mask-image:linear-gradient(#000 88%,transparent)}
 @media(max-width:600px){header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px}header .signature{grid-column:1;grid-row:1;align-self:end}header .edition-stamp{display:contents}header .edition-label{grid-column:1;grid-row:2;font-size:10px;align-self:start}header .header-pixel{grid-column:2;grid-row:1/span 2;height:56px;max-width:56px}}
+
+/* Declare both schemes early, then keep the chosen palette independent of the OS. */
+:root[data-palette="moss"]{color-scheme:light;color-scheme:only light}
+:root[data-palette="night"]{color-scheme:dark;--paper:#172922;--surface:#223b31;--ink:#edf1e6;--muted:#b9c7b6;--line:#486052;--accent:#f2b28a;--button:#b9d7b7;--button-ink:#17352b;--error:#ffb3a7}
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:44px;min-width:44px;min-height:44px;border:1px solid var(--line);border-radius:50%;padding:8px;background:transparent;color:var(--ink);font:500 12px/1.2 system-ui,sans-serif;cursor:pointer;letter-spacing:0}
+.theme-toggle[hidden]{display:none}.theme-toggle[aria-pressed="true"]{background:var(--surface);border-color:var(--accent)}.theme-toggle svg{flex:none;pointer-events:none}
+@media(max-width:600px){header{grid-template-columns:minmax(0,1fr) 44px auto;column-gap:12px}header .header-pixel{grid-column:3;grid-row:1/span 2}header .theme-toggle{grid-column:2;grid-row:1/span 2;padding:8px;width:44px;align-self:center}}
+
+#photo::backdrop{color-scheme:dark}#photo .photo-caption,#photo #save-status{color:#fff}
+
+.theme-toggle .theme-sun{display:none}:root[data-palette="night"] .theme-toggle .theme-sun{display:block}:root[data-palette="night"] .theme-toggle .theme-moon{display:none}
