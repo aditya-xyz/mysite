@@ -39,7 +39,7 @@ Use Node 22.13 or later. From year-service:
 - npm run deploy (guest compatibility with per-year publications)
 - npm run admin:deploy
 
-Apply migrations 0003, 0004, and 0005 first, then deploy the guest Worker before the admin Worker.
+Apply migrations through 0006 first, then deploy the guest Worker before the admin Worker.
 Migration 0003 adds year indexes. Migration 0004 creates persistent People and
 links invitations by phone, without rewriting existing content, tokens, or sessions. If preexisting duplicate
 phones block the index, investigate them rather than deleting records.
@@ -137,8 +137,8 @@ relevant task. Sharing has its own immediate-access actions without
 draft/publish buttons. Saving alone never publishes content.
 
 Uploads support JPEG, PNG, and WebP up to 25 MB each. HEIC and SVG aren't
-supported in this first version. The browser generates a JPEG preview up to
-1600 pixels without EXIF and uploads the original File unchanged. R2 keeps the
+supported in this first version. The browser generates JPEG grid and viewer previews up to 800 and 2400 pixels
+respectively (long edge, without upscaling or EXIF), and uploads the original File unchanged. R2 keeps the
 original bytes. Every uploaded image is private; the browser never receives R2
 write credentials. Removed draft photos remain in the media library so they
 can be added back. This version does not permanently delete originals.
@@ -295,3 +295,18 @@ cannot navigate the editor away. Partial network failures retain successful
 uploads and report how many completed. Tests cover validation and drop-event
 behavior; the local UI also completed a two-file synthetic upload. No production
 photos or invitations were changed for this work.
+
+## Rendition maintenance and original limits
+
+Migration 0006 adds viewer keys and atomic original-request counters. Older photos offer Generate lighter previews;
+this preserves original bytes and requires Save draft and Publish before guests
+see the new derivatives. Existing publications retain their derivative keys.
+
+Sharing offers Reset download limits for an invitation without changing its
+links or sessions. Guests may request each personal original five times per
+invitation per rolling 24-hour window. Household members share the allowance.
+The guest viewer groups Full resolution and download side by side. Download
+immediately saves the viewer preview, or saves/shares the original after Full
+resolution loads it. Loading the original consumes a request; saving the prepared
+file requires no extra request.
+Compressed preview browsing does not consume the allowance.

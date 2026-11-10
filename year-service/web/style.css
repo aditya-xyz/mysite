@@ -20,11 +20,13 @@ footer{flex-wrap:wrap;row-gap:20px}
 #photo p{font-size:13px;line-height:1.6;margin:10px auto 0;max-width:560px;text-align:center;overflow-wrap:anywhere;text-shadow:0 1px 5px #000,0 0 15px #000}
 #photo .photo-control{position:absolute;z-index:1;right:10px;display:grid;place-items:center;width:44px;height:44px;margin:0;padding:0;border:1px solid rgb(255 255 255 / .35);border-radius:50%;background:rgb(18 25 23 / .65);color:#fff;cursor:pointer;-webkit-appearance:none;appearance:none}
 #photo .close{top:10px}
-#photo #save{bottom:10px}
+#photo .photo-actions{position:absolute;z-index:1;right:10px;bottom:10px;left:10px;display:flex;align-items:center;justify-content:flex-end;gap:8px}
+#photo .photo-actions .photo-control{position:static;flex:0 0 44px}
+#photo .photo-actions .resolution-control{flex:0 1 auto;min-width:0}
 #photo .photo-control:focus-visible{outline:2px solid #fff;outline-offset:2px}
 #photo .photo-control:disabled{opacity:.5;cursor:wait}
 #photo .photo-control svg{display:block;pointer-events:none}
-#save[hidden],#save-status:empty{display:none}
+#save[hidden],#full-resolution[hidden],#save-status:empty{display:none}
 html:has(#photo[open]){overflow:hidden}
 @media(max-height:500px){#photo img{max-height:calc(100dvh - 80px)}}
 
@@ -42,3 +44,6 @@ html:has(#photo[open]){overflow:hidden}
 @media(prefers-reduced-transparency:reduce){#photo::backdrop,#photo.is-closing::backdrop{background:rgb(8 13 12 / .72);-webkit-backdrop-filter:none;backdrop-filter:none;animation:none}}
 
 footer a{color:inherit;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}footer a:hover{color:var(--accent);text-decoration-color:currentColor}footer>span{line-height:1.9}
+
+#photo .resolution-control{width:auto;height:auto;min-height:44px;padding:8px 12px;border-radius:22px;font:500 12px/1.25 system-ui,sans-serif;white-space:normal}
+#photo .resolution-control.is-ready{opacity:1;border-color:rgb(255 255 255 / .65)}

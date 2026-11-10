@@ -1,4 +1,5 @@
 import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionCookie } from "./security.ts";
+import { reserveDownload,releaseDownload } from "./downloads.ts";
 import { previewDimensions } from "./image-dimensions.ts";
 import { invitationAudience, invitationName, type InvitationAudience } from "./invitations.ts";
 import { publishedEdition, clientEdition, visiblePhotos } from "./edition.ts";
@@ -16,7 +17,7 @@ interface Env {
 interface Invite extends InvitationAudience { version:number; person_id: string | null; edition_year: number; id: string; name: string; phone: string; expires_at: number; challenge_expires_at: number }
 interface Photo { id: string; invite_id: string | null; preview_key: string; original_key: string | null; filename: string | null; caption: string; alt: string }
 const INVITE = "__Host-year_invite", SESSION = "__Host-year_session";
-class Failure extends Error { constructor(public status: number, message: string) { super(message); } }
+class Failure extends Error { constructor(public status: number, message: string, public retryAfter?:number) { super(message); } }
 const json = (data: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(data, { status, headers });
 
@@ -155,30 +156,36 @@ async function route(request: Request, env: Env) {
     const photos = await env.DB.prepare(`SELECT id,caption,alt,invite_id,preview_key,original_key FROM photos
       WHERE invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?1)) ORDER BY invite_id IS NULL,sort_order,id`).bind(JSON.stringify(await invitationAudience(env.DB,i))).all<Photo>();
     return json({ year:i.edition_year,name: invitationName(i), verificationName:i.name, photos: await Promise.all(photos.results.map(async p => ({ id: p.id, caption: p.caption, alt: p.alt,...await previewDimensions(env.MEDIA,p.preview_key),
-      personal: p.invite_id !== null, src: `/api/media/${p.id}`, canSave: !!p.invite_id && !!p.original_key }))) });
+      personal: p.invite_id !== null, src: `/api/media/${p.id}`,viewerSrc:`/api/media/${p.id}/viewer`, canSave: !!p.invite_id && !!p.original_key }))) });
   }
-  const media = /^\/api\/media\/([a-z0-9-]+)(\/original)?$/.exec(path);
+  const media = /^\/api\/media\/([a-z0-9-]+)(\/(original|viewer))?$/.exec(path);
   if (media && request.method === "GET") {
-    const i = await authenticated(request, env);
-    const edition = await publishedEdition(env.DB,i.edition_year);
-    if (edition) {
-      const p = visiblePhotos(edition,i.id,await invitationAudience(env.DB,i)).find(p => p.id === media[1]);
-      if (!p || (media[2] && (!p.recipients.length || !p.original_key))) throw new Failure(404,"Photo not found.");
-      const file = await env.MEDIA.get(media[2] ? p.original_key! : p.preview_key);
-      if (!file) throw new Failure(404,"Photo not found.");
-      const headers = new Headers({"Content-Type":media[2] ? p.mime : "image/jpeg"});
-      if (media[2]) headers.set("Content-Disposition",`attachment; filename="${p.filename.replace(/[^a-zA-Z0-9._-]/g,"_")}"`);
-      return new Response(file.body,{headers});
+    const i=await authenticated(request,env),edition=await publishedEdition(env.DB,i.edition_year),original=media[3]==="original";
+    let key:string|null,filename:string,mime:string;
+    if(edition){
+      const p=visiblePhotos(edition,i.id,await invitationAudience(env.DB,i)).find(p=>p.id===media[1]);
+      if(!p||(original&&(!p.recipients.length||!p.original_key)))throw new Failure(404,"Photo not found.");
+      key=original?p.original_key:media[3]==="viewer"?(p.viewer_key||p.preview_key):p.preview_key;
+      filename=p.filename;mime=original?p.mime:"image/jpeg";
+    }else{
+      if(i.edition_year!==2026)throw new Failure(404,"Photo not found.");
+      const p=await env.DB.prepare("SELECT * FROM photos WHERE id=?1 AND (invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?2)))")
+        .bind(media[1],JSON.stringify(await invitationAudience(env.DB,i))).first<Photo>();
+      if(!p||(original&&(!p.invite_id||!p.original_key)))throw new Failure(404,"Photo not found.");
+      key=original?p.original_key:p.preview_key;filename=p.filename||"photo.jpg";mime=original?"":"image/jpeg";
     }
-    if (i.edition_year !== 2026) throw new Failure(404,"Photo not found.");
-    const p = await env.DB.prepare("SELECT * FROM photos WHERE id=?1 AND (invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?2)))")
-      .bind(media[1], JSON.stringify(await invitationAudience(env.DB,i))).first<Photo>();
-    if (!p || (media[2] && (!p.invite_id || !p.original_key))) throw new Failure(404, "Photo not found.");
-    const file = await env.MEDIA.get(media[2] ? p.original_key! : p.preview_key);
-    if (!file) throw new Failure(404, "Photo not found.");
-    const headers = new Headers({ "Content-Type": file.httpMetadata?.contentType || "image/jpeg" });
-    if (media[2]) headers.set("Content-Disposition", `attachment; filename="${(p.filename || "photo.jpg").replace(/[^a-zA-Z0-9._-]/g, "_")}"`);
-    return new Response(file.body, { headers });
+    if(!key)throw new Failure(404,"Photo not found.");
+    const reservation=original?await reserveDownload(env.DB,i.id,media[1],now()):null;
+    if(reservation&&!reservation.allowed)throw new Failure(429,"You’ve reached five original downloads for this photo. Your allowance resets within 24 hours.",reservation.retryAfter);
+    let file:R2ObjectBody|null;
+    try{file=await env.MEDIA.get(key);}catch{
+      if(reservation?.allowed)await releaseDownload(env.DB,i.id,media[1],reservation.windowStart);
+      throw new Failure(503,"The original could not be retrieved. Please try again.");
+    }
+    if(!file){if(reservation?.allowed)await releaseDownload(env.DB,i.id,media[1],reservation.windowStart);throw new Failure(404,"Photo not found.");}
+    const headers=new Headers({"Content-Type":mime||file.httpMetadata?.contentType||"image/jpeg"});
+    if(original){headers.set("Content-Disposition",`attachment; filename="${filename.replace(/[^a-zA-Z0-9._-]/g,"_")}"`);if(reservation?.allowed)headers.set("X-Downloads-Remaining",String(reservation.remaining));}
+    return new Response(file.body,{headers});
   }
   if (path.startsWith("/api/")) throw new Failure(404, "Not found.");
   if (!["GET", "HEAD"].includes(request.method)) throw new Failure(405, "Method not allowed.");
@@ -190,7 +197,7 @@ export default {
   async fetch(request: Request, env: Env) {
     let response: Response;
     try { response = await route(request, env); }
-    catch (error) { response = error instanceof Failure ? json({ error: error.message }, error.status) : json({ error: "Something went wrong. Please try again later." }, 500); }
+    catch (error) { response = error instanceof Failure ? json({ error: error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store, private");
     headers.set("Referrer-Policy", "no-referrer");

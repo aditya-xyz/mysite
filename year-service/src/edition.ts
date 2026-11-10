@@ -5,7 +5,7 @@ export interface Draft {
   stories: Story[]; photos: DraftPhoto[];
 }
 export interface PublishedPhoto extends DraftPhoto {
-  preview_key: string; original_key: string | null; filename: string; mime: string; width?:number; height?:number;
+  preview_key: string; viewer_key?:string|null; original_key: string | null; filename: string; mime: string; width?:number; height?:number;
 }
 export interface Published extends Omit<Draft, "photos"> { photos: PublishedPhoto[] }
 export const visiblePhotos = (edition: Published, recipient: string, personId:string|string[]=recipient) =>
@@ -14,7 +14,7 @@ export function clientEdition(edition: Published, recipient: string, name: strin
   return { year, name, title: edition.title, authors: edition.authors, intro: edition.intro,
     note: edition.note, sharedTitle: edition.sharedTitle, stories: edition.stories,
     photos: visiblePhotos(edition, recipient, personId).map(p => ({ id: p.id, caption: p.caption, alt: p.alt,
-      width:p.width,height:p.height,personal: p.recipients.length > 0, src: `/api/media/${p.id}`,
+      width:p.width,height:p.height,personal: p.recipients.length > 0, src: `/api/media/${p.id}`,viewerSrc:`/api/media/${p.id}/viewer`,
       canSave: p.recipients.length > 0 && !!p.original_key })) };
 }
 export async function publishedEdition(db: D1Database, year: number) {

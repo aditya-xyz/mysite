@@ -2,7 +2,8 @@ import {scrapbookConfig} from './config.js';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#photo');
 const save = document.querySelector('#save');
-let preparedFile, selected, journal, saveMode = 'share', generation = 0, imageObserver, layoutObserver, closeTimer;
+const fullResolution=document.querySelector('#full-resolution');
+let preparedFile, selected, journal, saveMode = 'share', generation = 0, fullImageUrl, originalRequest, downloadPending=false, imageObserver, layoutObserver, closeTimer;
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path, data) {
   const response = await fetch('/api/' + path, data === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
@@ -87,29 +88,54 @@ async function openPhoto(photo) {
   if(dialog.open)return;
   clearTimeout(closeTimer);dialog.classList.remove('is-closing');
   selected=photo;preparedFile=null;saveMode='share';const current=++generation;
-  dialog.querySelector('img').src=photo.src;dialog.querySelector('img').alt=photo.alt;dialog.querySelector('p').textContent=photo.caption;
-  document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=true;save.setAttribute('aria-label','Preparing original photo');save.title='Preparing original…';dialog.showModal();
-  if (!photo.canSave) return;
-  try {
-    const response=await fetch(photo.src+'/original');if(!response.ok) throw new Error('Could not load the original. Reopen the photo to try again.');
-    const blob=await response.blob();
-    if(current!==generation) return;
-    const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] || 'photo.jpg';
-    preparedFile=new File([blob],filename,{type:blob.type});save.setAttribute('aria-label','Save original photo');save.title='Save photo';save.disabled=false;
-  } catch(error) {if(current===generation) document.querySelector('#save-status').textContent=error.message;}
+  const image=dialog.querySelector('img');image.src=photo.src;image.alt=photo.alt;dialog.querySelector('p').textContent=photo.caption;
+  if(photo.viewerSrc&&photo.viewerSrc!==photo.src){
+    const detailed=new Image();detailed.decoding='async';detailed.onload=()=>{if(current===generation&&!preparedFile)image.src=photo.viewerSrc;};detailed.src=photo.viewerSrc;
+  }
+  document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full resolution';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');dialog.showModal();
+}
+async function deliverOriginal(){
+  if(!preparedFile)return;
+  const file=preparedFile;
+  try{
+    if(saveMode==='share'&&navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return;}
+    const url=URL.createObjectURL(file),anchor=document.createElement('a');anchor.href=url;anchor.download=file.name;document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    document.querySelector('#save-status').textContent='Original downloaded. Your browser chooses where it saves.';
+  }catch(error){if(error.name!=='AbortError'){saveMode='download';document.querySelector('#save-status').textContent='Tap the download icon again to save the original.';}}
 }
 save.onclick=async()=>{
-  if(!preparedFile || !selected?.canSave) return;
-  const file=preparedFile;
-  try {
-    if(saveMode==='share' && navigator.canShare?.({files:[file]})) {await navigator.share({files:[file]});return;}
-    const url=URL.createObjectURL(file), a=document.createElement('a');a.href=url;a.download=file.name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-    document.querySelector('#save-status').textContent='Original downloaded. Your browser chooses where it saves.';
-  } catch(error) {if(error.name!=='AbortError'){saveMode='download';document.querySelector('#save-status').textContent='Tap the download icon again to save the original.';}}
+  if(!selected?.canSave)return;
+  if(preparedFile){await deliverOriginal();return;}
+  // A same-origin download starts directly from the tap, without fetching an original.
+  const anchor=document.createElement('a');anchor.href=selected.viewerSrc||selected.src;
+  anchor.download='photo-preview.jpg';document.body.append(anchor);anchor.click();anchor.remove();
+  document.querySelector('#save-status').textContent='Preview downloaded. Load Full resolution if you’d like the original.';
+};
+fullResolution.onclick=async()=>{
+  if(!selected?.canSave||downloadPending||preparedFile)return;
+  const photo=selected,current=generation,status=document.querySelector('#save-status');
+  downloadPending=true;fullResolution.disabled=true;fullResolution.setAttribute('aria-busy','true');fullResolution.textContent='Loading…';status.textContent='Loading the full-resolution photo…';
+  originalRequest=new AbortController();let limited=false;
+  try{
+    const response=await fetch(photo.src+'/original',{signal:originalRequest.signal});
+    if(!response.ok){
+      const error=await response.json();limited=response.status===429;
+      const reset=error.retryAfter?new Date(Date.now()+error.retryAfter*1000).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      throw new Error(limited&&reset?`You’ve reached this photo’s full-resolution limit. Try again after ${reset}, or ask us to reset it.`:error.error||'Could not load full resolution. Please try again.');
+    }
+    const blob=await response.blob();if(current!==generation)return;
+    const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]||'photo.jpg';
+    preparedFile=new File([blob],filename,{type:blob.type});
+    fullImageUrl=URL.createObjectURL(preparedFile);dialog.querySelector('img').src=fullImageUrl;
+    fullResolution.textContent='Full resolution ✓';fullResolution.classList.add('is-ready');
+    save.disabled=false;save.setAttribute('aria-label','Save original photo');save.title='Save original photo';
+    status.textContent='Full resolution loaded. Tap the download icon to save or share.';
+  }catch(error){if(current===generation&&error.name!=='AbortError'){status.textContent=error.message;fullResolution.disabled=limited;fullResolution.textContent=limited?'Limit reached':'Retry full resolution';}}
+  finally{if(current===generation){downloadPending=false;fullResolution.removeAttribute('aria-busy');}}
 };
 function closePhoto(){
   if(!dialog.open||dialog.classList.contains('is-closing'))return;
-  generation++;preparedFile=null;save.disabled=true;
+  generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;save.disabled=true;
   if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){dialog.close();return;}
   dialog.classList.add('is-closing');
   // Fallback if the browser suppresses animationend (for example, a hidden tab).
@@ -119,6 +145,6 @@ dialog.querySelector('.close').onclick=closePhoto;
 dialog.addEventListener('cancel',event=>{event.preventDefault();closePhoto();});
 dialog.addEventListener('animationend',event=>{if(event.target===dialog&&event.animationName==='photo-exit'&&dialog.classList.contains('is-closing'))dialog.close();});
 dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closePhoto();}});
-dialog.addEventListener('close',()=>{clearTimeout(closeTimer);dialog.classList.remove('is-closing');generation++;preparedFile=null;selected=null;dialog.querySelector('img').removeAttribute('src');});
+dialog.addEventListener('close',()=>{clearTimeout(closeTimer);dialog.classList.remove('is-closing');generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;selected=null;dialog.querySelector('img').removeAttribute('src');if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}});
 renderFooter();
 start();

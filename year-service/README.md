@@ -67,8 +67,10 @@ only; personal originals are available only to the corresponding recipient.
 Protected responses use no-store and the app has a restrictive CSP, no external
 scripts, no analytics, no cross-origin API access, and no request logging.
 
-The single Save photo action prepares the original before tapping, uses native
-file sharing where available, and otherwise downloads it. The original bytes
+Opening a photo loads a compressed viewer preview without requesting the original.
+The adjacent download button immediately saves the viewer preview. Full resolution
+optionally loads and displays the original; the download button then saves/shares
+that prepared original, using native file sharing where available. The original bytes
 and EXIF are preserved by our service. A phone or receiving app chooses the
 save destination and can alter metadata. Preview copies contain no EXIF.
 Displaying a shared photo inherently lets a viewer save/capture that preview;
@@ -167,7 +169,7 @@ The ignored aspect-ratio fixture includes synthetic 4:5 Instagram portrait,
 markers. Browser checks cover mixed-ratio scrolling, mobile resizing, and the
 floating viewer at 440px and 375px phone widths. The suite also covers JPEG
 header parsing, legacy dimension resolution, snapshot dimensions, and unchanged
-personal/shared authorization. All 34 tests pass. Run the ignored preview fixture
+personal/shared authorization. All 45 tests pass. Run the ignored preview fixture
 with ASPECT_PREVIEW=1 to use these test images. The fixture remains local-only; no real personal photos are used.
 
 The viewer enters with a 280ms zoom/fade and closes with a 180ms retreat/fade;
@@ -201,3 +203,24 @@ Scrapbook footer Instagram URLs live in `web/config.js`, separate from the publi
 portfolio’s `src/socials.ts`. All three credit names link to their configured
 profiles in a new tab. An unset/invalid URL leaves that name as plain text. This
 is shared scrapbook presentation config; it does not need Worker vars or D1.
+
+## Photo renditions and original limits
+
+New uploads generate 800px grid and 2400px viewer JPEG previews (maximum long
+edge, without upscaling). Only Full resolution requests the original. Each
+invitation can request each personal original five times per rolling 24-hour
+window, starting with its first request. Household members share this allowance.
+Preview browsing and repeated saves of an already loaded file do not count.
+Sessions and link rotation do not reset it. Blocked requests return 429 and
+Retry-After. Missing originals and storage failures before delivery release the
+reservation; interrupted transfers count.
+
+Sharing offers Reset download limits without changing links or sessions. Older
+photos use their existing preview until Generate lighter previews, Save draft,
+and Publish update their derivatives. Originals retain their bytes and EXIF, and
+older published snapshots retain their original derivative keys until publishing.
+
+Rollout requires migration 0006 before deploying
+the guest Worker, then build and deploy admin. Local integration tests cover
+renditions, concurrent quota enforcement, reset/expiry, legacy fallback, and
+publication isolation using synthetic images and mocked verification.

@@ -1,4 +1,4 @@
-import { previewDimensions } from "../../src/image-dimensions.ts";
+import { previewDimensions,imageDimensions } from "../../src/image-dimensions.ts";
 import { invitationAudience, invitationName, type InvitationAudience } from "../../src/invitations.ts";
 import { canonicalDraft, type Contact } from "./people.ts";
 import { adminIdentity, type AuthConfig } from "./auth.ts";
@@ -7,7 +7,7 @@ import { clientEdition, type Draft, type Published, type PublishedPhoto } from "
 
 interface Env extends AuthConfig { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
 interface EditionRow { draft_json: string; draft_version: number; published_version: number | null; published_at: number | null }
-interface Media { id: string; preview_key: string; original_key: string | null; filename: string; mime: string; bytes: number }
+interface Media { id: string; preview_key: string; viewer_key:string|null; original_key: string | null; filename: string; mime: string; bytes: number }
 class Problem extends Error { constructor(public status: number, message: string) { super(message); } }
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const fail = (message: string): never => { throw new Problem(400, message); };
@@ -60,7 +60,7 @@ async function snapshot(draft: Draft, env: Env, year: number): Promise<Published
   const photos: PublishedPhoto[] = [];
   for (const p of draft.photos) {
     const m = objects.get(p.id); if (!m) return fail("An uploaded photo is missing. Save the draft again.");
-    photos.push({...p,...await previewDimensions(env.MEDIA,m.preview_key),preview_key:m.preview_key,original_key:m.original_key,filename:m.filename,mime:m.mime});
+    photos.push({...p,...await previewDimensions(env.MEDIA,m.preview_key),preview_key:m.preview_key,viewer_key:m.viewer_key,original_key:m.original_key,filename:m.filename,mime:m.mime});
   }
   return {...draft,photos};
 }
@@ -69,6 +69,12 @@ function detect(bytes: Uint8Array) {
   if ([137,80,78,71,13,10,26,10].every((b,i) => bytes[i] === b)) return "image/png";
   const h = new TextDecoder().decode(bytes.slice(0,12)); if (h.startsWith("RIFF") && h.endsWith("WEBP")) return "image/webp";
   return fail("Upload JPEG, PNG, or WebP photos. HEIC and SVG aren’t supported in this first editor.");
+}
+async function validRenditions(grid:File,viewer:File){
+  if(!grid.size||grid.size>4*1024*1024||!viewer.size||viewer.size>6*1024*1024)throw new Problem(413,"Use a grid preview up to 4 MB and a viewer preview up to 6 MB.");
+  const g=imageDimensions(new Uint8Array(await grid.slice(0,65536).arrayBuffer())),v=imageDimensions(new Uint8Array(await viewer.slice(0,65536).arrayBuffer()));
+  if(!g||!v||Math.max(g.width,g.height)>800||Math.max(v.width,v.height)>2400)return fail("Use JPEG previews up to 800px for the grid and 2400px for the viewer.");
+  if(Math.abs(g.width*v.height-v.width*g.height)>2*Math.max(v.width,v.height))return fail("Both previews must have the same aspect ratio.");
 }
 async function route(request: Request, env: Env, actor: string) {
   const url = new URL(request.url); let path = url.pathname;
@@ -138,7 +144,7 @@ async function route(request: Request, env: Env, actor: string) {
   if (path === "/api/state" && request.method === "GET") {
     const row = await edition(env,year);
     const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
-    const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,original_key IS NOT NULL AS has_original FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
+    const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
     return json({actor,year,draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
@@ -174,7 +180,7 @@ async function route(request: Request, env: Env, actor: string) {
     const invite=invitationId?await env.DB.prepare("SELECT * FROM invites WHERE id=?1 AND edition_year=?2").bind(invitationId,year).first<InvitationAudience>():null;
     if(invitationId && !invite)throw new Problem(404,"Invitation not found.");
     const data = invite ? clientEdition(published,invite.id,invitationName(invite),year,await invitationAudience(env.DB,invite)) : clientEdition(published,id,person?.name || "friend",year,person?.id);
-    data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`}));
+    data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`,viewerSrc:`/api/editions/${year}/media/${p.id}/viewer`}));
     return json(data);
   }
   const invitationRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/details$/.exec(path);
@@ -239,6 +245,14 @@ async function route(request: Request, env: Env, actor: string) {
     await audit(env,actor,changed?"change-phone":"edit-person",id).run();
     return json({saved:true,phoneChanged:changed});
   }
+  const resetDownloads=/^\/api\/invitations\/([a-z0-9-]{1,100})\/downloads\/reset$/.exec(path);
+  if(resetDownloads&&request.method==="POST"){
+    await body(request);
+    const invite=await env.DB.prepare("SELECT id FROM invites WHERE id=?1 AND edition_year=?2").bind(resetDownloads[1],year).first();
+    if(!invite)throw new Problem(404,"Invitation not found.");
+    await env.DB.batch([env.DB.prepare("DELETE FROM original_downloads WHERE invite_id=?1").bind(resetDownloads[1]),audit(env,actor,"reset-downloads",resetDownloads[1])]);
+    return json({reset:true});
+  }
   const personRoute = /^\/api\/people\/(person-[a-f0-9]{24}|angela)\/(invite|revoke)$/.exec(path);
   if (personRoute && request.method === "POST") {
     const id = personRoute[1];
@@ -253,30 +267,51 @@ async function route(request: Request, env: Env, actor: string) {
     return json(revoke ? {revoked:true} : {url:env.JOURNAL_ORIGIN+"/#"+raw});
   }
   if (path === "/api/upload" && request.method === "POST") {
-    if (Number(request.headers.get("Content-Length") || 0) > 30*1024*1024) throw new Problem(413,"Use an original smaller than 25 MB.");
-    const form = await request.formData(), original = form.get("original"), preview = form.get("preview");
+    if (Number(request.headers.get("Content-Length") || 0) > 36*1024*1024) throw new Problem(413,"Use an original smaller than 25 MB.");
+    const form = await request.formData(), original = form.get("original"), preview = form.get("preview"),viewer=form.get("viewer");
     if (!(original instanceof File) || !(preview instanceof File)) return fail("Include the original photo and its preview.");
     if (original.size > 25*1024*1024 || preview.size > 4*1024*1024 || !original.size || !preview.size) throw new Problem(413,"Use an original up to 25 MB and a preview up to 4 MB.");
     const mime = detect(new Uint8Array(await original.slice(0,12).arrayBuffer()));
     if (detect(new Uint8Array(await preview.slice(0,12).arrayBuffer())) !== "image/jpeg") return fail("The preview must be JPEG.");
-    const id = "photo-"+token().slice(0,24), originalKey = `${year}/${id}/original`, previewKey = `${year}/${id}/preview.jpg`;
+    if(viewer!==null){
+      if(!(viewer instanceof File))return fail("Include a JPEG viewer preview.");
+      await validRenditions(preview,viewer);
+    }
+    const id = "photo-"+token().slice(0,24), originalKey = `${year}/${id}/original`, previewKey = `${year}/${id}/preview.jpg`,viewerKey=viewer instanceof File?`${year}/${id}/viewer.jpg`:null;
     try {
       await env.MEDIA.put(originalKey,original.stream(),{httpMetadata:{contentType:mime}});
       await env.MEDIA.put(previewKey,preview.stream(),{httpMetadata:{contentType:"image/jpeg"}});
+      if(viewerKey&&viewer instanceof File)await env.MEDIA.put(viewerKey,viewer.stream(),{httpMetadata:{contentType:"image/jpeg"}});
       await env.DB.batch([
-        env.DB.prepare("INSERT INTO media_objects(id,year,preview_key,original_key,filename,mime,bytes) VALUES(?1,?7,?2,?3,?4,?5,?6)")
-          .bind(id,previewKey,originalKey,original.name.slice(0,200),mime,original.size,year), audit(env,actor,"upload-photo",id)
+        env.DB.prepare("INSERT INTO media_objects(id,year,preview_key,original_key,filename,mime,bytes,viewer_key) VALUES(?1,?7,?2,?3,?4,?5,?6,?8)")
+          .bind(id,previewKey,originalKey,original.name.slice(0,200),mime,original.size,year,viewerKey), audit(env,actor,"upload-photo",id)
       ]);
-    } catch { await env.MEDIA.delete([originalKey,previewKey]); throw new Problem(503,"The upload did not finish. Please try again."); }
-    return json({id,filename:original.name,mime,bytes:original.size,has_original:true},201);
+    } catch { await env.MEDIA.delete([originalKey,previewKey,...(viewerKey?[viewerKey]:[])]); throw new Problem(503,"The upload did not finish. Please try again."); }
+    return json({id,filename:original.name,mime,bytes:original.size,has_original:true,has_viewer:!!viewerKey},201);
   }
-  const mediaRoute = /^\/api\/media\/([a-z0-9-]+)\/(preview|original)$/.exec(path);
+  const renditionRoute=/^\/api\/media\/([a-z0-9-]+)\/previews$/.exec(path);
+  if(renditionRoute&&request.method==="POST"){
+    if(Number(request.headers.get("Content-Length")||0)>11*1024*1024)throw new Problem(413,"Previews are too large.");
+    const media=await env.DB.prepare("SELECT id FROM media_objects WHERE id=?1 AND year=?2").bind(renditionRoute[1],year).first();
+    if(!media)throw new Problem(404,"Photo not found.");
+    const form=await request.formData(),grid=form.get("preview"),viewer=form.get("viewer");
+    if(!(grid instanceof File)||!(viewer instanceof File))return fail("Include both photo previews.");
+    await validRenditions(grid,viewer);
+    const prefix=`${year}/${renditionRoute[1]}/previews/${token().slice(0,16)}`,gridKey=prefix+"/grid.jpg",viewerKey=prefix+"/viewer.jpg";
+    try{
+      await env.MEDIA.put(gridKey,grid.stream(),{httpMetadata:{contentType:"image/jpeg"}});
+      await env.MEDIA.put(viewerKey,viewer.stream(),{httpMetadata:{contentType:"image/jpeg"}});
+      await env.DB.batch([env.DB.prepare("UPDATE media_objects SET preview_key=?1,viewer_key=?2 WHERE id=?3 AND year=?4").bind(gridKey,viewerKey,renditionRoute[1],year),audit(env,actor,"generate-previews",renditionRoute[1])]);
+    }catch{await env.MEDIA.delete([gridKey,viewerKey]);throw new Problem(503,"Preview generation could not be saved. Please try again.");}
+    return json({saved:true});
+  }
+  const mediaRoute = /^\/api\/media\/([a-z0-9-]+)\/(preview|viewer|original)$/.exec(path);
   if (mediaRoute && request.method === "GET") {
     const media = await env.DB.prepare("SELECT * FROM media_objects WHERE id=?1 AND year=?2").bind(mediaRoute[1],year).first<Media>();
-    const key = mediaRoute[2] === "preview" ? media?.preview_key : media?.original_key;
+    const key = mediaRoute[2] === "preview" ? media?.preview_key : mediaRoute[2]==="viewer"?(media?.viewer_key||media?.preview_key):media?.original_key;
     if (!key) throw new Problem(404,"Photo not found.");
     const file = await env.MEDIA.get(key); if (!file) throw new Problem(404,"Photo not found.");
-    return new Response(file.body,{headers:{"Content-Type":mediaRoute[2] === "preview" ? "image/jpeg" : media!.mime}});
+    return new Response(file.body,{headers:{"Content-Type":mediaRoute[2] !== "original" ? "image/jpeg" : media!.mime}});
   }
   if (path.startsWith("/api/")) throw new Problem(404,"Not found.");
   return env.ASSETS.fetch(request);

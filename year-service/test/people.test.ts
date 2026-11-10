@@ -48,6 +48,7 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
     const before=(await db.prepare('SELECT id,token_hash,name,phone,expires_at,revoked_at,challenge_expires_at FROM invites ORDER BY id').all()).results;
     await migrate('0004_people.sql');
     await db.batch((await readFile('migrations/0005_shared_invitations.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.exec((await readFile("migrations/0006_photo_renditions_downloads.sql","utf8")).replace(/\n/g," "));
     let oldPerson='',newPerson='',version=1,inviteId='',newRaw='';
     await t.test('migration links existing invitations without changing tokens, sessions, or manifests',async()=>{
       const contacts=await (await req('contacts')).json() as {people:{id:string;name:string;version:number}[]};
