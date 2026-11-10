@@ -365,8 +365,11 @@ unique photos added to the draft; a single selection may contain at most 300 fil
 
 Already uploaded has a Delete permanently action with an explicit confirmation.
 It deletes the original, current previews and historical generated renditions.
-The server refuses deletion while any saved draft, published edition, or active
-2026 pilot references the photo. Remove/save the draft first; if published, remove
+The server refuses deletion while any saved draft or published edition references
+the photo, with an error identifying the draft/publication and year. Obsolete
+sample-gallery references are removed atomically when deletion is confirmed; they
+do not count as a current publication or force the owner to publish first.
+Remove/save the draft first; if published, remove
 and explicitly publish that change before deleting. Database guards also prevent
 another tab from adding a photo after deletion starts. Shared legacy storage keys
 still referenced by another photo/publication are retained. Failed deletions remain

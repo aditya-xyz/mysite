@@ -42,6 +42,20 @@ test('private media reuse and guarded permanent library deletion',async t=>{
       assert.equal((await req('media/lookup',{hash:'not-a-hash',bytes:12})).status,400);
     });
     const keeper=await create(1);
+    await t.test('obsolete sample-gallery references do not block confirmed deletion of unused photos',async()=>{
+      for(const id of ['legacy-delete','legacy-keep']){
+        await bucket.put(id+'.jpg',jpeg(640,800));
+        await db.prepare("INSERT INTO media_objects(id,year,preview_key,filename,mime,bytes) VALUES(?1,2026,?2,?2,'image/jpeg',0)").bind(id,id+'.jpg').run();
+        await db.prepare("INSERT INTO photos(id,preview_key,caption,alt) VALUES(?1,?2,'Synthetic sample','Illustrative sample')").bind(id,id+'.jpg').run();
+      }
+      assert.equal((await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<{published_json:string|null}>())!.published_json,null);
+      assert.equal((await req('media/legacy-delete/delete',{confirm:true})).status,200);
+      assert.equal(await db.prepare("SELECT id FROM photos WHERE id='legacy-delete'").first(),null);
+      assert.equal(await db.prepare("SELECT id FROM media_objects WHERE id='legacy-delete'").first(),null);
+      assert.equal(await bucket.head('legacy-delete.jpg'),null);
+      assert.ok(await db.prepare("SELECT id FROM photos WHERE id='legacy-keep'").first());assert.ok(await bucket.head('legacy-keep.jpg'));
+      assert.equal((await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<{published_json:string|null}>())!.published_json,null,'Deletion must not publish content');
+    });
     await t.test('same content with a different filename reuses existing media and restores saved photo metadata',async()=>{
       await setDraft([photo(keeper.id)]);
       const lookup=await req('media/lookup',{hash:keeper.hash,bytes:keeper.bytes.length});assert.equal(lookup.status,200);
@@ -50,7 +64,7 @@ test('private media reuse and guarded permanent library deletion',async t=>{
       assert.equal((await reused.json() as {media:{id:string}}).media.id,keeper.id);
       const otherHash=createHash('sha256').update(new Uint8Array([...jpeg(640,800),2])).digest('hex');
       assert.equal((await (await req('media/lookup',{hash:otherHash,bytes:keeper.bytes.length})).json() as {media:unknown}).media,null,'Equal size and name are insufficient');
-      assert.equal((await db.prepare('SELECT count(*) n FROM media_objects').first<{n:number}>())!.n,1);
+      assert.equal((await db.prepare('SELECT count(*) n FROM media_objects WHERE original_key IS NOT NULL').first<{n:number}>())!.n,1);
       await setDraft([]);
       assert.equal((await req('editions',{year:2027,title:'Synthetic 2027',authors:'Test'})).status,201);
       const other=await (await req('editions/2027/media/lookup',{hash:keeper.hash,bytes:keeper.bytes.length})).json() as {media:unknown;candidates:unknown[]};assert.equal(other.media,null);assert.deepEqual(other.candidates,[]);
@@ -77,10 +91,10 @@ test('private media reuse and guarded permanent library deletion',async t=>{
       const item=await create(5),prefix=`2026/${item.id}/`;
       assert.equal((await req(`media/${item.id}/delete`,{})).status,400);
       await setDraft([photo(item.id)]);
-      assert.equal((await req(`media/${item.id}/delete`,{confirm:true})).status,409);assert.ok(await bucket.head(prefix+'original'));
+      const draftBlocked=await req(`media/${item.id}/delete`,{confirm:true});assert.equal(draftBlocked.status,409);assert.match((await draftBlocked.json() as {error:string}).error,/saved draft for 2026/);assert.ok(await bucket.head(prefix+'original'));
       await setDraft([]);
       await db.prepare('UPDATE editions SET published_json=? WHERE year=2026').bind(JSON.stringify(manifest(item.id))).run();
-      assert.equal((await req(`media/${item.id}/delete`,{confirm:true})).status,409);
+      const publicationBlocked=await req(`media/${item.id}/delete`,{confirm:true});assert.equal(publicationBlocked.status,409);assert.match((await publicationBlocked.json() as {error:string}).error,/published scrapbook for 2026/);
       const published=JSON.stringify(manifest(keeper.id));await db.prepare('UPDATE editions SET published_json=? WHERE year=2026').bind(published).run();
       await bucket.put(prefix+'previews/old/grid.jpg','historical grid');await bucket.put(prefix+'previews/old/viewer.jpg','historical viewer');
       await db.prepare('UPDATE media_objects SET deleting=1 WHERE id=?').bind(item.id).run();

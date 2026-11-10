@@ -44,11 +44,20 @@ export async function mediaLibraryRoute(request:Request,env:Env,actor:string,yea
     return json({media:await mediaResult(env,media)});
   }
   if(data.confirm!==true)throw new UploadProblem(400,'Confirm permanent deletion first.');
-  const claimed=await env.DB.prepare(`UPDATE media_objects SET deleting=1 WHERE id=?1 AND year=?2
+  const [claimed]=await env.DB.batch([env.DB.prepare(`UPDATE media_objects SET deleting=1 WHERE id=?1 AND year=?2
     AND NOT EXISTS(SELECT 1 FROM editions e,json_each(e.draft_json,'$.photos') p WHERE json_extract(p.value,'$.id')=?1)
-    AND NOT EXISTS(SELECT 1 FROM editions e,json_each(coalesce(e.published_json,'{"photos":[]}'),'$.photos') p WHERE json_extract(p.value,'$.id')=?1)
-    AND NOT EXISTS(SELECT 1 FROM photos WHERE id=?1 AND EXISTS(SELECT 1 FROM editions WHERE year=2026 AND published_json IS NULL)) RETURNING id`).bind(media.id,year).first();
-  if(!claimed)throw new UploadProblem(409,'This photo is still used. Remove it from the draft and save; if published, remove it and publish that change before deleting.');
+    AND NOT EXISTS(SELECT 1 FROM editions e,json_each(coalesce(e.published_json,'{"photos":[]}'),'$.photos') p WHERE json_extract(p.value,'$.id')=?1) RETURNING id`).bind(media.id,year),
+    // The old sample gallery is not a publication. Remove its reference in the
+    // same transaction so it cannot serve a file after confirmed deletion starts.
+    env.DB.prepare('DELETE FROM photos WHERE id=?1 AND EXISTS(SELECT 1 FROM media_objects WHERE id=?1 AND deleting=1)').bind(media.id)
+  ]);
+  if(!claimed.results.length){
+    const published=await env.DB.prepare("SELECT year FROM editions e,json_each(coalesce(e.published_json,'{\"photos\":[]}'),'$.photos') p WHERE json_extract(p.value,'$.id')=?1").bind(media.id).all<{year:number}>();
+    if(published.results.length)throw new UploadProblem(409,`This photo is in the published scrapbook for ${published.results.map(e=>e.year).join(', ')}. Remove it and publish that change before deleting.`);
+    const drafts=await env.DB.prepare("SELECT year FROM editions e,json_each(e.draft_json,'$.photos') p WHERE json_extract(p.value,'$.id')=?1").bind(media.id).all<{year:number}>();
+    if(drafts.results.length)throw new UploadProblem(409,`This photo is still in the saved draft for ${drafts.results.map(e=>e.year).join(', ')}. Save its removal before deleting.`);
+    throw new UploadProblem(409,'The photo changed in another tab. Please retry deletion.');
+  }
   try{
     const remove=new Set([media.original_key,media.preview_key,media.viewer_key].filter((k):k is string=>!!k));
     let cursor:string|undefined;

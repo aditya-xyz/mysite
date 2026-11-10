@@ -384,7 +384,7 @@ function attachMedia(media){
 function deleteMedia(id){
   if(busy||pendingRequests)return;
   const media=state.media.find(m=>m.id===id);if(!media)return;
-  showModal(`<p class="kicker">Photo library</p><h2>Delete this photo permanently?</h2><p>${esc(media.filename)}</p><p>This deletes the original and all its previews from private storage. It cannot be undone. Photos still used in a saved draft or published scrapbook cannot be deleted.</p><button class="button danger" id="confirm-delete-media">Delete permanently</button><p class="error" id="modal-error" role="alert"></p>`);
+  showModal(`<p class="kicker">Photo library</p><h2>Delete this photo permanently?</h2><p>${esc(media.filename)}</p><p>This deletes the original and all its previews from private storage. It cannot be undone. Old sample photos are also removed from the sample gallery. Photos still used in a saved draft or published scrapbook cannot be deleted.</p><button class="button danger" id="confirm-delete-media">Delete permanently</button><p class="error" id="modal-error" role="alert"></p>`);
   byId('confirm-delete-media').onclick=async event=>{
     event.target.disabled=true;
     try{await api(`media/${id}/delete`,{confirm:true});state.media=state.media.filter(m=>m.id!==id);removedPhotos.delete(`${state.year}/${id}`);modal.close();render();toast('Photo and previews deleted permanently.');}
