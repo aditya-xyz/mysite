@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error The browser helper is intentionally plain JavaScript.
-import {photoUploadError,bindPhotoDropzone} from '../admin/client/photo-upload.js';
+import {photoUploadError,uploadPhoto,bindPhotoDropzone} from '../admin/client/photo-upload.js';
 
 test('photo selection validates the entire batch before any upload starts',()=>{
   const jpeg=new File(['original bytes'],'photo.jpg',{type:'image/jpeg'});
@@ -22,7 +22,35 @@ test('size and scrapbook limits are checked for dropped batches',()=>{
   const file=new File(['jpeg'],'photo.jpg',{type:'image/jpeg'});
   assert.equal(photoUploadError([file],299),'');
   assert.match(photoUploadError([file,file],299),/300 photos/);
-  assert.match(photoUploadError([{name:'large.jpg',type:'image/jpeg',size:25*1024*1024+1}]),/25 MB/);
+  for(const size of [25*1024*1024+1,99_999_999])assert.equal(photoUploadError([{name:'large.jpg',type:'image/jpeg',size}]),'');
+  for(const size of [100_000_000,100_000_001])assert.match(photoUploadError([{name:'large.jpg',type:'image/jpeg',size}]),/smaller than 100 MB/);
+});
+test('chunk uploader preserves bytes, reports progress, and sends previews separately',async()=>{
+  const file=new File([new Uint8Array([255,216,255,225,69,88,73,70,1,2,3,4])],'original.JPG');
+  const preview=new Blob(['grid']),viewer=new Blob(['viewer']),chunks:Blob[]=[],progress:number[]=[];
+  const result=await uploadPhoto(file,{preview,viewer},async(path:string,data:unknown)=>{
+    if(path==='uploads'){
+      assert.deepEqual(data,{filename:'original.JPG',mime:'image/jpeg',bytes:12});
+      return {id:'test-photo',chunkBytes:5};
+    }
+    if(path.endsWith('/complete')){
+      assert.ok(data instanceof FormData);assert.equal(data.get('original'),null);
+      assert.equal(await (data.get('preview') as File).text(),'grid');
+      assert.equal(await (data.get('viewer') as File).text(),'viewer');
+      return {id:'done'};
+    }
+    assert.equal(path,`uploads/test-photo/parts/${chunks.length+1}`);assert.ok(data instanceof Blob);chunks.push(data);return {};
+  },(value:number)=>progress.push(value));
+  assert.deepEqual(new Uint8Array(await new Blob(chunks).arrayBuffer()),new Uint8Array(await file.arrayBuffer()));
+  assert.deepEqual(chunks.map(c=>c.size),[5,5,2]);assert.deepEqual(progress,[42,83,100]);assert.equal(result.id,'done');
+});
+test('chunk failure aborts only the unfinished upload and preserves the original error',async()=>{
+  const paths:string[]=[],failure=new Error('Connection lost');
+  await assert.rejects(()=>uploadPhoto(new File(['photo'],'photo.jpg'),{preview:new Blob(),viewer:new Blob()},async(path:string)=>{
+    paths.push(path);if(path==='uploads')return {id:'unfinished',chunkBytes:5};
+    throw failure;
+  }),error=>error===failure);
+  assert.deepEqual(paths,['uploads','uploads/unfinished/parts/1','uploads/unfinished/abort']);
 });
 
 // Exercise browser EventTarget semantics with file-manager data, without production UI or media.

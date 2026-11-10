@@ -39,7 +39,7 @@ Use Node 22.13 or later. From year-service:
 - npm run deploy (guest compatibility with per-year publications)
 - npm run admin:deploy
 
-Apply migrations through 0006 first, then deploy the guest Worker before the admin Worker.
+Apply migrations through 0007 first, then deploy the guest Worker before the admin Worker.
 Migration 0003 adds year indexes. Migration 0004 creates persistent People and
 links invitations by phone, without rewriting existing content, tokens, or sessions. If preexisting duplicate
 phones block the index, investigate them rather than deleting records.
@@ -137,7 +137,7 @@ required details disable publishing; the review checklist links back to the
 relevant task. Sharing has its own immediate-access actions without
 draft/publish buttons. Saving alone never publishes content.
 
-Uploads support JPEG, PNG, and WebP up to 25 MB each. HEIC and SVG aren't
+Uploads support JPEG, PNG, and WebP strictly under 100 MB (100,000,000 bytes) each. HEIC and SVG aren't
 supported in this first version. The browser generates JPEG grid and viewer previews up to 800 and 2400 pixels
 respectively (long edge, without upscaling or EXIF), and uploads the original File unchanged. R2 keeps the
 original bytes. Every uploaded image is private; the browser never receives R2
@@ -296,6 +296,36 @@ cannot navigate the editor away. Partial network failures retain successful
 uploads and report how many completed. Tests cover validation and drop-event
 behavior; the local UI also completed a two-file synthetic upload. No production
 photos or invitations were changed for this work.
+
+## Larger original uploads
+
+The current client starts a private upload session, sends the unchanged original
+in sequential 8 MiB pieces, then submits the 800px grid and 2400px viewer JPEGs
+separately. Per-photo progress is shown while uploading. No request contains the
+whole large original and previews, and Worker buffering is bounded per request.
+JPEG, PNG, and WebP must be strictly smaller than 100,000,000 bytes; HEIC remains
+unsupported. The legacy `/api/upload` endpoint retains its 25 MiB limit for older
+clients. Picker and drop uploads use the new path at every size.
+
+Migration **0007_photo_uploads.sql** adds temporary upload state, scoped to the
+authenticated owner and scrapbook year. It does not modify invitations, photos,
+publications, or download counters. Apply it before deploying the updated admin.
+Each piece is size-checked on the server, the first piece is checked for image
+type, and R2 assembles only the recorded pieces. The original becomes a media
+library item only after both validated previews are stored and the D1 transaction
+commits. Saving and publishing remain separate actions.
+
+Failed client uploads attempt to abort their private multipart session. Failed
+finalization removes partial objects. Sessions idle for 24 hours are cleaned up
+when another upload starts or an expired session is accessed; R2 also expires
+incomplete multipart uploads after seven days. Retrying a completed finalization
+returns the same media item. An interrupted upload must be selected again; there
+is no cross-reload resume feature.
+
+Synthetic tests upload a 99,999,999-byte original and verify SHA-256 and its EXIF
+marker, distinct previews, and unchanged publication. They also check limits,
+authentication, request origin, part ordering/concurrency, invalid previews,
+expiry, cleanup after a failed D1 commit, and browser-helper chunk/progress behavior.
 
 ## Rendition maintenance and original limits
 

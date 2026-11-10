@@ -5,9 +5,26 @@ export function photoUploadError(files,currentCount=0){
   for(const file of files){
     if(!photoTypes.has(file.type)&&!(file.type===''&&/\.(jpe?g|png|webp)$/i.test(file.name)))return `${file.name}: use JPEG, PNG, or WebP. HEIC and other file types are not supported yet.`;
     if(!file.size)return `${file.name} is empty. Choose another photo.`;
-    if(file.size>25*1024*1024)return `${file.name} is larger than 25 MB.`;
+    if(file.size>=100_000_000)return `${file.name} must be smaller than 100 MB.`;
   }
   return '';
+}
+// The original is sliced unchanged; only the separate browser-made previews are encoded.
+export async function uploadPhoto(file,{preview,viewer},send,onProgress=()=>{}){
+  const mime=file.type||(/\.png$/i.test(file.name)?'image/png':/\.webp$/i.test(file.name)?'image/webp':'image/jpeg');
+  const session=await send('uploads',{filename:file.name.slice(0,200),mime,bytes:file.size});
+  try{
+    for(let offset=0,part=1;offset<file.size;offset+=session.chunkBytes,part++){
+      const end=Math.min(offset+session.chunkBytes,file.size);
+      await send(`uploads/${session.id}/parts/${part}`,file.slice(offset,end));
+      onProgress(Math.round(end/file.size*100));
+    }
+    const form=new FormData();form.set('preview',preview,'grid.jpg');form.set('viewer',viewer,'viewer.jpg');
+    return await send(`uploads/${session.id}/complete`,form);
+  }catch(error){
+    try{await send(`uploads/${session.id}/abort`,{});}catch{/* Expired sign-in/connection: server expires unfinished uploads. */}
+    throw error;
+  }
 }
 export const isFileDrag=event=>Array.from(event.dataTransfer?.types||[]).includes('Files');
 export function bindPhotoDropzone(zone,{isBusy,onFiles,onError}){

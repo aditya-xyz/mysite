@@ -206,6 +206,13 @@ is shared scrapbook presentation config; it does not need Worker vars or D1.
 
 ## Photo renditions and original limits
 
+The admin accepts JPEG, PNG, and WebP originals strictly under 100 MB
+(100,000,000 bytes). Originals upload in 8 MiB pieces, with compressed grid/viewer
+previews sent separately and per-photo progress shown in the editor. Their bytes
+and EXIF stay unchanged. Migration 0007 adds temporary private upload sessions;
+apply it before deploying this admin update. See admin/README.md for failure
+cleanup, expiry, compatibility, and validation details. HEIC remains unsupported.
+
 New uploads generate 800px grid and 2400px viewer JPEG previews (maximum long
 edge, without upscaling). Only Full resolution requests the original. Each
 invitation can request each personal original five times per rolling 24-hour

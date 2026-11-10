@@ -2,6 +2,7 @@ import { previewDimensions,imageDimensions } from "../../src/image-dimensions.ts
 import { invitationAudience, invitationName, type InvitationAudience } from "../../src/invitations.ts";
 import { canonicalDraft, type Contact } from "./people.ts";
 import { adminIdentity, type AuthConfig } from "./auth.ts";
+import { photoUploadRoute, UploadProblem } from "./uploads.ts";
 import { token, digest, now, sameOrigin } from "../../src/security.ts";
 import { clientEdition, type Draft, type Published, type PublishedPhoto } from "../../src/edition.ts";
 
@@ -266,6 +267,8 @@ async function route(request: Request, env: Env, actor: string) {
     ]);
     return json(revoke ? {revoked:true} : {url:env.JOURNAL_ORIGIN+"/#"+raw});
   }
+  const uploaded = await photoUploadRoute(request,env,actor,year,path,validRenditions);
+  if (uploaded) return uploaded;
   if (path === "/api/upload" && request.method === "POST") {
     if (Number(request.headers.get("Content-Length") || 0) > 36*1024*1024) throw new Problem(413,"Use an original smaller than 25 MB.");
     const form = await request.formData(), original = form.get("original"), preview = form.get("preview"),viewer=form.get("viewer");
@@ -324,7 +327,7 @@ export default {
       const actor = await adminIdentity(request,env);
       response = actor ? await route(request,env,actor) : json({error:"Sign in with the approved admin Google account to continue."},401);
     } catch (error) {
-      if (error instanceof Problem) response=json({error:error.message},error.status);
+      if (error instanceof Problem || error instanceof UploadProblem) response=json({error:error.message},error.status);
       else if (error instanceof Error && error.message.includes("UNIQUE constraint failed: invites.edition_year, invites.phone"))
         response=json({error:"That phone number is already in this scrapbook. Refresh to see the latest invitations."},409);
       else if(error instanceof Error && error.message.includes("verification contact needs a phone"))
