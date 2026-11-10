@@ -15,7 +15,7 @@ async function api(path, data) {
   if (!response.ok) throw new Error(result.error || 'Please try again.');
   return result;
 }
-function applyBrand(authors='Aditya & Angela',year) { document.querySelector('.signature').textContent=authors.toLowerCase()+'.'; document.title=(year?year+' · ':'')+authors; document.querySelector('.edition-label').textContent=year||''; }
+function applyBrand(authors='Aditya & Angela',year) { document.querySelector('.signature').textContent=authors.toLowerCase(); document.title=(year?year+' · ':'')+authors; document.querySelector('.edition-label').textContent=year||''; }
 function footerProfile(name,profileUrl){
   if(!profileUrl)return document.createTextNode(name);
   try{

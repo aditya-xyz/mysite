@@ -340,7 +340,8 @@ uses the same opacity so it never settles on the older brighter overlay.
 
 ## Gallery loading and viewer toolbar
 
-The header shows the year without “A private edition”. Preview loading now starts
+The header wordmark has no trailing period, and the year sits directly beneath
+it on desktop and mobile, without “A private edition”. Preview loading now starts
 1200px ahead instead of 200px, with a four-request queue ordered by distance from
 the visible viewport. Only compressed grid previews are prefetched; viewer previews
 and originals retain their existing explicit access behavior. A decoded image
