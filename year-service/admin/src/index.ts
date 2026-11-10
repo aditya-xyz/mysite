@@ -47,7 +47,11 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
     if (!p || !mediaIds.has(p.id) || photoIds.has(p.id)) return fail("A photo is missing or appears more than once.");
     photoIds.add(p.id);
     if (!Array.isArray(p.recipients) || p.recipients.some(id => typeof id !== "string" || !peopleIds.has(id))) return fail("Check the selected photo recipients.");
-    return {id:p.id, caption:text(p.caption,"photo caption",500,false), alt:text(p.alt,"photo description",500), recipients:[...new Set(p.recipients)]};
+    if(p.hidden!==undefined && typeof p.hidden!=="boolean")return fail("Check the photo visibility.");
+    if(p.audience!==undefined && p.audience!=="shared" && p.audience!=="personal")return fail("Check the photo audience.");
+    if(!p.hidden && p.audience==="personal" && !p.recipients.length)return fail("Select people for this photo or hide it until you’re ready.");
+    return {id:p.id, caption:text(p.caption,"photo caption",500,false), alt:text(p.alt,"photo description",500,!p.hidden), recipients:[...new Set(p.recipients)],
+      ...(p.hidden?{hidden:true}:{}),...(p.audience?{audience:p.audience}:{})};
   });
   const stories = d.stories.map(s => {
     if (!s || typeof s.id !== "string" || !/^[a-z0-9-]{1,80}$/.test(s.id) || storyIds.has(s.id)) return fail("Check the stories.");
@@ -60,7 +64,7 @@ async function snapshot(draft: Draft, env: Env, year: number): Promise<Published
   const media = await env.DB.prepare("SELECT * FROM media_objects WHERE year=?1 AND deleting=0").bind(year).all<Media>();
   const objects = new Map(media.results.map(m => [m.id,m]));
   const photos: PublishedPhoto[] = [];
-  for (const p of draft.photos) {
+  for (const p of draft.photos.filter(p=>!p.hidden)) {
     const m = objects.get(p.id); if (!m) return fail("An uploaded photo is missing. Save the draft again.");
     photos.push({...p,...await previewDimensions(env.MEDIA,m.preview_key),preview_key:m.preview_key,viewer_key:m.viewer_key,original_key:m.original_key,filename:m.filename,mime:m.mime});
   }
@@ -165,7 +169,7 @@ async function route(request: Request, env: Env, actor: string) {
     if (!published.photos.length) return fail("Add at least one photo before publishing.");
     const invitations=await env.DB.prepare("SELECT m.value AS person_id FROM invites i,json_each(i.member_ids) m WHERE i.edition_year=?1 AND i.revoked_at IS NULL AND i.expires_at>?2").bind(year,now()).all<{person_id:string}>();
     const active=new Set(invitations.results.map(i=>i.person_id));
-    if(draft.photos.some(p=>p.recipients.some(id=>!active.has(id))))return fail("Invite every selected photo recipient to this scrapbook before publishing.");
+    if(draft.photos.some(p=>!p.hidden && p.recipients.some(id=>!active.has(id))))return fail("Invite every selected photo recipient to this scrapbook before publishing.");
     const result = await env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch() WHERE year=?3 AND draft_version=?2 RETURNING published_version")
       .bind(JSON.stringify(published),row.draft_version,year).first<{published_version:number}>();
     if (!result) throw new Problem(409,"The draft changed while publishing. Review it again.");

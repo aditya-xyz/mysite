@@ -109,3 +109,6 @@ html:has(#modal[open]){overflow:hidden}
 .button.danger{background:#7b3038;color:#fff3ef;border-color:#a24f58}.button.danger:hover{background:#8f3b44}
 
 .photo-number{margin:0 0 10px}.photo-validation{border:1px solid #755448;background:#241c19;border-radius:9px;padding:18px;margin:0 0 22px}.photo-validation h2{color:var(--error);font-size:15px;margin-bottom:8px}.photo-validation .hint{margin:0 0 8px}.photo-validation ul{list-style:none;margin:0;padding:0;max-height:240px;overflow:auto}.photo-validation .quiet{justify-content:flex-start;text-align:left;white-space:normal;overflow-wrap:anywhere;color:var(--ink);width:100%;font-size:12px}.photo-description-error{margin:-8px 0 16px}input[aria-invalid=true]{border-color:var(--error)}
+
+.photo-visibility{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.photo-visibility .photo-number{margin:0}.photo-visibility button{min-height:36px}.photo-editor.is-hidden{border-style:dashed;border-color:#705e3e}.is-hidden>img{opacity:.6}.hidden-photo-hint{color:var(--amber);margin-bottom:18px}
+.photo-visibility-actions{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}.photo-visibility-actions .hint{margin:0;max-width:490px}

@@ -1,4 +1,4 @@
-export interface DraftPhoto { id: string; caption: string; alt: string; recipients: string[] }
+export interface DraftPhoto { id: string; caption: string; alt: string; recipients: string[]; hidden?: boolean; audience?: "shared" | "personal" }
 export interface Story { id: string; title: string; body: string }
 export interface Draft {
   title: string; authors: string; intro: string; note: string; sharedTitle: string;
@@ -9,7 +9,7 @@ export interface PublishedPhoto extends DraftPhoto {
 }
 export interface Published extends Omit<Draft, "photos"> { photos: PublishedPhoto[] }
 export const visiblePhotos = (edition: Published, recipient: string, personId:string|string[]=recipient) =>
-  edition.photos.filter(p => p.recipients.length === 0 || (p.recipients.includes(recipient) || (Array.isArray(personId)?personId:[personId]).some(id=>p.recipients.includes(id))));
+  edition.photos.filter(p => !p.hidden && !(p.audience === "personal" && !p.recipients.length) && (p.recipients.length === 0 || p.recipients.includes(recipient) || (Array.isArray(personId)?personId:[personId]).some(id=>p.recipients.includes(id))));
 export function clientEdition(edition: Published, recipient: string, name: string, year: number, personId:string|string[]=recipient) {
   return { year, name, title: edition.title, authors: edition.authors, intro: edition.intro,
     note: edition.note, sharedTitle: edition.sharedTitle, stories: edition.stories,

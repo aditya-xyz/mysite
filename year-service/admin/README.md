@@ -452,3 +452,21 @@ the exact field. Empty descriptions have an inline error and `aria-invalid`; the
 list clears as descriptions are entered. Save errors identify the first incomplete
 photo and the remaining count, retaining all edits. Captions can be playful;
 accessibility descriptions should explain the visible scene.
+
+## Hide photos while preparing a scrapbook
+
+Hide all photos lets you start a small test, then unhide just the photos to include.
+Each photo has Hide photo / Unhide photo. Hidden photos stay in their exact draft
+position with captions, descriptions, and recipients intact, including after save
+and reload. They can have an unfinished description or Selected people with no
+assignments yet. The editor preserves that audience choice across reloads.
+Unhide requires a description and at least one person for a personal photo before
+saving. Hidden photos remain protected from library deletion.
+
+Hidden photos are omitted server-side from saved-draft recipient previews and
+publication manifests. Guest authorization also rejects hidden photos and
+unassigned personal photos defensively. Hidden assignments do not require active
+invitations for publication. At least one included photo is required to publish.
+Save and Publish are separate: hiding a previously published photo changes guest
+access only after publishing again. A code deployment never changes photo flags
+or publishes the owner's draft.

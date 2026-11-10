@@ -43,7 +43,7 @@ export function addPhotoToDraft(draft,media){
   if(draft.photos.some(photo=>photo.id===media.id))return false;
   if(draft.photos.length>=300)throw new Error('A scrapbook can contain up to 300 photos.');
   const photo=media.draftPhoto||{caption:'',alt:'',recipients:[]};
-  draft.photos.push({id:media.id,caption:photo.caption,alt:photo.alt,recipients:[...photo.recipients]});
+  draft.photos.push({id:media.id,caption:photo.caption,alt:photo.alt,recipients:[...photo.recipients],...(photo.hidden?{hidden:true}:{}),...(photo.audience?{audience:photo.audience}:{})});
   return true;
 }
 export async function uploadPhoto(file,{preview,viewer},send,onProgress=()=>{},wait,onRetry,hash){

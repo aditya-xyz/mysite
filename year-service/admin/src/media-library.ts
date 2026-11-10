@@ -11,7 +11,7 @@ export async function mediaResult(env:Env,media:LibraryMedia){
   const photos=[...JSON.parse(edition!.draft_json).photos,...(edition!.published_json?JSON.parse(edition!.published_json).photos:[])];
   const photo=photos.find((p:{id:string})=>p.id===media.id);
   return {id:media.id,filename:media.filename,mime:media.mime,bytes:media.bytes,has_original:!!media.original_key,has_viewer:!!media.viewer_key,
-    ...(photo?{draftPhoto:{id:media.id,caption:photo.caption,alt:photo.alt,recipients:photo.recipients}}:{})};
+    ...(photo?{draftPhoto:{id:media.id,caption:photo.caption,alt:photo.alt,recipients:photo.recipients,...(photo.hidden?{hidden:true}:{}),...(photo.audience?{audience:photo.audience}:{})}}:{})};
 }
 export async function mediaByHash(env:Env,year:number,hash:string,bytes:number){
   return env.DB.prepare('SELECT * FROM media_objects WHERE year=?1 AND content_hash=?2 AND bytes=?3 AND deleting=0 AND original_key IS NOT NULL').bind(year,hash,bytes).first<LibraryMedia>();
