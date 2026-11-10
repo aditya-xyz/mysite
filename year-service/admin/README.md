@@ -510,3 +510,15 @@ removed. Guest opening, verification, journals, previews, and originals check th
 invitation’s year on every request and reject inactive editions with an explicit
 message. Older invitations never open a newer year’s content. Admin draft previews
 remain available for inactive years. Deployment itself publishes no content.
+
+## Compact photo recipient picker
+
+Photo cards keep recipient assignments in a fixed-height summary: selected count,
+the first two names and a remaining count, plus an invitation-status warning when
+needed. Edit opens a bounded panel with name/phone search, All people and Selected
+filters, a scrollable multiselect list, quick-add, and Done. Selection changes are
+part of the private draft, saved by the usual Save draft action. Done, Escape,
+clicking outside, or moving focus away closes the panel; Escape/Done restore focus
+to its summary. Reopening clears the search. The invitation creation picker keeps
+its existing chip layout. No audience rules or saved assignments change in this
+UI update.

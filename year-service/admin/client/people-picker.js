@@ -1,15 +1,30 @@
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-export function peoplePickerMarkup(photoId,label,{hint="Select multiple people. Adding someone doesn’t invite them to this scrapbook.",allowAdd=true}={}){
+export function peoplePickerMarkup(photoId,label,{hint="Select multiple people. Adding someone doesn’t invite them to this scrapbook.",allowAdd=true,compact=false}={}){
   const id='recipients-'+photoId;
+  if(compact)return `<div class="recipient-picker compact-picker" data-picker="${escape(photoId)}"><span class="picker-label" id="${id}-label">${escape(label)}</span><button type="button" class="picker-summary" aria-expanded="false" aria-controls="${id}-panel" aria-labelledby="${id}-label ${id}-summary"><span class="picker-summary-text"><strong id="${id}-summary"></strong><span class="picker-summary-names"></span></span><span class="picker-manage">Choose</span></button><div class="picker-menu" id="${id}-panel" hidden><div class="picker-search"><input type="search" class="picker-input" role="combobox" aria-label="Search ${escape(label.toLowerCase())}" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-list" aria-describedby="${id}-hint" placeholder="Search names or phone numbers…" autocomplete="off"><div class="picker-filters" role="group" aria-label="Filter people"><button type="button" data-picker-filter="all" aria-pressed="true">All people</button><button type="button" data-picker-filter="selected" aria-pressed="false">Selected</button></div></div><div role="listbox" aria-multiselectable="true" id="${id}-list" aria-labelledby="${id}-label" class="picker-options"></div><div class="picker-panel-footer"><button type="button" class="picker-add" ${allowAdd?'':'hidden'}>+ Add a new person…</button><button type="button" class="secondary picker-done">Done</button></div></div><p class="hint picker-hint" id="${id}-hint">${escape(hint)}</p><span class="sr-only picker-announcement" role="status" aria-live="polite"></span></div>`;
+
   return `<div class="recipient-picker" data-picker="${escape(photoId)}"><span class="picker-label" id="${id}-label">${escape(label)}</span><div class="picker-control"><div class="picker-chips"></div><input type="text" class="picker-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-list" aria-labelledby="${id}-label" aria-describedby="${id}-hint" placeholder="Search people…" autocomplete="off"></div><div class="picker-menu" hidden><div role="listbox" aria-multiselectable="true" id="${id}-list" aria-labelledby="${id}-label" class="picker-options"></div><button type="button" class="picker-add" ${allowAdd?'':'hidden'}>+ Add a new person…</button></div><p class="hint picker-hint" id="${id}-hint">${escape(hint)}</p><span class="sr-only picker-announcement" role="status" aria-live="polite"></span></div>`;
 }
 
+let openPicker;
+if(typeof document!=='undefined')document.addEventListener('pointerdown',event=>{if(openPicker&&!openPicker.root.contains(event.target))openPicker.close();});
+
 export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
-  const input=root.querySelector('.picker-input'),menu=root.querySelector('.picker-menu'),options=root.querySelector('.picker-options'),chips=root.querySelector('.picker-chips'),addButton=root.querySelector('.picker-add');
-  let active=-1,matches=[];
-  function close(){menu.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');active=-1;}
+  const input=root.querySelector('.picker-input'),menu=root.querySelector('.picker-menu'),options=root.querySelector('.picker-options'),chips=root.querySelector('.picker-chips'),addButton=root.querySelector('.picker-add'),summary=root.querySelector('.picker-summary');
+  let active=-1,matches=[],selectedOnly=false;
+  function close(restoreFocus=false){if(summary)input.value='';menu.hidden=true;input.setAttribute('aria-expanded','false');summary?.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');active=-1;if(openPicker?.root===root)openPicker=null;if(restoreFocus)summary?.focus();}
   function renderChips(){
+    if(summary){
+      const ids=selected(),names=ids.map(id=>people().find(p=>p.id===id)?.name||'Unknown person');
+      const missing=ids.filter(id=>status(id)&&status(id)!=='Invited').length;
+      summary.querySelector('strong').textContent=ids.length?`${ids.length} ${ids.length===1?'person':'people'} selected${missing?` · ${missing} not invited`:''}`:'Choose people';
+      summary.querySelector('.picker-summary-names').textContent=names.length?names.slice(0,2).join(', ')+(names.length>2?` +${names.length-2} more`:''):'No one selected yet';
+      summary.querySelector('.picker-manage').textContent=ids.length?'Edit':'Choose';
+      summary.classList.toggle('needs-invitation',missing>0);
+      root.querySelector('[data-picker-filter="selected"]').textContent=`Selected (${ids.length})`;
+      return;
+    }
     chips.innerHTML=selected().map(id=>{
       const person=people().find(p=>p.id===id),name=person?.name||'Unknown person',access=status(id);
       return `<span class="person-chip ${!access||access==='Invited'?'':'needs-invitation'}"><span>${escape(name)}${!access||access==='Invited'?'':`<small>${escape(access)}</small>`}</span><button type="button" data-remove="${escape(id)}" aria-label="Remove ${escape(name)}">×</button></span>`;
@@ -19,9 +34,9 @@ export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
     });
   }
   function paint(){
-    const query=input.value.trim().toLocaleLowerCase();matches=people().filter(p=>(p.name+' '+(p.phone||'')).toLocaleLowerCase().includes(query));
+    const query=input.value.trim().toLocaleLowerCase();matches=people().filter(p=>(!selectedOnly||selected().includes(p.id))&&(p.name+' '+(p.phone||'')).toLocaleLowerCase().includes(query));
     if(active>=matches.length)active=matches.length-1;
-    options.innerHTML=matches.map((person,i)=>`<div role="option" id="${options.id}-${i}" aria-selected="${selected().includes(person.id)}" class="picker-option ${i===active?'highlighted':''}" data-option="${i}"><span><strong>${escape(person.name)}</strong><small>${person.phone?'•••• '+escape(person.phone.slice(-4)):'No phone needed'}${status(person.id)?' · '+escape(status(person.id)):''}</small></span><span aria-hidden="true">${selected().includes(person.id)?'✓':'+'}</span></div>`).join('')||'<p class="picker-no-results">No matching people.</p>';
+    options.innerHTML=matches.map((person,i)=>`<div role="option" id="${options.id}-${i}" aria-selected="${selected().includes(person.id)}" class="picker-option ${i===active?'highlighted':''}" data-option="${i}"><span><strong>${escape(person.name)}</strong><small>${person.phone?'•••• '+escape(person.phone.slice(-4)):'No phone needed'}${status(person.id)?' · '+escape(status(person.id)):''}</small></span><span aria-hidden="true">${selected().includes(person.id)?'✓':'+'}</span></div>`).join('')||`<p class="picker-no-results">${selectedOnly&&!selected().length?'No people selected yet.':selectedOnly?'No selected people match your search.':'No matching people.'}</p>`;
     options.querySelectorAll('[data-option]').forEach(option=>{
       option.onpointerdown=event=>event.preventDefault();
       option.onclick=()=>choose(Number(option.dataset.option));
@@ -29,7 +44,7 @@ export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
     addButton.textContent=query?`+ Add “${input.value.trim()}” as a new person…`:'+ Add a new person…';
     if(active>=0&&!menu.hidden)input.setAttribute('aria-activedescendant',`${options.id}-${active}`);else input.removeAttribute('aria-activedescendant');
   }
-  function open(){menu.hidden=false;input.setAttribute('aria-expanded','true');paint();}
+  function open(){if(summary){if(openPicker?.root!==root)openPicker?.close();openPicker={root,close};summary.setAttribute('aria-expanded','true');}menu.hidden=false;input.setAttribute('aria-expanded','true');paint();}
   function choose(index){
     const person=matches[index];if(!person)return;
     const removing=selected().includes(person.id);toggle(person.id);input.value='';active=-1;renderChips();paint();input.focus();
@@ -44,11 +59,16 @@ export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
       event.preventDefault();if(menu.hidden){open();return;}
       if(matches.length)choose(active<0?0:active);else add(input.value.trim());
     }else if(event.key==='Escape'){
-      event.preventDefault();event.stopPropagation();close();
+      event.preventDefault();event.stopPropagation();close(!!summary);
     }
   };
   addButton.onclick=()=>add(input.value.trim());
-  root.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();input.focus();close();}};
+  root.onkeydown=event=>{if(event.key==='Escape'&&!menu.hidden){event.preventDefault();event.stopPropagation();if(!summary)input.focus();close(!!summary);}};
+  if(summary){
+    summary.onclick=()=>{if(menu.hidden){open();input.focus();}else close();};
+    root.querySelector('.picker-done').onclick=()=>close(true);
+    root.querySelectorAll('[data-picker-filter]').forEach(button=>button.onclick=()=>{selectedOnly=button.dataset.pickerFilter==='selected';active=-1;root.querySelectorAll('[data-picker-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));paint();});
+  }
   root.onfocusout=()=>setTimeout(()=>{if(!root.contains(document.activeElement))close();},0);
   renderChips();paint();
 }
