@@ -1,6 +1,5 @@
 import HeroImage from "@/assets/heroImage.png";
-import { FiArrowDown, FiArrowUpRight } from "react-icons/fi";
-import { linkedInUrl } from "@/socials";
+import { FiArrowDown } from "react-icons/fi";
 const Home = () => (
   <section id="home" className="hero shell" aria-labelledby="home-title">
     <div className="hero-copy">
@@ -17,14 +16,6 @@ const Home = () => (
       <div className="hero-actions">
         <a className="button button-solid" href="#projects">
           Explore my work <FiArrowDown aria-hidden="true" />
-        </a>
-        <a
-          className="text-link"
-          href={linkedInUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Find me on LinkedIn <FiArrowUpRight aria-hidden="true" />
         </a>
       </div>
     </div>

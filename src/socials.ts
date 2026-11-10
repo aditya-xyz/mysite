@@ -8,9 +8,4 @@ export const socialLinks = [
     label: "Medium",
     href: "https://medium.com/@adityapatil.xyz",
   },
-  {
-    id: "instagram",
-    label: "Pixel’s Instagram",
-    href: "https://www.instagram.com/pixelthegsd/",
-  },
 ];

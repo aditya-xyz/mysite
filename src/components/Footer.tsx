@@ -1,11 +1,10 @@
-import { FaGithub, FaLinkedin, FaInstagram } from "react-icons/fa";
+import { FaGithub, FaLinkedin } from "react-icons/fa";
 import { BsMedium } from "react-icons/bs";
 import { socialLinks } from "@/socials";
 const icons = {
   github: FaGithub,
   linkedin: FaLinkedin,
   medium: BsMedium,
-  instagram: FaInstagram,
 };
 const Footer = ({
   palette,

@@ -492,12 +492,14 @@ h1 em {
   color: #dfb998;
 }
 .footer-top nav {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px 35px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 30px;
 }
 .footer-top nav a {
   display: flex;
+  white-space: nowrap;
   gap: 10px;
   align-items: center;
   font-size: 11px;
@@ -578,15 +580,13 @@ h1 em {
   display: flex;
   flex-direction: column;
 }
-.project-mark {
-  display: grid;
-  place-items: center;
-  width: 45px;
-  height: 45px;
-  background: var(--surface);
-  color: var(--accent);
-  border-radius: 10px;
-  font-size: 23px;
+.project-cover {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
 }
 .personal-note li svg {
   color: var(--accent);

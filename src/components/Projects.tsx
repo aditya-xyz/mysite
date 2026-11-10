@@ -1,36 +1,5 @@
 import { projects } from "@/content";
-import {
-  FiArrowUpRight,
-  FiCode,
-  FiLayers,
-  FiMousePointer,
-} from "react-icons/fi";
-const features = [
-  {
-    id: 1,
-    label: "Full-stack exploration",
-    title: "From interface to API.",
-    description:
-      "An exploration of a MERN application, with a write-up and backend source to dig into.",
-    Icon: FiLayers,
-  },
-  {
-    id: 5,
-    label: "Motion & interaction",
-    title: "Navigation that follows along.",
-    description:
-      "Using Framer Motion to highlight navigation as you move through a page.",
-    Icon: FiMousePointer,
-  },
-  {
-    id: 3,
-    label: "React fundamentals",
-    title: "Small screens. Thoughtful navigation.",
-    description:
-      "Building a responsive navigation bar for a React app, step by step.",
-    Icon: FiCode,
-  },
-];
+import { FiArrowUpRight } from "react-icons/fi";
 const Projects = () => (
   <section
     id="projects"
@@ -46,30 +15,35 @@ const Projects = () => (
           </h2>
         </div>
         <p className="section-aside">
-          A few experiments from my web development journey. Code, lessons, and
-          the details along the way.
+          Stories from building apps, connecting data, and making room for the
+          little moments. The decisions and lessons along the way.
         </p>
       </div>
       <div className="work-grid">
-        {features.map(({ id, label, title, description, Icon }) => {
-          const project = projects.find((p) => p.id === id)!;
-          return (
-            <article className="work-item" key={id}>
-              <div className="project-mark" aria-hidden="true">
-                <Icon />
-              </div>
-              <p className="project-category">{label}</p>
-              <h3>{title}</h3>
-              <p className="project-description">{description}</p>
-              <div className="project-links">
-                <a
-                  href={project.mediumUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Read the story <FiArrowUpRight aria-hidden="true" />
-                  <span className="sr-only"> (opens in a new tab)</span>
-                </a>
+        {projects.map((project) => (
+          <article className="work-item" key={project.id}>
+            <img
+              className="project-cover"
+              src={project.src}
+              alt=""
+              width="1200"
+              height="675"
+              loading="lazy"
+              decoding="async"
+            />
+            <p className="project-category">{project.category}</p>
+            <h3>{project.title}</h3>
+            <p className="project-description">{project.description}</p>
+            <div className="project-links">
+              <a
+                href={project.mediumUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Read the story <FiArrowUpRight aria-hidden="true" />
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+              {project.githubUrl && (
                 <a
                   href={project.githubUrl}
                   target="_blank"
@@ -78,32 +52,11 @@ const Projects = () => (
                   Source code <FiArrowUpRight aria-hidden="true" />
                   <span className="sr-only"> (opens in a new tab)</span>
                 </a>
-              </div>
-            </article>
-          );
-        })}
+              )}
+            </div>
+          </article>
+        ))}
       </div>
-      <details className="writing-archive">
-        <summary>
-          More from the notebook <span>02 more articles</span>
-        </summary>
-        <div>
-          {projects
-            .filter((p) => p.id === 2 || p.id === 4)
-            .map((p) => (
-              <a
-                href={p.mediumUrl}
-                key={p.id}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {p.title}
-                <FiArrowUpRight aria-hidden="true" />
-                <span className="sr-only"> (opens in a new tab)</span>
-              </a>
-            ))}
-        </div>
-      </details>
     </div>
   </section>
 );

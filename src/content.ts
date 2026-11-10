@@ -1,9 +1,7 @@
 // Public content lives with the site; images are bundled by Vite.
-import mernApp from "@/assets/public-content/mern_app.png";
-import reactAndTailwind from "@/assets/public-content/reactAndTailwind.jpg";
-import navbar from "@/assets/public-content/navbar.jpg";
-import reactSmooth from "@/assets/public-content/reactSmooth.jpg";
-import highlightNavbar from "@/assets/public-content/highlight_nav_bar.png";
+import scrapbookCover from "@/assets/public-content/scrapbook-cover.jpg";
+import congressCover from "@/assets/public-content/congress-sync-cover.jpg";
+import codeAppCover from "@/assets/public-content/codeapp-mda-cover.jpg";
 
 export const experiences = [
   {
@@ -64,44 +62,38 @@ export const experiences = [
 
 export const projects = [
   {
-    id: 1,
-    src: mernApp,
-    title: "MERN App",
-    mediumUrl: "https://medium.com/@adityapatil.xyz/the-mern-app-2b8e5d03b33",
-    githubUrl: "https://github.com/aditya-xyz/backend",
-  },
-  {
-    id: 2,
-    src: reactAndTailwind,
-    title: "Adding Tailwind CSS to React",
+    id: "scrapbook",
+    src: scrapbookCover,
+    category: "Personal projects",
+    title: "I Built a Scrapbook. Then It Needed a Backend.",
+    description:
+      "A little gift for friends became a private photo experience, complete with invitations, an admin dashboard, and a few unexpected engineering lessons.",
     mediumUrl:
-      "https://medium.com/@adityapatil.xyz/adding-tailwind-css-to-your-reactjs-app-2ab01a45fe40",
-    githubUrl: "https://github.com/aditya-xyz/website_frontend",
-  },
-  {
-    id: 3,
-    src: navbar,
-    title: "Responsive Navigation Bar",
-    mediumUrl:
-      "https://medium.com/@adityapatil.xyz/responsive-nav-bar-for-your-react-app-b08452b39b15",
-    githubUrl:
-      "https://github.com/aditya-xyz/website_frontend/blob/main/src/components/NavBar.jsx",
-  },
-  {
-    id: 4,
-    src: reactSmooth,
-    title: "Smooth Scrolling in React",
-    mediumUrl:
-      "https://medium.com/@adityapatil.xyz/adding-react-smooth-scroll-to-your-site-74c791a23c4c",
-    githubUrl:
-      "https://github.com/aditya-xyz/website_frontend/blob/main/src/components/NavBar.jsx",
-  },
-  {
-    id: 5,
-    src: highlightNavbar,
-    title: "Highlight Navigation on Scroll",
-    mediumUrl:
-      "https://medium.com/@adityapatil.xyz/highlight-nav-bar-items-on-page-scroll-using-framer-motion-a69ae40528be",
+      "https://medium.com/@adityapatil.xyz/i-built-a-scrapbook-then-it-needed-a-backend-b3bef6c0f482?sharedUserId=adityapatil.xyz",
     githubUrl: "https://github.com/aditya-xyz/mysite",
+  },
+  {
+    id: "congress",
+    src: congressCover,
+    category: "Data & background processing",
+    title:
+      "I Built a System to Keep Up With Congress. The Hard Part Wasn’t Politics.",
+    description:
+      "Bringing legislative information together—and teaching the software to recover, repeat itself safely, and know when the work is actually done.",
+    mediumUrl:
+      "https://medium.com/@adityapatil.xyz/i-built-a-system-to-keep-up-with-congress-the-hard-part-wasnt-politics-b8caaf7fdb63?sharedUserId=adityapatil.xyz",
+    githubUrl: null,
+  },
+  {
+    id: "code-app",
+    src: codeAppCover,
+    category: "Power Platform & custom interfaces",
+    title:
+      "Two Apps, One Source of Truth, and a Save Button That Needed a Break",
+    description:
+      "A custom interface and a model-driven app share the same foundation, while heavier processing moves behind the scenes.",
+    mediumUrl:
+      "https://medium.com/@adityapatil.xyz/two-apps-one-source-of-truth-and-a-save-button-that-needed-a-break-d5fd83a0a8f7?sharedUserId=adityapatil.xyz",
+    githubUrl: null,
   },
 ];
