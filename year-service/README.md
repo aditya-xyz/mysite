@@ -269,3 +269,16 @@ Synthetic desktop/440px-phone checks cover keyboard and swipe navigation across
 personal/shared photos, both gallery boundaries, original-state reset, and footer
 contrast. Navigation helper tests cover gallery ordering, gesture intent, and
 trackpad momentum.
+
+## Winter edition accents
+
+The winter presentation adds a small static Christmas-light string beside the
+opening note, a transparent Santa-hat portrait of Pixel in the header, and a
+round-tipped snowflake in the footer. Its closing line is
+“Here’s to the next chapter—and having you in it.” The original decorative SVGs
+live in `web/seasonal.js`, are hidden from assistive technology, and introduce
+no animation, external requests, or gallery/viewer changes. Pixel’s owner-approved
+cutout is `web/pixel-santa.png`, with a matching admin preview copy; the raw
+source photo stays outside the repository. No other private photos are included.
+The admin preview mirrors these opening/closing touches. The gallery and photo
+viewer remain unchanged from the pre-seasonal checkpoint, commit 48abe58.

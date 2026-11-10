@@ -1,6 +1,7 @@
 import {photoUploadError,isFileDrag,bindPhotoDropzone} from './photo-upload.js';
 import QRCode from 'qrcode';
 import {scrapbookConfig} from '../../web/config.js';
+import {winterLights,winterSnowflake} from '../../web/seasonal.js';
 import {createPreviewLoader} from './preview-loader.js';
 import {peoplePickerMarkup,bindPeoplePicker} from './people-picker.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal'),modalContent=document.querySelector('#modal-content');
@@ -157,11 +158,11 @@ function previewFooter(){
     return name;
   };
   const links=scrapbookConfig.instagram;
-  return `<footer class="preview-footer"><p class="footer-closing">That’s our year.<br><em>Glad you were in it.</em></p><span>By ${credit('Aditya',links.aditya)} & ${credit('Angela',links.angela)}, with help from ${credit('Pixel',links.pixel)}</span></footer>`;
+  return `<footer class="preview-footer"><div class="footer-ornament" aria-hidden="true">${winterSnowflake}</div><p class="footer-closing">Here’s to the next chapter—<br><em>and having you in it.</em></p><span>By ${credit('Aditya',links.aditya)} & ${credit('Angela',links.angela)}, with help from ${credit('Pixel',links.pixel)}</span></footer>`;
 }
 function previewMarkup(d){
   const chapter=personal=>d.photos.filter(p=>p.personal===personal).map(p=>`<figure><img src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async"><figcaption>${esc(p.caption)}${p.canSave?' · Original can be saved':''}</figcaption></figure>`).join('');
-  return `<article class="preview"><p class="kicker">${state.year} · ${esc(d.authors)}</p><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${esc(d.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div><p class="prose">${esc(d.note)}</p><p><em>With love, ${esc(d.authors)}</em></p>${d.photos.some(p=>p.personal)?`<section aria-label="Photos selected for ${esc(d.name)}"><div class="gallery">${chapter(true)}</div></section>`:''}<h2>${esc(sharedHeading(d.sharedTitle))}</h2><div class="gallery">${chapter(false)}</div>${d.stories.map(s=>`<section><h2>${esc(s.title)}</h2><p class="prose">${esc(s.body)}</p></section>`).join('')}${previewFooter()}</article>`;
+  return `<article class="preview"><div class="preview-opening-note"><span class="preview-edition-stamp"><img class="header-pixel" src="/pixel-santa.png" alt="Pixel wearing a Santa hat" width="369" height="400" decoding="async"><span class="kicker">${state.year} · ${esc(d.authors)}</span></span>${winterLights}</div><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${esc(d.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div><p class="prose">${esc(d.note)}</p><p><em>With love, ${esc(d.authors)}</em></p>${d.photos.some(p=>p.personal)?`<section aria-label="Photos selected for ${esc(d.name)}"><div class="gallery">${chapter(true)}</div></section>`:''}<h2>${esc(sharedHeading(d.sharedTitle))}</h2><div class="gallery">${chapter(false)}</div>${d.stories.map(s=>`<section><h2>${esc(s.title)}</h2><p class="prose">${esc(s.body)}</p></section>`).join('')}${previewFooter()}</article>`;
 }
 function previewOptions(){
   return `<option value="" ${!previewRecipient?'selected':''}>Shared photos only</option><optgroup label="Invitations">${state.people.map(i=>`<option value="invite:${esc(i.id)}" ${previewRecipient==='invite:'+i.id?'selected':''}>${esc(i.addressedTo)}</option>`).join('')}</optgroup><optgroup label="Individual people">${contacts.map(p=>`<option value="${esc(p.id)}" ${previewRecipient===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</optgroup>`;

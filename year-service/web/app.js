@@ -1,4 +1,5 @@
 import {scrapbookConfig} from './config.js';
+import {winterLights,winterSnowflake} from './seasonal.js';
 import {photoOrder,adjacentIndex,swipeStep,wheelNavigation} from './photo-navigation.js';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#photo');
@@ -14,7 +15,7 @@ async function api(path, data) {
   if (!response.ok) throw new Error(result.error || 'Please try again.');
   return result;
 }
-function applyBrand(authors='Aditya & Angela',year) { document.querySelector('.signature').textContent=authors.toLowerCase()+'.'; document.title=(year?year+' · ':'')+authors; document.querySelector('header > span').textContent=(year?year+' · ':'')+'A private edition'; }
+function applyBrand(authors='Aditya & Angela',year) { document.querySelector('.signature').textContent=authors.toLowerCase()+'.'; document.title=(year?year+' · ':'')+authors; document.querySelector('.edition-label').textContent=(year?year+' · ':'')+'A private edition'; }
 function footerProfile(name,profileUrl){
   if(!profileUrl)return document.createTextNode(name);
   try{
@@ -25,6 +26,8 @@ function footerProfile(name,profileUrl){
   }catch{return document.createTextNode(name);}
 }
 function renderFooter(){
+  document.querySelector('.edition-stamp').insertAdjacentHTML('afterbegin','<img class="header-pixel" src="/pixel-santa.png" alt="Pixel wearing a Santa hat" width="369" height="400" decoding="async">');
+  document.querySelector('.footer-ornament').innerHTML=winterSnowflake;
   const links=scrapbookConfig.instagram;
   document.querySelector('footer > span').replaceChildren('By ',footerProfile('Aditya',links.aditya),' & ',footerProfile('Angela',links.angela),', with help from ',footerProfile('Pixel',links.pixel));
 }
@@ -66,7 +69,7 @@ function showJournal() {
   const cards = personal => journal.photos.filter(p=>p.personal===personal).map(p=>`<button class="card" data-photo="${escape(p.id)}" aria-label="Open photo: ${escape(p.caption)}"><img data-src="${escape(p.src)}" alt="${escape(p.alt)}" loading="lazy" decoding="async" ${p.width&&p.height?`width="${p.width}" height="${p.height}"`:'class="pending-dimensions"'}/><span>${escape(p.caption)}</span></button>`).join('');
   const hasPersonal=journal.photos.some(p=>p.personal), sharedTitle=sharedHeading(journal.sharedTitle);
   const stories=(journal.stories || []).map(s=>`<section class="letter"><h2>${escape(s.title)}</h2><p class="prose">${escape(s.body)}</p></section>`).join('');
-  app.innerHTML = `<section class="letter"><p class="kicker">The opening note</p><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${escape(journal.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div><p class="prose">${escape(journal.note || 'We wanted to make a little space for the photos with a story behind them, the ordinary days worth remembering, and the people who make it all feel like home.')}</p><p class="signoff">With love, ${escape(journal.authors || 'Aditya & Angela')}</p>${!journal.title?'<p class="hint">These are illustrative samples while we test your invitation. Real memories will come later.</p>':''}</section>${hasPersonal?`<section class="personal-photos" aria-label="Photos selected for ${escape(journal.name)}"><div class="grid">${cards(true)}</div></section>`:''}<section class="shared-photos" aria-labelledby="shared-title"><h2 id="shared-title">${escape(sharedTitle)}</h2><div class="grid">${cards(false)}</div></section>${stories}`;
+  app.innerHTML = `<section class="letter"><div class="opening-note-top"><p class="kicker">The opening note</p>${winterLights}</div><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${escape(journal.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div><p class="prose">${escape(journal.note || 'We wanted to make a little space for the photos with a story behind them, the ordinary days worth remembering, and the people who make it all feel like home.')}</p><p class="signoff">With love, ${escape(journal.authors || 'Aditya & Angela')}</p>${!journal.title?'<p class="hint">These are illustrative samples while we test your invitation. Real memories will come later.</p>':''}</section>${hasPersonal?`<section class="personal-photos" aria-label="Photos selected for ${escape(journal.name)}"><div class="grid">${cards(true)}</div></section>`:''}<section class="shared-photos" aria-labelledby="shared-title"><h2 id="shared-title">${escape(sharedTitle)}</h2><div class="grid">${cards(false)}</div></section>${stories}`;
   const loadImage = image => {image.onload=()=>{image.classList.remove('pending-dimensions');layoutPhotoGrid(image.closest('.grid'));};image.src=image.dataset.src;delete image.dataset.src;};
   const images=app.querySelectorAll('img[data-src]');
   if ('IntersectionObserver' in window) {

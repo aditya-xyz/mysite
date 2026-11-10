@@ -92,3 +92,15 @@ html:has(#modal[open]){overflow:hidden}
 .preview-dialog .preview-footer a:hover{color:#fff4e5}
 .preview-dialog .preview-footer a:focus-visible{outline:2px solid #f2ab89;outline-offset:4px}
 @media(max-width:540px){.preview-dialog .preview-footer{margin:32px -20px -26px;padding:32px 20px}}
+
+/* Seasonal stationery accents mirror the guest opening and closing only. */
+.preview-opening-note{display:flex;align-items:center;gap:18px;min-height:39px}
+.preview-edition-stamp{display:inline-flex;align-items:center;gap:9px}
+.preview-edition-stamp .winter-snowflake{width:19px;height:19px;color:#81988e;flex:none}
+.preview-dialog .winter-lights{display:block;width:120px;height:34px;flex:none}
+.preview-dialog .preview-footer .footer-ornament{height:30px;margin-bottom:14px;color:#dce8e2}
+.preview-dialog .preview-footer .winter-snowflake{display:block;width:30px;height:30px;margin:auto}
+@media(max-width:540px){.preview-opening-note{gap:12px;min-height:33px}.preview-dialog .winter-lights{width:96px;height:28px}.preview-edition-stamp{gap:5px}.preview-edition-stamp .winter-snowflake{width:16px;height:16px}}
+
+.preview-dialog .preview .header-pixel{display:block;width:auto;height:64px;max-width:66px;object-fit:contain;border-radius:0;-webkit-mask-image:linear-gradient(#000 88%,transparent);mask-image:linear-gradient(#000 88%,transparent)}
+@media(max-width:540px){.preview-dialog .preview .header-pixel{height:56px;max-width:56px}}
