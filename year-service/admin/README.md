@@ -278,3 +278,20 @@ http://localhost:8794 and guest on http://localhost:8795. It uses fake people,
 illustrative samples, ephemeral identity, and mocked SMS (code **123456**), with
 external requests blocked. Run the usual check/test build first, then run this
 fixture with Node 22. Data resets when the fixture restarts. Never deploy it.
+
+
+## Drag-and-drop photo uploads
+
+Manage photos accepts multiple JPEG, PNG, or WebP files dropped onto the upload
+area, with a highlighted drop state. The native file picker remains available
+for keyboard, phone, and tablet use. Both entry points use the same sequential
+upload flow: preview generation strips metadata, while the original File goes
+unchanged into the existing protected upload endpoint. Uploading never publishes.
+
+Batch validation rejects unsupported/empty/oversize files before any upload
+starts, enforces the 300-photo draft limit, and rejects folders. Busy-state guards
+prevent overlapping uploads; dropping files outside the upload area on Photos
+cannot navigate the editor away. Partial network failures retain successful
+uploads and report how many completed. Tests cover validation and drop-event
+behavior; the local UI also completed a two-file synthetic upload. No production
+photos or invitations were changed for this work.
