@@ -4,6 +4,10 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {generateKeyPair,exportJWK,SignJWT} from 'jose';
+// @ts-expect-error Browser upload helper is plain JavaScript.
+import {uploadPhoto} from '../admin/client/photo-upload.js';
+// @ts-expect-error Browser transport is plain JavaScript.
+import {ApiError} from '../admin/client/api-request.js';
 const jpeg=(w:number,h:number)=>new Uint8Array([255,216,255,192,0,11,8,h>>8,h&255,w>>8,w&255,1,1,17,0,255,217]);
 test('private bounded uploads of originals under 100 MB',async t=>{
   const {privateKey,publicKey}=await generateKeyPair('RS256',{extractable:true});
@@ -80,7 +84,9 @@ test('private bounded uploads of originals under 100 MB',async t=>{
     await t.test('invalid previews preserve the pending upload; valid previews finalize once',async()=>{
       const value=jpeg(640,800),s=await start(value.length);
       const responses=await Promise.all([req(`uploads/${s.id}/parts/1`,value),req(`uploads/${s.id}/parts/1`,value)]);
-      assert.equal(responses.filter(r=>r.status===200).length,1);assert.equal(responses.filter(r=>r.status===409).length,1);
+      assert.ok(responses.some(r=>r.status===200));assert.ok(responses.every(r=>[200,409].includes(r.status)));
+      assert.equal((await req(`uploads/${s.id}/parts/1`,value)).status,200,'A lost part response is safe to retry');
+      assert.equal(JSON.parse((await db.prepare('SELECT parts_json FROM photo_uploads WHERE id=?').bind(s.id).first<{parts_json:string}>())!.parts_json).length,1);
       assert.equal((await req(`uploads/${s.id}/complete`,previews(jpeg(801,801)))).status,400);
       assert.equal((await req(`uploads/${s.id}/complete`,previews(jpeg(640,800),jpeg(2400,1800)))).status,400);
       assert.ok(await db.prepare('SELECT id FROM photo_uploads WHERE id=?').bind(s.id).first());
@@ -92,6 +98,21 @@ test('private bounded uploads of originals under 100 MB',async t=>{
       assert.equal((await req(`uploads/${s.id}/abort`)).status,410);
       assert.ok(await bucket.head(`2026/${s.id}/original`));
       assert.equal(await db.prepare('SELECT id FROM photo_uploads WHERE id=?').bind(s.id).first(),null);
+    });
+    await t.test('client recovers lost initialization, part and final responses without duplicating photos',async()=>{
+      const original=jpeg(640,800),lost=new Set<string>(),waits:number[]=[];
+      const result=await uploadPhoto(new File([original],'synthetic.jpg',{type:'image/jpeg'}),{preview:new Blob([jpeg(640,800)]),viewer:new Blob([jpeg(1920,2400)])},async(path:string,data:unknown)=>{
+        const r=await req(path,data instanceof Blob?new Uint8Array(await data.arrayBuffer()):data);
+        const value=await r.json() as {error?:string};
+        if(!r.ok)throw new ApiError(value.error,r.status,r.status>=500);
+        if((path==='uploads'||path.endsWith('/parts/1')||path.endsWith('/complete'))&&!lost.has(path)){
+          lost.add(path);throw new ApiError('Synthetic lost response',503,true);
+        }
+        return value;
+      },()=>{},async(ms:number)=>{waits.push(ms);});
+      assert.equal(lost.size,3);assert.deepEqual(waits,[1000,1000,1000]);
+      assert.deepEqual(new Uint8Array(await (await bucket.get(`2026/${result.id}/original`))!.arrayBuffer()),original);
+      assert.equal((await db.prepare("SELECT count(*) n FROM admin_events WHERE target=? AND action='upload-photo'").bind(result.id).first<{n:number}>())!.n,1);
     });
     await t.test('storage failure after original completion removes partial objects and pending state',async()=>{
       const value=jpeg(640,800),s=await start(value.length);

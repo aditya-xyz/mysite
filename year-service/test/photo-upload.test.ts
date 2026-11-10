@@ -30,7 +30,8 @@ test('chunk uploader preserves bytes, reports progress, and sends previews separ
   const preview=new Blob(['grid']),viewer=new Blob(['viewer']),chunks:Blob[]=[],progress:number[]=[];
   const result=await uploadPhoto(file,{preview,viewer},async(path:string,data:unknown)=>{
     if(path==='uploads'){
-      assert.deepEqual(data,{filename:'original.JPG',mime:'image/jpeg',bytes:12});
+      assert.match((data as {id:string}).id,/^photo-[a-f0-9]{24}$/);
+      assert.deepEqual({...data as object,id:undefined},{id:undefined,filename:'original.JPG',mime:'image/jpeg',bytes:12});
       return {id:'test-photo',chunkBytes:5};
     }
     if(path.endsWith('/complete')){

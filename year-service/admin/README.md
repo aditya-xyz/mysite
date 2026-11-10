@@ -302,7 +302,8 @@ photos or invitations were changed for this work.
 The current client starts a private upload session, sends the unchanged original
 in sequential 8 MiB pieces, then submits the 800px grid and 2400px viewer JPEGs
 separately. Per-photo progress is shown while uploading. No request contains the
-whole large original and previews, and Worker buffering is bounded per request.
+whole large original and previews. Original pieces stream to R2 with backpressure;
+only their image-type header is inspected in memory. Preview requests remain bounded.
 JPEG, PNG, and WebP must be strictly smaller than 100,000,000 bytes; HEIC remains
 unsupported. The legacy `/api/upload` endpoint retains its 25 MiB limit for older
 clients. Picker and drop uploads use the new path at every size.
@@ -321,6 +322,16 @@ when another upload starts or an expired session is accessed; R2 also expires
 incomplete multipart uploads after seven days. Retrying a completed finalization
 returns the same media item. An interrupted upload must be selected again; there
 is no cross-reload resume feature.
+
+Temporary connection failures, HTTP 408/429, and server errors are retried up to
+three times with backoff. A reasonable Retry-After is honored; longer waits are
+shown as errors instead of silently retrying early. Recorded original pieces are
+immutable and can be acknowledged again if their success response was lost.
+Finalization retries return the existing media item if it already committed.
+Retries apply to upload requests only; draft, publication and invitation actions
+are not automatically repeated. HTML/empty edge error responses report their
+HTTP status rather than claiming the admin session expired. Actual Access
+redirects/401/403 ask the owner to sign in in another tab, preserving current edits.
 
 Synthetic tests upload a 99,999,999-byte original and verify SHA-256 and its EXIF
 marker, distinct previews, and unchanged publication. They also check limits,

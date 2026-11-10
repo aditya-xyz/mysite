@@ -10,17 +10,30 @@ export function photoUploadError(files,currentCount=0){
   return '';
 }
 // The original is sliced unchanged; only the separate browser-made previews are encoded.
-export async function uploadPhoto(file,{preview,viewer},send,onProgress=()=>{}){
+export async function retryUploadRequest(send,path,data,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),onRetry=()=>{}){
+  for(let attempt=0;;attempt++){
+    try{return await send(path,data);}catch(error){
+      if(!error.retryable||attempt===3)throw error;
+      const delay=error.retryAfterMs??1000*2**attempt;
+      // Do not silently retry earlier than Retry-After or leave the UI waiting indefinitely.
+      if(!Number.isFinite(delay)||delay>30000)throw error;
+      onRetry(attempt+1);await wait(delay);
+    }
+  }
+}
+export async function uploadPhoto(file,{preview,viewer},send,onProgress=()=>{},wait,onRetry){
   const mime=file.type||(/\.png$/i.test(file.name)?'image/png':/\.webp$/i.test(file.name)?'image/webp':'image/jpeg');
-  const session=await send('uploads',{filename:file.name.slice(0,200),mime,bytes:file.size});
+  const request=(path,data)=>retryUploadRequest(send,path,data,wait,onRetry);
+  const id='photo-'+crypto.randomUUID().replaceAll('-','').slice(0,24);
+  const session=await request('uploads',{id,filename:file.name.slice(0,200),mime,bytes:file.size});
   try{
     for(let offset=0,part=1;offset<file.size;offset+=session.chunkBytes,part++){
       const end=Math.min(offset+session.chunkBytes,file.size);
-      await send(`uploads/${session.id}/parts/${part}`,file.slice(offset,end));
+      await request(`uploads/${session.id}/parts/${part}`,file.slice(offset,end));
       onProgress(Math.round(end/file.size*100));
     }
     const form=new FormData();form.set('preview',preview,'grid.jpg');form.set('viewer',viewer,'viewer.jpg');
-    return await send(`uploads/${session.id}/complete`,form);
+    return await request(`uploads/${session.id}/complete`,form);
   }catch(error){
     try{await send(`uploads/${session.id}/abort`,{});}catch{/* Expired sign-in/connection: server expires unfinished uploads. */}
     throw error;

@@ -1,4 +1,5 @@
 import {photoUploadError,uploadPhoto,isFileDrag,bindPhotoDropzone} from './photo-upload.js';
+import {sendApiRequest} from './api-request.js';
 import QRCode from 'qrcode';
 import {scrapbookConfig} from '../../web/config.js';
 import {winterLights,winterSnowflake} from '../../web/seasonal.js';
@@ -10,10 +11,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const byId=id=>document.getElementById(id);
 function sharedHeading(title){return !title||['A little of our year','A little of our year.'].includes(title.trim())?'Meanwhile, in our camera roll…':title;}
 async function requestApi(path,data,signal){
-  const multipart=data instanceof FormData,raw=data instanceof Blob;
-  const response=await fetch('/api/'+path,data===undefined?{signal}:{signal,method:'POST',headers:multipart?{}:{'Content-Type':raw?'application/octet-stream':'application/json'},body:multipart||raw?data:JSON.stringify(data)});
-  let result;try{result=await response.json();}catch{throw new Error('Your sign-in may have expired. Refresh this page to sign in again.');}
-  if(!response.ok)throw new Error(result.error||'Something went wrong. Please try again.');return result;
+  return sendApiRequest(path,data,signal);
 }
 async function api(path,data){
   if(!state)throw new Error('Choose a scrapbook first.');
@@ -383,7 +381,7 @@ async function uploadFiles(files){
     try{status.textContent=`Preparing ${i+1} of ${files.length}: ${file.name}`;
       const previews=await makePreviews(file);
       status.textContent=`Uploading ${i+1} of ${files.length}: ${file.name} · 0%`;
-      const media=await uploadPhoto(file,previews,api,percent=>{status.textContent=`Uploading ${i+1} of ${files.length}: ${file.name} · ${percent}%`;});
+      const media=await uploadPhoto(file,previews,api,percent=>{status.textContent=`Uploading ${i+1} of ${files.length}: ${file.name} · ${percent}%`;},undefined,retry=>{status.textContent=`Uploading ${i+1} of ${files.length}: ${file.name} · connection interrupted, retry ${retry} of 3…`;});
       completed.push(media);state.media.unshift(media);state.draft.photos.push({id:media.id,caption:'',alt:'',recipients:[]});mark();
     }catch(error){failure=error;break;}
   }

@@ -35,6 +35,48 @@ async function boundedBody(request: Request, max: number) {
   for (const chunk of chunks) { bytes.set(chunk,offset); offset += chunk.byteLength; }
   return bytes;
 }
+// R2 requires a known-length stream. Forward each piece with backpressure rather
+// than buffering/copying megabytes in the Worker's small CPU and memory budget.
+async function streamOriginalPart(request: Request, expected: number, mime: string, partNumber: number, upload: R2MultipartUpload) {
+  const length = request.headers.get('Content-Length');
+  if (length !== null && Number(length) !== expected) throw new UploadProblem(Number(length)>expected?413:400,'The photo part has the wrong size. Please try again.');
+  const reader = request.body?.getReader();
+  if (!reader) throw new UploadProblem(400,'Missing upload data.');
+  const prefix: Uint8Array[] = [], header = new Uint8Array(12); let headerSize = 0;
+  try {
+    if (partNumber === 1) {
+      while (headerSize < header.length) {
+        const {value,done} = await reader.read(); if (done) break;
+        prefix.push(value);
+        const length = Math.min(value.length,header.length-headerSize);
+        header.set(value.subarray(0,length),headerSize); headerSize += length;
+      }
+      if (detectPhoto(header.subarray(0,headerSize)) !== mime) throw new UploadProblem(400,'The photo contents do not match its type.');
+    }
+  } catch (error) { await reader.cancel(); throw error; }
+  const stream = new FixedLengthStream(expected), writer = stream.writable.getWriter();
+  const pumping = (async()=>{
+    let size = 0;
+    async function write(value: Uint8Array) {
+      size += value.byteLength;
+      if (size > expected) throw new UploadProblem(413,'This photo part is too large.');
+      await writer.write(value);
+    }
+    try {
+      for (const value of prefix) await write(value);
+      for (;;) { const {value,done} = await reader.read(); if (done) break; await write(value); }
+      if (size !== expected) throw new UploadProblem(400,'The photo part was incomplete. Please try again.');
+      await writer.close();
+    } catch (error) { await writer.abort(error); throw error; }
+  })();
+  try {
+    const [part] = await Promise.all([upload.uploadPart(partNumber,stream.readable),pumping]);
+    return part;
+  } catch (error) {
+    await Promise.allSettled([reader.cancel(),writer.abort(error)]);
+    throw error;
+  }
+}
 async function discard(env: UploadEnv, u: Upload) {
   // A D1 commit can succeed even if its response is lost. Never clean up an
   // already registered photo, including when recovering an expired session.
@@ -61,22 +103,36 @@ export async function photoUploadRoute(request: Request, env: UploadEnv, actor: 
   validatePreviews: (grid: File, viewer: File) => Promise<void>): Promise<Response | null> {
   if (request.method !== 'POST' || !/^\/api\/uploads(?:\/|$)/.test(path)) return null;
   if (path === '/api/uploads') {
-    let data: {filename?: unknown; mime?: unknown; bytes?: unknown};
+    let data: {id?: unknown; filename?: unknown; mime?: unknown; bytes?: unknown};
     try { data = JSON.parse(new TextDecoder().decode(await boundedBody(request,4096))); }
     catch (error) { if (error instanceof UploadProblem) throw error; throw new UploadProblem(400,'Invalid upload details.'); }
     if (!data || typeof data.filename !== 'string' || !data.filename.trim() || data.filename.length > 200 ||
       !['image/jpeg','image/png','image/webp'].includes(data.mime as string)) throw new UploadProblem(400,'Check the photo name and type.');
     if (!Number.isSafeInteger(data.bytes) || (data.bytes as number) <= 0 || (data.bytes as number) >= MAX_BYTES)
       throw new UploadProblem(413,'Choose a photo smaller than 100 MB.');
+    if (data.id !== undefined && (typeof data.id !== 'string' || !/^photo-[a-f0-9]{24}$/.test(data.id))) throw new UploadProblem(400,'Invalid upload ID.');
     await expireUploads(env);
+    const id = typeof data.id === 'string' ? data.id : 'photo-'+token().slice(0,24);
+    const previous = await env.DB.prepare('SELECT * FROM photo_uploads WHERE id=?1').bind(id).first<Upload>();
+    const sameUpload = (u: Upload) => u.year===year && u.actor===actor && u.filename===data.filename && u.mime===data.mime && u.bytes===data.bytes && u.status!=='aborting';
+    if (previous) {
+      if (!sameUpload(previous)) throw new UploadProblem(409,'This upload ID is already in use. Choose the photo again.');
+      return json({id,chunkBytes:CHUNK_BYTES},201);
+    }
+    if (await env.DB.prepare('SELECT id FROM media_objects WHERE id=?1').bind(id).first()) throw new UploadProblem(409,'This photo upload already finished.');
     const pending = await env.DB.prepare('SELECT count(*) n FROM photo_uploads').first<{n:number}>();
     if (pending!.n >= 50) throw new UploadProblem(429,'Too many unfinished uploads. Please try again later.');
-    const id = 'photo-'+token().slice(0,24), key = `${year}/${id}/original`;
+    const key = `${year}/${id}/original`;
     const upload = await env.MEDIA.createMultipartUpload(key,{httpMetadata:{contentType:data.mime as string}});
     try {
       await env.DB.prepare('INSERT INTO photo_uploads(id,year,actor,filename,mime,bytes,upload_id) VALUES(?1,?2,?3,?4,?5,?6,?7)')
         .bind(id,year,actor,data.filename,data.mime,data.bytes,upload.uploadId).run();
-    } catch (error) { await upload.abort(); throw error; }
+    } catch (error) {
+      await upload.abort();
+      const concurrent = await env.DB.prepare('SELECT * FROM photo_uploads WHERE id=?1').bind(id).first<Upload>();
+      if (concurrent && sameUpload(concurrent)) return json({id,chunkBytes:CHUNK_BYTES},201);
+      throw error;
+    }
     return json({id,chunkBytes:CHUNK_BYTES},201);
   }
   const match = /^\/api\/uploads\/(photo-[a-f0-9]{24})\/(parts\/([1-9]\d?)|complete|abort)$/.exec(path);
@@ -95,17 +151,20 @@ export async function photoUploadRoute(request: Request, env: UploadEnv, actor: 
   const parts = JSON.parse(u.parts_json) as R2UploadedPart[];
   if (match[2].startsWith('parts/')) {
     const partNumber = Number(match[3]);
+    if (partNumber <= parts.length && u.status !== 'aborting') {
+      // A successful part response may be lost at the edge. Recorded parts are
+      // immutable: acknowledge the retry without writing the original twice.
+      await request.body?.cancel();
+      return json({uploaded:Math.min(partNumber*CHUNK_BYTES,u.bytes)});
+    }
     if (partNumber !== parts.length+1 || partNumber > Math.ceil(u.bytes/CHUNK_BYTES))
       throw new UploadProblem(409,'Upload the photo parts in order.');
     const expected = Math.min(CHUNK_BYTES,u.bytes-(partNumber-1)*CHUNK_BYTES);
-    const bytes = await boundedBody(request,expected);
-    if (bytes.byteLength !== expected) throw new UploadProblem(400,'The photo part was incomplete. Please try again.');
-    if (partNumber === 1 && detectPhoto(bytes) !== u.mime) throw new UploadProblem(400,'The photo contents do not match its type.');
     const claimed = await env.DB.prepare("UPDATE photo_uploads SET status='working',created_at=?3 WHERE id=?1 AND status='open' AND parts_json=?2 RETURNING id")
       .bind(u.id,u.parts_json,now()).first();
     if (!claimed) throw new UploadProblem(409,'This photo is already being uploaded.');
     try {
-      const part = await env.MEDIA.resumeMultipartUpload(keys(u)[0],u.upload_id).uploadPart(partNumber,bytes);
+      const part = await streamOriginalPart(request,expected,u.mime,partNumber,env.MEDIA.resumeMultipartUpload(keys(u)[0],u.upload_id));
       await env.DB.prepare("UPDATE photo_uploads SET parts_json=?1,status='open' WHERE id=?2").bind(JSON.stringify([...parts,part]),u.id).run();
       return json({uploaded:Math.min(partNumber*CHUNK_BYTES,u.bytes)});
     } catch (error) {
