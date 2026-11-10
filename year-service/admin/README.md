@@ -310,3 +310,12 @@ immediately saves the viewer preview, or saves/shares the original after Full
 resolution loads it. Loading the original consumes a request; saving the prepared
 file requires no extra request.
 Compressed preview browsing does not consume the allowance.
+
+## Workspace icon
+
+The admin has its own mint-and-amber workspace tile favicon on charcoal.
+`web/favicon.svg` is the scalable version; `web/favicon-32.png` is the tab
+fallback, and `web/apple-touch-icon.png` is the 180px iOS home-screen icon.
+All are original geometric artwork with no private content. These assets use
+the same Access/JWT gate as other admin assets. The guest scrapbook has a separate moss-and-cream album icon; the public
+portfolio retains its own favicon.

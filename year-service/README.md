@@ -224,3 +224,11 @@ Rollout requires migration 0006 before deploying
 the guest Worker, then build and deploy admin. Local integration tests cover
 renditions, concurrent quota enforcement, reset/expiry, legacy fallback, and
 publication isolation using synthetic images and mocked verification.
+
+## Scrapbook icon
+
+The guest scrapbook uses an original open-album icon in moss and cream with a
+peach heart. `web/favicon.svg` is scalable, `web/favicon-32.png` is the browser
+fallback, and `web/apple-touch-icon.png` is the 180px iOS home-screen icon. It
+contains no photos or personal data. Admin and the public portfolio keep their
+own distinct icons.
