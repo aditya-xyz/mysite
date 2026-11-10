@@ -27,6 +27,8 @@ test('separate photo renditions and persistent original-download limits',async t
     for(const file of ['0001_invites.sql','0002_editor.sql','0003_scrapbooks.sql','0004_people.sql'])await db.exec((await readFile('migrations/'+file,'utf8')).replace(/\n/g,' '));
     await db.batch((await readFile('migrations/0005_shared_invitations.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0006_photo_renditions_downloads.sql','utf8')).replace(/\n/g,' '));
+    await db.exec((await readFile('migrations/0007_photo_uploads.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
+    await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     const expiry=Math.floor(Date.now()/1000)+86400;
     const contact=async(name:string,phone?:string)=>(await (await req('contacts',{name,phone})).json() as {person:{id:string}}).person.id;
     const ben=await contact('Ben','+15555550110'),jerry=await contact('Jerry');

@@ -34,6 +34,7 @@ test('private bounded uploads of originals under 100 MB',async t=>{
     for(const file of ['0001_invites.sql','0002_editor.sql','0003_scrapbooks.sql','0004_people.sql'])await db.exec((await readFile('migrations/'+file,'utf8')).replace(/\n/g,' '));
     await db.batch((await readFile('migrations/0005_shared_invitations.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     for(const file of ['0006_photo_renditions_downloads.sql','0007_photo_uploads.sql'])await db.exec((await readFile('migrations/'+file,'utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
+    await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await t.test('new upload APIs retain authentication, same-origin and year checks',async()=>{
       for(const path of ['uploads','uploads/photo-'+('a'.repeat(24))+'/parts/1','uploads/photo-'+('a'.repeat(24))+'/complete','uploads/photo-'+('a'.repeat(24))+'/abort']){
         assert.equal((await req('editions/2026/'+path,{},undefined,'')).status,401);
@@ -84,7 +85,7 @@ test('private bounded uploads of originals under 100 MB',async t=>{
     await t.test('invalid previews preserve the pending upload; valid previews finalize once',async()=>{
       const value=jpeg(640,800),s=await start(value.length);
       const responses=await Promise.all([req(`uploads/${s.id}/parts/1`,value),req(`uploads/${s.id}/parts/1`,value)]);
-      assert.ok(responses.some(r=>r.status===200));assert.ok(responses.every(r=>[200,409].includes(r.status)));
+      assert.ok(responses.every(r=>r.status===200),'Concurrent retries are safe and cannot leave a busy lock');
       assert.equal((await req(`uploads/${s.id}/parts/1`,value)).status,200,'A lost part response is safe to retry');
       assert.equal(JSON.parse((await db.prepare('SELECT parts_json FROM photo_uploads WHERE id=?').bind(s.id).first<{parts_json:string}>())!.parts_json).length,1);
       assert.equal((await req(`uploads/${s.id}/complete`,previews(jpeg(801,801)))).status,400);
@@ -98,6 +99,19 @@ test('private bounded uploads of originals under 100 MB',async t=>{
       assert.equal((await req(`uploads/${s.id}/abort`)).status,410);
       assert.ok(await bucket.head(`2026/${s.id}/original`));
       assert.equal(await db.prepare('SELECT id FROM photo_uploads WHERE id=?').bind(s.id).first(),null);
+    });
+    await t.test('a killed part request leaves no busy lock and its physical part cannot overwrite a retry',async()=>{
+      const value=jpeg(640,800),s=await start(value.length);
+      const row=(await db.prepare('SELECT upload_id FROM photo_uploads WHERE id=?').bind(s.id).first<{upload_id:string}>())!;
+      await db.prepare('UPDATE photo_uploads SET part_counter=1 WHERE id=?').bind(s.id).run();
+      await bucket.resumeMultipartUpload(`2026/${s.id}/original`,row.upload_id).uploadPart(1,new Uint8Array(value.length));
+      assert.equal((await req(`uploads/${s.id}/parts/1`,value)).status,200);
+      const pending=(await db.prepare('SELECT status,parts_json FROM photo_uploads WHERE id=?').bind(s.id).first<{status:string;parts_json:string}>())!;
+      assert.equal(pending.status,'open');assert.equal(JSON.parse(pending.parts_json)[0].partNumber,2);
+      const finished=await Promise.all([req(`uploads/${s.id}/complete`,previews()),req(`uploads/${s.id}/complete`,previews())]);
+      assert.ok(finished.every(r=>r.status===201));
+      assert.deepEqual(new Uint8Array(await (await bucket.get(`2026/${s.id}/original`))!.arrayBuffer()),value);
+      assert.equal((await db.prepare("SELECT count(*) n FROM admin_events WHERE target=? AND action='upload-photo'").bind(s.id).first<{n:number}>())!.n,1);
     });
     await t.test('client recovers lost initialization, part and final responses without duplicating photos',async()=>{
       const original=jpeg(640,800),lost=new Set<string>(),waits:number[]=[];
@@ -114,12 +128,14 @@ test('private bounded uploads of originals under 100 MB',async t=>{
       assert.deepEqual(new Uint8Array(await (await bucket.get(`2026/${result.id}/original`))!.arrayBuffer()),original);
       assert.equal((await db.prepare("SELECT count(*) n FROM admin_events WHERE target=? AND action='upload-photo'").bind(result.id).first<{n:number}>())!.n,1);
     });
-    await t.test('storage failure after original completion removes partial objects and pending state',async()=>{
+    await t.test('storage failure after original completion can be retried without a permanent lock',async()=>{
       const value=jpeg(640,800),s=await start(value.length);
       assert.equal((await req(`uploads/${s.id}/parts/1`,value)).status,200);
       await db.exec("CREATE TRIGGER fail_upload BEFORE INSERT ON media_objects BEGIN SELECT RAISE(ABORT,'synthetic failure'); END");
       try{assert.equal((await req(`uploads/${s.id}/complete`,previews())).status,503);}finally{await db.exec('DROP TRIGGER fail_upload');}
-      for(const name of ['original','preview.jpg','viewer.jpg'])assert.equal(await bucket.head(`2026/${s.id}/${name}`),null);
+      assert.ok(await bucket.head(`2026/${s.id}/original`));
+      assert.equal((await db.prepare('SELECT status FROM photo_uploads WHERE id=?').bind(s.id).first<{status:string}>())!.status,'completing');
+      assert.equal((await req(`uploads/${s.id}/complete`,previews())).status,201);
       assert.equal(await db.prepare('SELECT id FROM photo_uploads WHERE id=?').bind(s.id).first(),null);
     });
     await t.test('expired uploads are cleaned up and cannot be resumed',async()=>{

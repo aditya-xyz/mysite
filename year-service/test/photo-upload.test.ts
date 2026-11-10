@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error The browser helper is intentionally plain JavaScript.
-import {photoUploadError,uploadPhoto,bindPhotoDropzone} from '../admin/client/photo-upload.js';
+import {photoUploadError,uploadPhoto,findUploadedPhoto,fingerprintPhoto,addPhotoToDraft,bindPhotoDropzone} from '../admin/client/photo-upload.js';
 
 test('photo selection validates the entire batch before any upload starts',()=>{
   const jpeg=new File(['original bytes'],'photo.jpg',{type:'image/jpeg'});
@@ -52,6 +52,25 @@ test('chunk failure aborts only the unfinished upload and preserves the original
     throw failure;
   }),error=>error===failure);
   assert.deepEqual(paths,['uploads','uploads/unfinished/parts/1','uploads/unfinished/abort']);
+});
+test('matching original bytes reuse existing media without creating an upload',async()=>{
+  const file=new File(['same original bytes'],'renamed.jpg',{type:'image/jpeg'}),hash=await fingerprintPhoto(file);
+  const paths:string[]=[];
+  const result=await findUploadedPhoto(file,async(path:string,data:{hash:string;bytes:number})=>{paths.push(path);assert.equal(data.hash,hash);assert.equal(data.bytes,file.size);return {media:{id:'existing'},candidates:[]};},()=>assert.fail('Known fingerprints do not download originals'));
+  assert.equal(result.media.id,'existing');assert.deepEqual(paths,['media/lookup']);
+});
+test('older media is checked byte-for-byte, and equal filenames and sizes cannot reuse different contents',async()=>{
+  const file=new File(['photo-A'],'same.jpg'),different=new Blob(['photo-B']),matching=new Blob(['photo-A']);const checked:string[]=[];
+  const result=await findUploadedPhoto(file,async(path:string,data:unknown)=>{
+    if(path==='media/lookup')return {media:null,candidates:[{id:'different'},{id:'matching'}]};
+    checked.push(path);return {media:{id:path.includes('matching')?'matching':'different'}};
+  },async(path:string)=>path.includes('different')?different:matching);
+  assert.equal(result.media.id,'matching');assert.deepEqual(checked,['media/different/fingerprint','media/matching/fingerprint']);
+  const draft={photos:[{id:'matching',caption:'Keep this caption',alt:'Accessible description',recipients:['person-1']}]};
+  assert.equal(addPhotoToDraft(draft,{id:'matching'}),false);assert.equal(draft.photos[0].caption,'Keep this caption');
+  draft.photos=[];
+  assert.equal(addPhotoToDraft(draft,{id:'matching',draftPhoto:{caption:'Restored',alt:'Description',recipients:['person-1']}}),true);
+  assert.deepEqual(draft.photos[0],{id:'matching',caption:'Restored',alt:'Description',recipients:['person-1']});
 });
 
 // Exercise browser EventTarget semantics with file-manager data, without production UI or media.

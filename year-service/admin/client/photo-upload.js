@@ -21,11 +21,37 @@ export async function retryUploadRequest(send,path,data,wait=ms=>new Promise(res
     }
   }
 }
-export async function uploadPhoto(file,{preview,viewer},send,onProgress=()=>{},wait,onRetry){
+export async function fingerprintPhoto(file){
+  const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,'0')).join('');
+}
+export async function findUploadedPhoto(file,send,readOriginal,wait,onRetry){
+  const hash=await fingerprintPhoto(file),data={hash,bytes:file.size};
+  const request=(path,body)=>retryUploadRequest(send,path,body,wait,onRetry);
+  const result=await request('media/lookup',data);
+  if(result.media)return {hash,media:result.media};
+  for(const candidate of result.candidates){
+    const original=await retryUploadRequest(()=>readOriginal(`media/${candidate.id}/original`),'',undefined,wait,onRetry);
+    if(original.size!==file.size)continue;
+    const candidateHash=await fingerprintPhoto(original);
+    const saved=await request(`media/${candidate.id}/fingerprint`,{hash:candidateHash,bytes:original.size});
+    if(candidateHash===hash)return {hash,media:saved.media};
+  }
+  return {hash,media:null};
+}
+export function addPhotoToDraft(draft,media){
+  if(draft.photos.some(photo=>photo.id===media.id))return false;
+  if(draft.photos.length>=300)throw new Error('A scrapbook can contain up to 300 photos.');
+  const photo=media.draftPhoto||{caption:'',alt:'',recipients:[]};
+  draft.photos.push({id:media.id,caption:photo.caption,alt:photo.alt,recipients:[...photo.recipients]});
+  return true;
+}
+export async function uploadPhoto(file,{preview,viewer},send,onProgress=()=>{},wait,onRetry,hash){
   const mime=file.type||(/\.png$/i.test(file.name)?'image/png':/\.webp$/i.test(file.name)?'image/webp':'image/jpeg');
   const request=(path,data)=>retryUploadRequest(send,path,data,wait,onRetry);
   const id='photo-'+crypto.randomUUID().replaceAll('-','').slice(0,24);
-  const session=await request('uploads',{id,filename:file.name.slice(0,200),mime,bytes:file.size});
+  const session=await request('uploads',{id,filename:file.name.slice(0,200),mime,bytes:file.size,...(hash?{hash}:{})});
+  if(session.media)return {...session.media,reused:true};
   try{
     for(let offset=0,part=1;offset<file.size;offset+=session.chunkBytes,part++){
       const end=Math.min(offset+session.chunkBytes,file.size);

@@ -1,7 +1,7 @@
 export class ApiError extends Error{
   constructor(message,status=0,retryable=false){super(message);this.status=status;this.retryable=retryable;}
 }
-export async function sendApiRequest(path,data,signal,fetcher=fetch){
+export async function sendApiRequest(path,data,signal,fetcher=fetch,asBlob=false){
   const multipart=data instanceof FormData,raw=data instanceof Blob;
   let response;
   try{
@@ -12,6 +12,10 @@ export async function sendApiRequest(path,data,signal,fetcher=fetch){
   }
   if(response.type==='opaqueredirect'||response.status===401||response.status===403||response.status>=300&&response.status<400)
     throw new ApiError('Your admin sign-in needs attention. Sign in to the admin in another tab, then retry here to keep your unsaved edits.',response.status);
+  if(response.ok&&asBlob){
+    if(!/^image\/(jpeg|png|webp)(?:;|$)/i.test(response.headers.get('Content-Type')||''))throw new ApiError('The original photo returned an unexpected response. Keep this tab open and retry.',response.status,true);
+    return response.blob();
+  }
   let result;try{result=await response.json();}catch(error){if(error.name==='AbortError')throw error;/* Edge error pages may be HTML or empty. */}
   if(!response.ok){
     const retryable=response.status===408||response.status===429||response.status>=500;

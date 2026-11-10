@@ -9,6 +9,11 @@ test('HTML 503 responses are retryable server errors, not expired sign-ins',asyn
     assert.equal(error.status,503);assert.equal(error.retryable,true);assert.match(error.message,/503/);assert.doesNotMatch(error.message,/sign-in|Refresh/);return true;
   });
 });
+test('legacy fingerprint reads accept image bytes and reject an HTML success page',async()=>{
+  const photo=await sendApiRequest('media/photo/original',undefined,undefined,async()=>new Response('unchanged bytes',{headers:{'Content-Type':'image/jpeg'}}),true);
+  assert.equal(await photo.text(),'unchanged bytes');
+  await assert.rejects(()=>sendApiRequest('media/photo/original',undefined,undefined,async()=>new Response('<html>edge page</html>',{headers:{'Content-Type':'text/html'}}),true),/original photo returned an unexpected response/);
+});
 test('authentication failures preserve the current draft and are not retried',async()=>{
   for(const status of [401,403,302])await assert.rejects(()=>sendApiRequest('uploads',{},undefined,async()=>new Response('',{status})),(error:InstanceType<typeof ApiError>)=>{
     assert.equal(error.retryable,false);assert.match(error.message,/another tab/);assert.doesNotMatch(error.message,/Refresh/);return true;

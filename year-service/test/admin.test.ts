@@ -31,6 +31,8 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
     for(const f of ["0001_invites.sql","0002_editor.sql","0003_scrapbooks.sql","0004_people.sql"]) await db.exec((await readFile("migrations/"+f,"utf8")).replace(/\n/g," "));
     await db.batch((await readFile("migrations/0005_shared_invitations.sql","utf8")).split("--> statement-breakpoint").map(sql=>db.prepare(sql)));
     await db.exec((await readFile("migrations/0006_photo_renditions_downloads.sql","utf8")).replace(/\n/g," "));
+    await db.exec((await readFile('migrations/0007_photo_uploads.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
+    await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     const expires=Math.floor(Date.now()/1000)+86400;
     await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',?1,'Angela','+15555550101',?2)").bind(await digest("a".repeat(64)),expires).run();
     let assertion=await signed();

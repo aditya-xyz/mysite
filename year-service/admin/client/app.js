@@ -1,4 +1,4 @@
-import {photoUploadError,uploadPhoto,isFileDrag,bindPhotoDropzone} from './photo-upload.js';
+import {photoUploadError,uploadPhoto,findUploadedPhoto,addPhotoToDraft,isFileDrag,bindPhotoDropzone} from './photo-upload.js';
 import {sendApiRequest} from './api-request.js';
 import QRCode from 'qrcode';
 import {scrapbookConfig} from '../../web/config.js';
@@ -8,6 +8,7 @@ import {peoplePickerMarkup,bindPeoplePicker} from './people-picker.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal'),modalContent=document.querySelector('#modal-content');
 let state,view=routeFromHash().view,editions=[],contacts=[],draftCache=new Map(),navigationGeneration=0,pendingRequests=0,dirty=false,busy=false,previewRecipient='',previewData=null,personalModes=new Set(),inviteData,editGeneration=0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const retryFilesByYear=new Map(),removedPhotos=new Map();
 const byId=id=>document.getElementById(id);
 function sharedHeading(title){return !title||['A little of our year','A little of our year.'].includes(title.trim())?'Meanwhile, in our camera roll…':title;}
 async function requestApi(path,data,signal){
@@ -129,7 +130,7 @@ function flowSteps(){return `<nav class="flow-steps" aria-label="Scrapbook creat
 function continueFlow(next,save=true){return `<div class="flow-footer"><a class="quiet" href="#scrapbooks" data-view="scrapbooks">${icon('arrow')} All scrapbooks</a>${save?`<button class="button" data-continue="${next}" data-busy>Save & continue to ${next==='photos'?'photos':'sharing'} ${icon('arrow')}</button>`:`<a class="button" href="${taskHref(next)}" data-view="${next}">Continue to review ${icon('arrow')}</a>`}</div>`;}
 function story(){const d=state.draft;return `${head()}<div class="notice">You’re editing a private draft. Save your work, then go to Review & publish when it’s ready.</div><div class="editor-width"><section class="panel form-panel"><div class="section-heading"><h2>Edition details</h2><p class="hint">The introduction your friends see when they open the scrapbook.</p></div>${field('From','authors',d.authors,false,'maxlength="100"')}${field('Invitation introduction','intro',d.intro,true,'maxlength="1000"')}${field('Opening note','note',d.note,true,'class="long-note" maxlength="10000"')}${field('Shared photo heading','sharedTitle',sharedHeading(d.sharedTitle),false,'maxlength="150"')}</section><section class="panel form-panel"><div class="row-head"><div><h2>Stories</h2><p class="hint">A trip, a milestone, or an ordinary day worth remembering.</p></div><button class="secondary" id="add-story" ${d.stories.length>=20?'disabled':''}>+ Add a story</button></div>${d.stories.map((s,i)=>`<article class="story-card" data-story="${esc(s.id)}"><div class="row-head"><span class="kicker">Story ${i+1}</span><button class="quiet danger" data-remove-story="${esc(s.id)}">Remove from draft</button></div>${field('Title','story-title',s.title,false,'maxlength="150"')}${field('Story','story-body',s.body,true,'maxlength="10000"')}</article>`).join('')||'<div class="empty">No stories yet.<span>Your opening note and photos are enough to start. Add a story whenever you have one.</span></div>'}</section></div>${continueFlow('photos')}`;}
 function photoCard(p,i){const personal=personalModes.has(p.id),hasOriginal=!!state.media.find(m=>m.id===p.id)?.has_original;return `<article class="photo-editor" data-photo="${esc(p.id)}"><img src="/api/editions/${state.year}/media/${esc(p.id)}/preview" alt="${esc(p.alt||'Photo awaiting description')}" loading="lazy"><div class="photo-fields"><div class="photo-tools"><div class="actions"><button class="icon-button" data-move="up" aria-label="Move photo ${i+1} earlier" ${i===0?'disabled':''}>↑</button><button class="icon-button" data-move="down" aria-label="Move photo ${i+1} later" ${i===state.draft.photos.length-1?'disabled':''}>↓</button></div><button class="quiet danger" data-remove-photo>Remove from draft</button></div>${!state.media.find(m=>m.id===p.id)?.has_viewer?`<button class="secondary" data-generate-previews="${esc(p.id)}">Generate lighter previews</button><p class="hint">Uses the original when available. Updates the next publication; the original stays unchanged.</p>`:''}${field('Caption','caption',p.caption,false,'maxlength="500"')}${field('Describe the photo for accessibility','alt',p.alt,false,'maxlength="500"')}<label class="field"><span>Who can see this photo?</span><span class="select-control"><select data-audience><option value="shared" ${!personal?'selected':''}>Everyone invited</option><option value="personal" ${personal?'selected':''}>Selected people</option></select></span></label><p class="hint">${personal?(hasOriginal?'Invitations including a selected person can view and save the original.':'Invitations including a selected person can view this sample. No original is available.'):'Everyone invited can view the preview. The original stays private.'}</p>${personal?peoplePickerMarkup(p.id,`People for photo ${i+1}`):''}</div></article>`;}
-function photos(){const used=new Set(state.draft.photos.map(p=>p.id)),unused=state.media.filter(m=>!used.has(m.id));return `${head()}<div class="row-head"><div><h2>Photos & little moments</h2><p class="hint">Arrange the photos, add their stories, and choose who gets each one.</p></div><span class="badge">${state.draft.photos.length} photos</span></div><div class="upload-zone" id="photo-dropzone" role="group" aria-label="Add original photos" aria-describedby="upload-hint upload-status"><div><p>Drop photos here, or choose files</p><span class="hint" id="upload-hint">JPEG, PNG, or WebP · under 100 MB each<br>Originals keep their metadata. Previews are smaller and omit EXIF.</span></div><input id="upload" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple aria-label="Upload original photos"></div><p id="upload-status" role="status" aria-live="polite" aria-atomic="true"></p><div class="photo-grid">${state.draft.photos.map(photoCard).join('')||'<div class="empty">Your first photo goes here.</div>'}</div>${unused.length?`<section class="library"><h3>Already uploaded</h3><p class="hint">Removed photos stay here so you can add them back. They aren’t published unless they’re in the draft.</p><div class="library-items">${unused.map(m=>`<button data-add-media="${esc(m.id)}" aria-label="Add ${esc(m.filename)} to draft"><img src="/api/editions/${state.year}/media/${esc(m.id)}/preview" alt="">${esc(m.filename)}<br>+ Add to draft</button>`).join('')}</div></section>`:''}${continueFlow('sharing')}`;}
+function photos(){const used=new Set(state.draft.photos.map(p=>p.id)),unused=state.media.filter(m=>!used.has(m.id));return `${head()}<div class="row-head"><div><h2>Photos & little moments</h2><p class="hint">Arrange the photos, add their stories, and choose who gets each one.</p></div><span class="badge">${state.draft.photos.length} photos</span></div><div class="upload-zone" id="photo-dropzone" role="group" aria-label="Add original photos" aria-describedby="upload-hint upload-status"><div><p>Drop photos here, or choose files</p><span class="hint" id="upload-hint">JPEG, PNG, or WebP · under 100 MB each<br>Originals keep their metadata. Previews are smaller and omit EXIF.</span></div><input id="upload" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple aria-label="Upload original photos"></div><p id="upload-status" role="status" aria-live="polite" aria-atomic="true"></p>${retryFilesByYear.get(state.year)?.length?`<button class="secondary" id="retry-uploads">Retry remaining ${retryFilesByYear.get(state.year).length} photos</button>`:''}<div class="photo-grid">${state.draft.photos.map(photoCard).join('')||'<div class="empty">Your first photo goes here.</div>'}</div>${unused.length?`<section class="library"><h3>Already uploaded</h3><p class="hint">Reuse these photos or permanently delete unused originals and previews. Published photos stay protected.</p><div class="library-items">${unused.map(m=>`<article class="library-item"><button data-add-media="${esc(m.id)}" aria-label="Add ${esc(m.filename)} to draft" ${m.deletion_pending?'disabled':''}>${!m.deletion_pending?`<img src="/api/editions/${state.year}/media/${esc(m.id)}/preview" alt="">`:''}${esc(m.filename)}<br>${m.deletion_pending?'Deletion pending':'+ Add to draft'}</button><button class="quiet danger" data-delete-media="${esc(m.id)}" aria-label="Delete ${esc(m.filename)} permanently">${m.deletion_pending?'Retry deletion':'Delete permanently'}</button></article>`).join('')}</div></section>`:''}${continueFlow('sharing')}`;}
 function directoryRows(query=''){
   const matches=contacts.filter(p=>(p.name+' '+(p.phone||'')).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return matches.map(p=>`<article class="person"><div class="person-identity"><span class="person-avatar">${esc(p.name.slice(0,1).toUpperCase())}</span><div><strong>${esc(p.name)}</strong><p>${esc(p.phone||'No phone number · Can join a shared invitation')}</p></div></div><button class="secondary" data-edit-contact="${esc(p.id)}">Edit details</button></article>`).join('')||'<div class="empty">No people found.<span>Add someone to your directory, or try a different search.</span></div>';
@@ -244,10 +245,12 @@ function bind(){
     card.querySelector('[data-audience]').onchange=e=>{if(e.target.value==='personal')personalModes.add(p.id);else{personalModes.delete(p.id);p.recipients=[];}mark();render();};
     const picker=card.querySelector('[data-picker]');
     if(picker)bindPeoplePicker(picker,{people:()=>contacts,selected:()=>p.recipients,status:accessStatus,toggle:id=>{p.recipients=p.recipients.includes(id)?p.recipients.filter(value=>value!==id):[...p.recipients,id];mark();},add:query=>addPerson({photoId:p.id,name:query})});
-    card.querySelector('[data-remove-photo]').onclick=()=>{state.draft.photos=state.draft.photos.filter(item=>item.id!==p.id);mark();render();};
+    card.querySelector('[data-remove-photo]').onclick=()=>{removedPhotos.set(`${state.year}/${p.id}`,structuredClone(p));state.draft.photos=state.draft.photos.filter(item=>item.id!==p.id);mark();render();};
     card.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const i=state.draft.photos.indexOf(p),j=i+(b.dataset.move==='up'?-1:1);[state.draft.photos[i],state.draft.photos[j]]=[state.draft.photos[j],state.draft.photos[i]];mark();render();});
   });
-  app.querySelectorAll('[data-add-media]').forEach(b=>b.onclick=()=>{state.draft.photos.push({id:b.dataset.addMedia,caption:'',alt:'',recipients:[]});mark();render();});
+  app.querySelectorAll('[data-add-media]').forEach(b=>b.onclick=()=>{try{attachMedia(state.media.find(m=>m.id===b.dataset.addMedia));render();}catch(error){toast(error.message);}});
+  app.querySelectorAll('[data-delete-media]').forEach(b=>b.onclick=()=>deleteMedia(b.dataset.deleteMedia));
+  byId('retry-uploads')?.addEventListener('click',()=>uploadFiles(retryFilesByYear.get(state.year)||[]));
   app.querySelectorAll('[data-generate-previews]').forEach(button=>button.onclick=()=>generatePreviews(button.dataset.generatePreviews));
   byId('upload')?.addEventListener('change',event=>uploadFiles(Array.from(event.target.files||[])));
   const dropzone=byId('photo-dropzone');
@@ -370,22 +373,47 @@ async function generatePreviews(id){
     media.has_viewer=true;mark();render();toast('Previews generated. Save and publish when ready; the live edition is unchanged.');
   }catch(error){toast(error.message);}finally{busy=false;updateBadge();}
 }
+function attachMedia(media){
+  const existing=state.media.find(item=>item.id===media.id);
+  if(existing)Object.assign(existing,media);else state.media.unshift(media);
+  const remembered=removedPhotos.get(`${state.year}/${media.id}`);
+  const added=addPhotoToDraft(state.draft,{...media,draftPhoto:remembered||media.draftPhoto});
+  if(added){const photo=state.draft.photos.find(p=>p.id===media.id);if(photo.recipients.length)personalModes.add(media.id);mark();}
+  return added;
+}
+function deleteMedia(id){
+  if(busy||pendingRequests)return;
+  const media=state.media.find(m=>m.id===id);if(!media)return;
+  showModal(`<p class="kicker">Photo library</p><h2>Delete this photo permanently?</h2><p>${esc(media.filename)}</p><p>This deletes the original and all its previews from private storage. It cannot be undone. Photos still used in a saved draft or published scrapbook cannot be deleted.</p><button class="button danger" id="confirm-delete-media">Delete permanently</button><p class="error" id="modal-error" role="alert"></p>`);
+  byId('confirm-delete-media').onclick=async event=>{
+    event.target.disabled=true;
+    try{await api(`media/${id}/delete`,{confirm:true});state.media=state.media.filter(m=>m.id!==id);removedPhotos.delete(`${state.year}/${id}`);modal.close();render();toast('Photo and previews deleted permanently.');}
+    catch(error){byId('modal-error').textContent=error.message;event.target.disabled=false;}
+  };
+}
 async function uploadFiles(files){
   if(busy||pendingRequests||modal.open){toast('Wait for the current change to finish before adding more photos.');return;}
   const status=byId('upload-status'),input=byId('upload'),zone=byId('photo-dropzone');
-  const error=photoUploadError(files,state.draft.photos.length);
+  const error=photoUploadError(files);
   if(error){status.textContent=error;input.value='';return;}
   busy=true;updateBadge();input.disabled=true;zone.setAttribute('aria-busy','true');
-  const completed=[];let failure;
+  const completed=[];let failure,reused=0,skipped=0;const year=state.year;retryFilesByYear.delete(year);
   for(const [i,file] of files.entries()){
-    try{status.textContent=`Preparing ${i+1} of ${files.length}: ${file.name}`;
+    try{
+      const progress=percent=>{status.textContent=`Uploading ${i+1} of ${files.length}: ${file.name} · ${percent}%`;};
+      const retry=attempt=>{status.textContent=`Checking ${i+1} of ${files.length}: ${file.name} · retry ${attempt} of 3…`;};
+      status.textContent=`Checking ${i+1} of ${files.length}: ${file.name}`;
+      const existing=await findUploadedPhoto(file,api,path=>sendApiRequest(`editions/${year}/${path}`,undefined,undefined,fetch,true),undefined,retry);
+      if(existing.media){if(attachMedia(existing.media))reused++;else skipped++;continue;}
+      if(state.draft.photos.length>=300)throw new Error('A scrapbook can contain up to 300 photos.');
+      status.textContent=`Preparing ${i+1} of ${files.length}: ${file.name}`;
       const previews=await makePreviews(file);
-      status.textContent=`Uploading ${i+1} of ${files.length}: ${file.name} · 0%`;
-      const media=await uploadPhoto(file,previews,api,percent=>{status.textContent=`Uploading ${i+1} of ${files.length}: ${file.name} · ${percent}%`;},undefined,retry=>{status.textContent=`Uploading ${i+1} of ${files.length}: ${file.name} · connection interrupted, retry ${retry} of 3…`;});
-      completed.push(media);state.media.unshift(media);state.draft.photos.push({id:media.id,caption:'',alt:'',recipients:[]});mark();
-    }catch(error){failure=error;break;}
+      progress(0);
+      const media=await uploadPhoto(file,previews,api,progress,undefined,retry,existing.hash);
+      if(attachMedia(media)){if(media.reused)reused++;else completed.push(media);}else skipped++;
+    }catch(error){failure=error;retryFilesByYear.set(year,files.slice(i));break;}
   }
-  busy=false;render();byId('upload-status').textContent=failure?`${completed.length} uploaded. ${failure.message}`:`${completed.length} uploaded. Add descriptions and choose recipients, then save your draft.`;
+  busy=false;render();byId('upload-status').textContent=failure?`${completed.length} uploaded, ${reused} reused, ${skipped} already in draft. ${failure.message} Use Retry remaining photos to continue.`:`${completed.length} uploaded, ${reused} reused, ${skipped} already in draft. Add descriptions and choose recipients, then save your draft.`;
 }
 // Prevent a file dropped outside the upload area from replacing the editor tab.
 for(const type of ['dragover','drop'])document.addEventListener(type,event=>{

@@ -104,3 +104,6 @@ html:has(#modal[open]){overflow:hidden}
 
 .preview-dialog .preview .header-pixel{display:block;width:auto;height:64px;max-width:66px;object-fit:contain;border-radius:0;-webkit-mask-image:linear-gradient(#000 88%,transparent);mask-image:linear-gradient(#000 88%,transparent)}
 @media(max-width:540px){.preview-dialog .preview .header-pixel{height:56px;max-width:56px}}
+
+.library-item{display:flex;flex-direction:column;gap:6px;max-width:145px}.library-item>button{width:100%}.library-item>.danger{min-height:44px;border:0;background:transparent;padding:8px 10px}.library-item>button:disabled{opacity:.65}
+.button.danger{background:#7b3038;color:#fff3ef;border-color:#a24f58}.button.danger:hover{background:#8f3b44}

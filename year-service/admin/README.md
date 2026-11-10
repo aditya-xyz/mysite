@@ -39,7 +39,7 @@ Use Node 22.13 or later. From year-service:
 - npm run deploy (guest compatibility with per-year publications)
 - npm run admin:deploy
 
-Apply migrations through 0007 first, then deploy the guest Worker before the admin Worker.
+Apply migrations through 0008 first, then deploy the guest Worker before the admin Worker.
 Migration 0003 adds year indexes. Migration 0004 creates persistent People and
 links invitations by phone, without rewriting existing content, tokens, or sessions. If preexisting duplicate
 phones block the index, investigate them rather than deleting records.
@@ -142,7 +142,8 @@ supported in this first version. The browser generates JPEG grid and viewer prev
 respectively (long edge, without upscaling or EXIF), and uploads the original File unchanged. R2 keeps the
 original bytes. Every uploaded image is private; the browser never receives R2
 write credentials. Removed draft photos remain in the media library so they
-can be added back. This version does not permanently delete originals.
+can be added back. Already uploaded also offers confirmed permanent deletion of
+unused originals and their previews; saved-draft and published references block deletion.
 
 Shared photos expose previews only to verified invitees. Selected-recipient
 photos expose previews and available originals only to those recipients. Group
@@ -316,8 +317,8 @@ type, and R2 assembles only the recorded pieces. The original becomes a media
 library item only after both validated previews are stored and the D1 transaction
 commits. Saving and publishing remain separate actions.
 
-Failed client uploads attempt to abort their private multipart session. Failed
-finalization removes partial objects. Sessions idle for 24 hours are cleaned up
+Failed client uploads attempt to abort their private multipart session. Interrupted
+finalization retains private pending objects so it can resume. Sessions idle for 24 hours are cleaned up
 when another upload starts or an expired session is accessed; R2 also expires
 incomplete multipart uploads after seven days. Retrying a completed finalization
 returns the same media item. An interrupted upload must be selected again; there
@@ -336,7 +337,41 @@ redirects/401/403 ask the owner to sign in in another tab, preserving current ed
 Synthetic tests upload a 99,999,999-byte original and verify SHA-256 and its EXIF
 marker, distinct previews, and unchanged publication. They also check limits,
 authentication, request origin, part ordering/concurrency, invalid previews,
-expiry, cleanup after a failed D1 commit, and browser-helper chunk/progress behavior.
+expiry, recovery after failed D1 commits, and browser-helper chunk/progress behavior.
+
+### Reuse, interrupted requests, and deletion
+
+Migration **0008_media_library.sql** adds private content fingerprints, per-upload
+physical-part counters, and guarded deletion state. Apply it before this admin
+update. It does not rewrite current drafts, publications, originals, or invitations.
+
+Selecting a photo computes its SHA-256 in the owner's browser and looks for the
+same original bytes in this scrapbook. Matching originals return to the draft;
+already-present photos are skipped without resetting captions, descriptions or
+recipients. A different filename can reuse identical bytes; equal filenames and
+sizes alone never count as a match. Older uploads without fingerprints are checked
+by downloading same-size candidate originals through the protected admin API and
+hashing them in the browser once. These private fingerprints are reuse metadata,
+not guest access credentials. No production originals are hashed inside the Worker.
+
+Each original-piece attempt uses a new physical R2 part number. Only the first
+successfully recorded attempt is selected for assembly, so interrupted requests
+cannot leave a busy lock or overwrite a successful retry. Finalization can resume
+from a completed private R2 original after a transient D1/R2 failure. A failed batch
+retains the remaining File references in the current tab and offers Retry remaining;
+refreshing still discards those selections. Upload results distinguish new uploads,
+reused originals, and photos already in the draft. The 300-photo limit applies to
+unique photos added to the draft; a single selection may contain at most 300 files.
+
+Already uploaded has a Delete permanently action with an explicit confirmation.
+It deletes the original, current previews and historical generated renditions.
+The server refuses deletion while any saved draft, published edition, or active
+2026 pilot references the photo. Remove/save the draft first; if published, remove
+and explicitly publish that change before deleting. Database guards also prevent
+another tab from adding a photo after deletion starts. Shared legacy storage keys
+still referenced by another photo/publication are retained. Failed deletions remain
+unavailable for reuse and offer Retry deletion until cleanup finishes. There is no
+automatic deletion of duplicate photos and no bulk erasure of production content.
 
 ## Rendition maintenance and original limits
 

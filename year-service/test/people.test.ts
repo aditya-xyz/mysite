@@ -49,6 +49,8 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
     await migrate('0004_people.sql');
     await db.batch((await readFile('migrations/0005_shared_invitations.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile("migrations/0006_photo_renditions_downloads.sql","utf8")).replace(/\n/g," "));
+    await db.exec((await readFile('migrations/0007_photo_uploads.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
+    await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     let oldPerson='',newPerson='',version=1,inviteId='',newRaw='';
     await t.test('migration links existing invitations without changing tokens, sessions, or manifests',async()=>{
       const contacts=await (await req('contacts')).json() as {people:{id:string;name:string;version:number}[]};
@@ -140,6 +142,7 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
     await t.test('one QR exposes either partner’s personal photos and originals, with shared and year isolation',async()=>{
       const photo=(id:string,recipients:string[])=>({id,caption:id,alt:'Sample',recipients,preview_key:'legacy-preview',original_key:'legacy-original',filename:'original.jpg',mime:'image/jpeg'});
       const grouped={...oldPublished,photos:[photo('for-ben',[ben]),photo('for-jerry',[jerry]),photo('unrelated',[newPerson]),{...photo('shared',[]),original_key:null}]};
+      for(const item of grouped.photos)await db.prepare('INSERT INTO media_objects(id,year,preview_key,original_key,filename,mime,bytes) VALUES(?1,2026,?2,?3,?4,?5,0)').bind(item.id,item.preview_key,item.original_key,item.filename,item.mime).run();
       await db.prepare('UPDATE editions SET published_json=? WHERE year=2026').bind(JSON.stringify(grouped)).run();
       await db.prepare('INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)').bind(await digest(coupleRaw),coupleId,expiry).run();
       const journal=await (await guest('journal',coupleRaw)).json() as {name:string;photos:{id:string}[]};

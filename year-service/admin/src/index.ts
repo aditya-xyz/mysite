@@ -3,6 +3,7 @@ import { invitationAudience, invitationName, type InvitationAudience } from "../
 import { canonicalDraft, type Contact } from "./people.ts";
 import { adminIdentity, type AuthConfig } from "./auth.ts";
 import { photoUploadRoute, UploadProblem } from "./uploads.ts";
+import { mediaLibraryRoute } from './media-library.ts';
 import { token, digest, now, sameOrigin } from "../../src/security.ts";
 import { clientEdition, type Draft, type Published, type PublishedPhoto } from "../../src/edition.ts";
 
@@ -38,7 +39,7 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
   if (!value || typeof value !== "object") return fail("Missing draft.");
   const d = await canonicalDraft(value as Draft,env.DB,year);
   if (!Array.isArray(d.photos) || d.photos.length > 300 || !Array.isArray(d.stories) || d.stories.length > 20) return fail("Use at most 300 photos and 20 stories.");
-  const media = await env.DB.prepare("SELECT id FROM media_objects WHERE year=?1").bind(year).all<{id:string}>();
+  const media = await env.DB.prepare("SELECT id FROM media_objects WHERE year=?1 AND deleting=0").bind(year).all<{id:string}>();
   const people = await env.DB.prepare("SELECT id FROM people").all<{id:string}>();
   const mediaIds = new Set(media.results.map(m => m.id)), peopleIds = new Set(people.results.map(p => p.id));
   const photoIds = new Set<string>(), storyIds = new Set<string>();
@@ -56,7 +57,7 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
     note:text(d.note,"opening note",10000),sharedTitle:text(d.sharedTitle,"shared chapter title",150),stories,photos};
 }
 async function snapshot(draft: Draft, env: Env, year: number): Promise<Published> {
-  const media = await env.DB.prepare("SELECT * FROM media_objects WHERE year=?1").bind(year).all<Media>();
+  const media = await env.DB.prepare("SELECT * FROM media_objects WHERE year=?1 AND deleting=0").bind(year).all<Media>();
   const objects = new Map(media.results.map(m => [m.id,m]));
   const photos: PublishedPhoto[] = [];
   for (const p of draft.photos) {
@@ -145,7 +146,7 @@ async function route(request: Request, env: Env, actor: string) {
   if (path === "/api/state" && request.method === "GET") {
     const row = await edition(env,year);
     const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
-    const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
+    const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
     return json({actor,year,draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
@@ -267,6 +268,8 @@ async function route(request: Request, env: Env, actor: string) {
     ]);
     return json(revoke ? {revoked:true} : {url:env.JOURNAL_ORIGIN+"/#"+raw});
   }
+  const library=await mediaLibraryRoute(request,env,actor,year,path,body);
+  if(library)return library;
   const uploaded = await photoUploadRoute(request,env,actor,year,path,validRenditions);
   if (uploaded) return uploaded;
   if (path === "/api/upload" && request.method === "POST") {
@@ -295,7 +298,7 @@ async function route(request: Request, env: Env, actor: string) {
   const renditionRoute=/^\/api\/media\/([a-z0-9-]+)\/previews$/.exec(path);
   if(renditionRoute&&request.method==="POST"){
     if(Number(request.headers.get("Content-Length")||0)>11*1024*1024)throw new Problem(413,"Previews are too large.");
-    const media=await env.DB.prepare("SELECT id FROM media_objects WHERE id=?1 AND year=?2").bind(renditionRoute[1],year).first();
+    const media=await env.DB.prepare("SELECT id FROM media_objects WHERE id=?1 AND year=?2 AND deleting=0").bind(renditionRoute[1],year).first();
     if(!media)throw new Problem(404,"Photo not found.");
     const form=await request.formData(),grid=form.get("preview"),viewer=form.get("viewer");
     if(!(grid instanceof File)||!(viewer instanceof File))return fail("Include both photo previews.");
@@ -304,13 +307,17 @@ async function route(request: Request, env: Env, actor: string) {
     try{
       await env.MEDIA.put(gridKey,grid.stream(),{httpMetadata:{contentType:"image/jpeg"}});
       await env.MEDIA.put(viewerKey,viewer.stream(),{httpMetadata:{contentType:"image/jpeg"}});
-      await env.DB.batch([env.DB.prepare("UPDATE media_objects SET preview_key=?1,viewer_key=?2 WHERE id=?3 AND year=?4").bind(gridKey,viewerKey,renditionRoute[1],year),audit(env,actor,"generate-previews",renditionRoute[1])]);
+      const [updated]=await env.DB.batch([
+        env.DB.prepare("UPDATE media_objects SET preview_key=?1,viewer_key=?2 WHERE id=?3 AND year=?4 AND deleting=0 RETURNING id").bind(gridKey,viewerKey,renditionRoute[1],year),
+        env.DB.prepare("INSERT INTO admin_events(actor,action,target) SELECT ?1,'generate-previews',?2 WHERE EXISTS(SELECT 1 FROM media_objects WHERE id=?2 AND preview_key=?3 AND viewer_key=?4 AND deleting=0)").bind(actor,renditionRoute[1],gridKey,viewerKey)
+      ]);
+      if(!updated.results.length)throw new Problem(409,'This photo is no longer available.');
     }catch{await env.MEDIA.delete([gridKey,viewerKey]);throw new Problem(503,"Preview generation could not be saved. Please try again.");}
     return json({saved:true});
   }
   const mediaRoute = /^\/api\/media\/([a-z0-9-]+)\/(preview|viewer|original)$/.exec(path);
   if (mediaRoute && request.method === "GET") {
-    const media = await env.DB.prepare("SELECT * FROM media_objects WHERE id=?1 AND year=?2").bind(mediaRoute[1],year).first<Media>();
+    const media = await env.DB.prepare("SELECT * FROM media_objects WHERE id=?1 AND year=?2 AND deleting=0").bind(mediaRoute[1],year).first<Media>();
     const key = mediaRoute[2] === "preview" ? media?.preview_key : mediaRoute[2]==="viewer"?(media?.viewer_key||media?.preview_key):media?.original_key;
     if (!key) throw new Problem(404,"Photo not found.");
     const file = await env.MEDIA.get(key); if (!file) throw new Problem(404,"Photo not found.");
@@ -328,6 +335,7 @@ export default {
       response = actor ? await route(request,env,actor) : json({error:"Sign in with the approved admin Google account to continue."},401);
     } catch (error) {
       if (error instanceof Problem || error instanceof UploadProblem) response=json({error:error.message},error.status);
+      else if(error instanceof Error&&error.message.includes('photo is no longer available'))response=json({error:'A photo was deleted in another tab. Remove it from this draft before saving or publishing.'},409);
       else if (error instanceof Error && error.message.includes("UNIQUE constraint failed: invites.edition_year, invites.phone"))
         response=json({error:"That phone number is already in this scrapbook. Refresh to see the latest invitations."},409);
       else if(error instanceof Error && error.message.includes("verification contact needs a phone"))

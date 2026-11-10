@@ -213,6 +213,12 @@ and EXIF stay unchanged. Migration 0007 adds temporary private upload sessions;
 apply it before deploying this admin update. See admin/README.md for failure
 cleanup, expiry, compatibility, and validation details. HEIC remains unsupported.
 
+Migration 0008 adds exact-original reuse, recovery without stale upload locks,
+Retry remaining for interrupted batches, and confirmed deletion of unused library
+photos. Existing saved-draft/published photos stay protected. See admin/README.md
+for the fingerprint and deletion behavior; uploading or deleting unused media
+does not publish scrapbook content.
+
 New uploads generate 800px grid and 2400px viewer JPEG previews (maximum long
 edge, without upscaling). Only Full resolution requests the original. Each
 invitation can request each personal original five times per rolling 24-hour
