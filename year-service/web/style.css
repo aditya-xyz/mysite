@@ -91,12 +91,15 @@ header .header-pixel{display:block;width:auto;height:64px;max-width:66px;object-
 @media(max-width:600px){header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px}header .signature{grid-column:1;grid-row:1;align-self:end}header .edition-stamp{display:contents}header .edition-label{grid-column:1;grid-row:2;font-size:10px;align-self:start}header .header-pixel{grid-column:2;grid-row:1/span 2;height:56px;max-width:56px}}
 
 /* Declare both schemes early, then keep the chosen palette independent of the OS. */
-:root[data-palette="moss"]{color-scheme:light;color-scheme:only light}
-:root[data-palette="night"]{color-scheme:dark;--paper:#172922;--surface:#223b31;--ink:#edf1e6;--muted:#b9c7b6;--line:#486052;--accent:#f2b28a;--button:#b9d7b7;--button-ink:#17352b;--error:#ffb3a7}
+:root[data-palette="moss"]{color-scheme:light dark}
+:root[data-palette="night"]{color-scheme:dark light;--paper:#172922;--surface:#223b31;--ink:#edf1e6;--muted:#b9c7b6;--line:#486052;--accent:#f2b28a;--button:#b9d7b7;--button-ink:#17352b;--error:#ffb3a7}
 .theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:44px;min-width:44px;min-height:44px;border:1px solid var(--line);border-radius:50%;padding:8px;background:transparent;color:var(--ink);font:500 12px/1.2 system-ui,sans-serif;cursor:pointer;letter-spacing:0}
 .theme-toggle[hidden]{display:none}.theme-toggle[aria-pressed="true"]{background:var(--surface);border-color:var(--accent)}.theme-toggle svg{flex:none;pointer-events:none}
-@media(max-width:600px){header{grid-template-columns:minmax(0,1fr) 44px auto;column-gap:12px}header .header-pixel{grid-column:3;grid-row:1/span 2}header .theme-toggle{grid-column:2;grid-row:1/span 2;padding:8px;width:44px;align-self:center}}
+@media(max-width:600px){header{grid-template-columns:minmax(0,1fr) auto 44px;column-gap:12px}header .header-pixel{grid-column:2;grid-row:1/span 2}header .theme-toggle{grid-column:3;grid-row:1/span 2;padding:8px;width:44px;align-self:center}}
 
 #photo::backdrop{color-scheme:dark}#photo .photo-caption,#photo #save-status{color:#fff}
 
 .theme-toggle .theme-sun{display:none}:root[data-palette="night"] .theme-toggle .theme-sun{display:block}:root[data-palette="night"] .theme-toggle .theme-moon{display:none}
+
+/* Keep both root schemes advertised to Safari; native form controls follow the reader. */
+:root[data-palette="moss"] input{color-scheme:light}:root[data-palette="night"] input{color-scheme:dark}

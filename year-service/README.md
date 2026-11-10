@@ -317,8 +317,11 @@ the operating system prefers dark colors. The header's sun/moon icon button is a
 explicit opt-in to a dark moss palette, and remembers the reader's choice on that
 browser/hostname. The small same-origin theme.js runs before CSS to restore that
 choice before paint; blocked local storage falls back safely to the default.
-Palette CSS selects light (with an `only light` progressive enhancement) or dark
-native controls. Photos and the photo viewer are not recolored.
+Both palette rules keep `light dark` support declared on the root; overriding
+that declaration with light-only colors may let Safari beta transform the
+light palette again. Inputs select their native scheme separately. The original
+light colors remain #ecf0e5 paper and #20392f ink. Pixel sits to the left of the
+sun/moon button on phones and desktop. Photos and the viewer are not recolored.
 
 WebKit's Safari 27.3 Adaptive Dark Mode documentation says declaring support for
 both schemes opts the page out of its automatic recoloring. Verify the beta's

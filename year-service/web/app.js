@@ -26,7 +26,7 @@ function footerProfile(name,profileUrl){
   }catch{return document.createTextNode(name);}
 }
 function renderFooter(shareSocials=false){
-  if(!document.querySelector('.header-pixel'))document.querySelector('.edition-stamp').insertAdjacentHTML('afterbegin','<img class="header-pixel" src="/pixel-santa.png" alt="Pixel wearing a Santa hat" width="369" height="400" decoding="async">');
+  if(!document.querySelector('.header-pixel'))document.querySelector('#theme-toggle').insertAdjacentHTML('beforebegin','<img class="header-pixel" src="/pixel-santa.png" alt="Pixel wearing a Santa hat" width="369" height="400" decoding="async">');
   document.querySelector('.footer-ornament').innerHTML=winterSnowflake;
   const links=shareSocials?scrapbookConfig.instagram:{};
   document.querySelector('footer > span').replaceChildren('By ',footerProfile('Aditya',links.aditya),' & ',footerProfile('Angela',links.angela),', with help from ',footerProfile('Pixel',links.pixel));
