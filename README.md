@@ -23,7 +23,8 @@ The public site no longer requests the Railway `/project` or `/experience`
 endpoints and needs no MongoDB connection, S3 bucket, or `VITE_API_BASE_URL`.
 The social footer links to GitHub, LinkedIn, and Medium. Links are maintained
 in `src/socials.ts`. The hero contains only Explore my work; its LinkedIn button
-has been removed. There is no contact form or Getform integration.
+has been removed. The header contains the wordmark and Work/Toolkit/About navigation,
+with no Let’s connect link. There is no contact form or Getform integration.
 
 To update content, edit the local arrays and add/import any new images, then
 commit and deploy them together. Keep original photo backups separately.
@@ -66,3 +67,14 @@ configuration. Cloudflare DNS delegation and the admin hostname's HTTPS were
 verified on November 9, 2026, including the Access redirect and the signed-in
 dashboard. The public website remains hosted on Netlify. The protected
 workers.dev admin URL remains a fallback.
+
+## Browser color schemes
+
+The HTML declares `color-scheme: light dark` before React loads so Safari can
+recognize the existing native palette support. CSS selects a light color scheme
+for Paper/Moss and dark for After hours through the portfolio’s palette attribute.
+Light palettes also specify `only light` to discourage automatic recoloring in
+supporting browsers. Safari 27.3 beta 1 does not yet support that keyword; its
+Adaptive Dark Mode documentation says the light/dark support declaration skips
+automatic transformation. Verify on the actual beta device after deployment;
+desktop previews do not reproduce that feature.

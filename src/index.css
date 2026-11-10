@@ -6,6 +6,18 @@
 * {
   box-sizing: border-box;
 }
+/* Declare native dark support before React renders; each palette selects its scheme. */
+:root {
+  color-scheme: light dark;
+}
+:root:has(.portfolio[data-palette="paper"]),
+:root:has(.portfolio[data-palette="moss"]) {
+  color-scheme: light;
+  color-scheme: only light;
+}
+:root:has(.portfolio[data-palette="night"]) {
+  color-scheme: dark;
+}
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 100px;
@@ -166,14 +178,7 @@ em {
   color: var(--accent);
   border-color: var(--accent);
 }
-.header-social {
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  border-bottom: 1px solid var(--ink);
-  padding-block: 8px;
-}
+
 .hero {
   display: grid;
   grid-template-columns: 1.14fr 1fr;
@@ -648,9 +653,6 @@ h1 em {
   }
   .header-inner nav a {
     font-size: 12px;
-  }
-  .header-social {
-    display: none;
   }
   .hero {
     grid-template-columns: 1fr;
