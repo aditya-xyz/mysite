@@ -1,4 +1,4 @@
-export interface InvitationAudience { id:string; person_id:string|null; edition_year:number; member_ids:string; addressed_to:string|null; name:string }
+export interface InvitationAudience { id:string; person_id:string|null; edition_year:number; member_ids:string; addressed_to:string|null; name:string; share_socials?:number }
 export const invitationName = (invite: Pick<InvitationAudience,'addressed_to'|'name'>) => invite.addressed_to || invite.name;
 export const invitationMembers = (invite: Pick<InvitationAudience,'member_ids'|'person_id'>):string[] =>
   invite.member_ids ? JSON.parse(invite.member_ids) : invite.person_id ? [invite.person_id] : [];

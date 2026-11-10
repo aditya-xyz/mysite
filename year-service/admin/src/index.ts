@@ -1,3 +1,4 @@
+import {sealLink,unsealLink,invitationUrl,type LinkConfig} from './invitation-links.ts';
 import { previewDimensions,imageDimensions } from "../../src/image-dimensions.ts";
 import { invitationAudience, invitationName, type InvitationAudience } from "../../src/invitations.ts";
 import { canonicalDraft, type Contact } from "./people.ts";
@@ -7,8 +8,8 @@ import { mediaLibraryRoute } from './media-library.ts';
 import { token, digest, now, sameOrigin } from "../../src/security.ts";
 import { clientEdition, type Draft, type Published, type PublishedPhoto } from "../../src/edition.ts";
 
-interface Env extends AuthConfig { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
-interface EditionRow { draft_json: string; draft_version: number; published_version: number | null; published_at: number | null }
+interface Env extends AuthConfig, LinkConfig { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
+interface EditionRow { draft_json: string; draft_version: number; published_version: number | null; published_at: number | null; is_active:number }
 interface Media { id: string; preview_key: string; viewer_key:string|null; original_key: string | null; filename: string; mime: string; bytes: number }
 class Problem extends Error { constructor(public status: number, message: string) { super(message); } }
 const json = (value: unknown, status = 200) => Response.json(value, { status });
@@ -115,13 +116,13 @@ async function route(request: Request, env: Env, actor: string) {
   }
   if (path === "/api/editions") {
     if (request.method === "GET") {
-      const rows = await env.DB.prepare(`SELECT year,draft_json,draft_version,published_version,published_at,updated_at,
+      const rows = await env.DB.prepare(`SELECT year,draft_json,draft_version,published_version,published_at,is_active,updated_at,
         (SELECT count(DISTINCT m.value) FROM invites i,json_each(i.member_ids) m WHERE i.edition_year=editions.year) AS people_count
         FROM editions ORDER BY year DESC`).all<EditionRow & {year:number;updated_at:number;people_count:number}>();
       return json({editions:rows.results.map(row=>{
         const draft=JSON.parse(row.draft_json) as Draft;
         return {year:row.year,title:draft.title,authors:draft.authors,version:row.draft_version,
-          publishedVersion:row.published_version,publishedAt:row.published_at,updatedAt:row.updated_at,
+          publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,updatedAt:row.updated_at,
           photoCount:draft.photos.length,storyCount:draft.stories.length,peopleCount:row.people_count};
       })});
     }
@@ -149,9 +150,9 @@ async function route(request: Request, env: Env, actor: string) {
   if (path.startsWith("/api/")) await edition(env,year);
   if (path === "/api/state" && request.method === "GET") {
     const row = await edition(env,year);
-    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
+    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,share_socials,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
-    return json({actor,year,draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
+    return json({actor,year,draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
     const data = await body(request), draft = await validDraft(data.draft,env,year);
@@ -170,11 +171,11 @@ async function route(request: Request, env: Env, actor: string) {
     const invitations=await env.DB.prepare("SELECT m.value AS person_id FROM invites i,json_each(i.member_ids) m WHERE i.edition_year=?1 AND i.revoked_at IS NULL AND i.expires_at>?2").bind(year,now()).all<{person_id:string}>();
     const active=new Set(invitations.results.map(i=>i.person_id));
     if(draft.photos.some(p=>!p.hidden && p.recipients.some(id=>!active.has(id))))return fail("Invite every selected photo recipient to this scrapbook before publishing.");
-    const result = await env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch() WHERE year=?3 AND draft_version=?2 RETURNING published_version")
+    const result = await env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch(),is_active=1 WHERE year=?3 AND draft_version=?2 RETURNING published_version")
       .bind(JSON.stringify(published),row.draft_version,year).first<{published_version:number}>();
     if (!result) throw new Problem(409,"The draft changed while publishing. Review it again.");
     await audit(env,actor,"publish",String(year)).run();
-    return json({publishedVersion:result.published_version});
+    return json({publishedVersion:result.published_version,isActive:true});
   }
   if (path === "/api/preview" && request.method === "GET") {
     const id = url.searchParams.get("recipient") || "";
@@ -186,12 +187,39 @@ async function route(request: Request, env: Env, actor: string) {
     const invite=invitationId?await env.DB.prepare("SELECT * FROM invites WHERE id=?1 AND edition_year=?2").bind(invitationId,year).first<InvitationAudience>():null;
     if(invitationId && !invite)throw new Problem(404,"Invitation not found.");
     const data = invite ? clientEdition(published,invite.id,invitationName(invite),year,await invitationAudience(env.DB,invite)) : clientEdition(published,id,person?.name || "friend",year,person?.id);
+    data.shareSocials=!!invite?.share_socials;
     data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`,viewerSrc:`/api/editions/${year}/media/${p.id}/viewer`}));
     return json(data);
+  }
+  const linkRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/link$/.exec(path);
+  if(linkRoute && request.method==="POST"){
+    const data=await body(request),id=linkRoute[1];
+    const invite=await env.DB.prepare("SELECT token_hash,token_encrypted,share_socials,revoked_at,expires_at,name,addressed_to FROM invites WHERE id=?1 AND edition_year=?2").bind(id,year).first<{token_hash:string;token_encrypted:string|null;share_socials:number;revoked_at:number|null;expires_at:number;name:string;addressed_to:string|null}>();
+    if(!invite)throw new Problem(404,"Invitation not found.");
+    if(invite.revoked_at||invite.expires_at<=now())throw new Problem(409,"This invitation is expired or revoked. Create a fresh link to reopen access.");
+    let raw:string;
+    if(data.url!==undefined){
+      if(typeof data.url!=="string")return fail("Paste the original invitation link.");
+      let parsed:URL;try{parsed=new URL(data.url);}catch{return fail("Paste the original invitation link.");}
+      if(![new URL(env.JOURNAL_ORIGIN).origin,...(env.SOCIAL_JOURNAL_ORIGIN?[new URL(env.SOCIAL_JOURNAL_ORIGIN).origin]:[])].includes(parsed.origin))return fail("Use one of this scrapbook’s invitation links.");
+      raw=parsed.hash.slice(1);
+      if(!/^[a-f0-9]{64}$/.test(raw)||await digest(raw)!==invite.token_hash)return fail("That link doesn’t match this invitation.");
+      const encrypted=await sealLink(raw,env.INVITATION_LINK_KEY,id,year);
+      if(!encrypted)throw new Problem(503,"Invitation link storage is not configured.");
+      const saved=await env.DB.prepare("UPDATE invites SET token_encrypted=?1 WHERE id=?2 AND edition_year=?3 AND token_hash=?4 AND revoked_at IS NULL AND expires_at>?5 RETURNING id").bind(encrypted,id,year,invite.token_hash,now()).first();
+      if(!saved)throw new Problem(409,"This invitation changed. Reopen it and try again.");
+      await audit(env,actor,"restore-invitation-link",id).run();
+    }else{
+      if(!invite.token_encrypted)throw new Problem(409,"Paste the original link once to restore it without replacing it.");
+      try{raw=await unsealLink(invite.token_encrypted,env.INVITATION_LINK_KEY,id,year);}catch{throw new Problem(503,"The stored link couldn’t be reopened. Try restoring the original link.");}
+      if(await digest(raw)!==invite.token_hash)throw new Problem(409,"This link was replaced. Reopen the invitation.");
+    }
+    return json({name:invitationName(invite),url:invitationUrl(env,raw,!!invite.share_socials)});
   }
   const invitationRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/details$/.exec(path);
   if ((path === "/api/invitations" || invitationRoute) && request.method === "POST") {
     const data=await body(request),personId=text(data.verificationContactId??data.personId,"verification contact",100);
+    if(data.shareSocials!==undefined && typeof data.shareSocials!=="boolean")return fail("Choose whether to share socials.");
     const members=data.memberIds??[personId];
     if(!Array.isArray(members)||!members.length||members.length>20||members.some(id=>typeof id!=="string")||new Set(members).size!==members.length)
       return fail("Choose between 1 and 20 different people for the invitation.");
@@ -205,10 +233,10 @@ async function route(request: Request, env: Env, actor: string) {
     if(invitationRoute){
       if(!Number.isInteger(data.version))return fail("Missing invitation version.");
       const id=invitationRoute[1];
-      const saved=await env.DB.prepare(`UPDATE invites SET person_id=?1,name=?2,phone=?3,addressed_to=?4,member_ids=?5,version=version+1,
+      const saved=await env.DB.prepare(`UPDATE invites SET person_id=?1,name=?2,phone=?3,addressed_to=?4,member_ids=?5,share_socials=coalesce(?10,share_socials),version=version+1,
         challenge_expires_at=CASE WHEN person_id<>?1 OR member_ids<>?5 THEN 0 ELSE challenge_expires_at END
         WHERE id=?6 AND edition_year=?7 AND version=?8 AND EXISTS(SELECT 1 FROM people WHERE id=?1 AND version=?9) RETURNING id`)
-        .bind(contact.id,contact.name,contact.phone,addressedTo,JSON.stringify(members),id,year,data.version as number,contact.version).first();
+        .bind(contact.id,contact.name,contact.phone,addressedTo,JSON.stringify(members),id,year,data.version as number,contact.version,data.shareSocials===undefined?null:Number(data.shareSocials)).first();
       if(!saved)throw new Problem(409,"This invitation changed in another window. Refresh before editing again.");
       await audit(env,actor,"edit-invitation",id).run();
       return json({saved:true});
@@ -216,12 +244,12 @@ async function route(request: Request, env: Env, actor: string) {
     const count=await env.DB.prepare("SELECT count(*) n FROM invites WHERE edition_year=?1").bind(year).first<{n:number}>();
     if(count && count.n>=100)return fail("This scrapbook supports up to 100 invitations.");
     const id="person-"+token().slice(0,24),raw=token();
-    const created=await env.DB.prepare(`INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,edition_year,addressed_to,member_ids)
-      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9 FROM people WHERE id=?2 AND version=?10 AND phone IS NOT NULL ON CONFLICT(edition_year,person_id) WHERE person_id IS NOT NULL DO NOTHING RETURNING id`)
-      .bind(id,contact.id,await digest(raw),contact.name,contact.phone,now()+90*86400,year,addressedTo,JSON.stringify(members),contact.version).first();
+    const created=await env.DB.prepare(`INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,edition_year,addressed_to,member_ids,share_socials,token_encrypted)
+      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?11,?12 FROM people WHERE id=?2 AND version=?10 AND phone IS NOT NULL ON CONFLICT(edition_year,person_id) WHERE person_id IS NOT NULL DO NOTHING RETURNING id`)
+      .bind(id,contact.id,await digest(raw),contact.name,contact.phone,now()+90*86400,year,addressedTo,JSON.stringify(members),contact.version,Number(!!data.shareSocials),await sealLink(raw,env.INVITATION_LINK_KEY,id,year)).first();
     if(!created)throw new Problem(409,"This verification contact already has an invitation here. Edit their existing invitation to include both people.");
     await audit(env,actor,"create-invitation",id).run();
-    return json({id,personId:contact.id,url:env.JOURNAL_ORIGIN+"/#"+raw},201);
+    return json({id,personId:contact.id,url:invitationUrl(env,raw,!!data.shareSocials)},201);
   }
   if (path === "/api/people" && request.method === "POST") {
     const data = await body(request), name = text(data.name,"name",100), phone = text(data.phone,"phone number",20);
@@ -232,8 +260,8 @@ async function route(request: Request, env: Env, actor: string) {
     if (duplicate) return fail("That phone number is already in this edition.");
     const id = "person-" + token().slice(0,24), raw = token();
     await env.DB.batch([
-      env.DB.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at,edition_year) VALUES(?1,?2,?3,?4,?5,?6)")
-        .bind(id,await digest(raw),name,phone,now()+90*86400,year), audit(env,actor,"add-person",id)
+      env.DB.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at,edition_year,token_encrypted) VALUES(?1,?2,?3,?4,?5,?6,?7)")
+        .bind(id,await digest(raw),name,phone,now()+90*86400,year,await sealLink(raw,env.INVITATION_LINK_KEY,id,year)), audit(env,actor,"add-person",id)
     ]);
     return json({id,url:env.JOURNAL_ORIGIN+"/#"+raw},201);
   }
@@ -262,15 +290,15 @@ async function route(request: Request, env: Env, actor: string) {
   const personRoute = /^\/api\/people\/(person-[a-f0-9]{24}|angela)\/(invite|revoke)$/.exec(path);
   if (personRoute && request.method === "POST") {
     const id = personRoute[1];
-    const person = await env.DB.prepare("SELECT id FROM invites WHERE id=?1 AND edition_year=?2").bind(id,year).first();
+    const person = await env.DB.prepare("SELECT id,share_socials FROM invites WHERE id=?1 AND edition_year=?2").bind(id,year).first<{id:string;share_socials:number}>();
     if (!person) throw new Problem(404,"Recipient not found.");
     const raw = token(), revoke = personRoute[2] === "revoke";
     await env.DB.batch([
       revoke ? env.DB.prepare("UPDATE invites SET version=version+1,revoked_at=?1,challenge_expires_at=0 WHERE id=?2").bind(now(),id) :
-        env.DB.prepare("UPDATE invites SET version=version+1,token_hash=?1,revoked_at=NULL,expires_at=?2,last_sent_at=0,challenge_expires_at=0,attempts=0 WHERE id=?3").bind(await digest(raw),now()+90*86400,id),
+        env.DB.prepare("UPDATE invites SET version=version+1,token_hash=?1,revoked_at=NULL,expires_at=?2,last_sent_at=0,challenge_expires_at=0,attempts=0,token_encrypted=?4 WHERE id=?3").bind(await digest(raw),now()+90*86400,id,await sealLink(raw,env.INVITATION_LINK_KEY,id,year)),
       env.DB.prepare("DELETE FROM sessions WHERE invite_id=?1").bind(id), audit(env,actor,revoke?"revoke-invite":"rotate-invite",id)
     ]);
-    return json(revoke ? {revoked:true} : {url:env.JOURNAL_ORIGIN+"/#"+raw});
+    return json(revoke ? {revoked:true} : {url:invitationUrl(env,raw,!!person.share_socials)});
   }
   const library=await mediaLibraryRoute(request,env,actor,year,path,body);
   if(library)return library;

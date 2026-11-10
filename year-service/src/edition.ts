@@ -12,7 +12,7 @@ export const visiblePhotos = (edition: Published, recipient: string, personId:st
   edition.photos.filter(p => !p.hidden && !(p.audience === "personal" && !p.recipients.length) && (p.recipients.length === 0 || p.recipients.includes(recipient) || (Array.isArray(personId)?personId:[personId]).some(id=>p.recipients.includes(id))));
 export function clientEdition(edition: Published, recipient: string, name: string, year: number, personId:string|string[]=recipient) {
   return { year, name, title: edition.title, authors: edition.authors, intro: edition.intro,
-    note: edition.note, sharedTitle: edition.sharedTitle, stories: edition.stories,
+    note: edition.note, sharedTitle: edition.sharedTitle, stories: edition.stories, shareSocials:false,
     photos: visiblePhotos(edition, recipient, personId).map(p => ({ id: p.id, caption: p.caption, alt: p.alt,
       width:p.width,height:p.height,personal: p.recipients.length > 0, src: `/api/media/${p.id}`,viewerSrc:`/api/media/${p.id}/viewer`,
       canSave: p.recipients.length > 0 && !!p.original_key })) };

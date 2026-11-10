@@ -112,3 +112,5 @@ html:has(#modal[open]){overflow:hidden}
 
 .photo-visibility{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.photo-visibility .photo-number{margin:0}.photo-visibility button{min-height:36px}.photo-editor.is-hidden{border-style:dashed;border-color:#705e3e}.is-hidden>img{opacity:.6}.hidden-photo-hint{color:var(--amber);margin-bottom:18px}
 .photo-visibility-actions{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}.photo-visibility-actions .hint{margin:0;max-width:490px}
+
+.socials-toggle{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:16px;margin:0 0 20px}.socials-toggle input{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0;margin-top:2px}.socials-toggle strong{display:block;font-size:13px;margin-bottom:5px}.socials-toggle span span{display:block;font-size:11px;color:var(--muted);line-height:1.8}.edition-access{font-size:11px}.edition-access.active{color:var(--accent)}

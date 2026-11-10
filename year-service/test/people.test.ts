@@ -51,6 +51,8 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
     await db.exec((await readFile("migrations/0006_photo_renditions_downloads.sql","utf8")).replace(/\n/g," "));
     await db.exec((await readFile('migrations/0007_photo_uploads.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.prepare('UPDATE editions SET published_at=unixepoch() WHERE year=2026').run();
+    await db.batch((await readFile('migrations/0009_invitation_sharing.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     let oldPerson='',newPerson='',version=1,inviteId='',newRaw='';
     await t.test('migration links existing invitations without changing tokens, sessions, or manifests',async()=>{
       const contacts=await (await req('contacts')).json() as {people:{id:string;name:string;version:number}[]};
@@ -59,7 +61,8 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
       assert.equal((await db.prepare('SELECT count(*) n FROM sessions').first<{n:number}>())!.n,2);
       const edition=(await db.prepare('SELECT draft_json,published_json FROM editions WHERE year=2026').first<{draft_json:string;published_json:string}>())!;
       assert.equal(edition.draft_json,draftJSON);assert.equal(edition.published_json,publishedJSON);
-      for(const raw of ['a'.repeat(64),'b'.repeat(64)])assert.equal((await guest('media/legacy-photo/original',raw)).status,200);
+      assert.equal((await guest('media/legacy-photo/original','a'.repeat(64))).status,200);
+      assert.equal((await guest('media/legacy-photo/original','b'.repeat(64))).status,409,'Only the last published year remains active');
       assert.deepEqual(new Uint8Array(await (await guest('media/legacy-photo/original','a'.repeat(64))).arrayBuffer()),original);
       const opened=await mf.dispatchFetch('https://guest.test/api/open',{method:'POST',headers:{Origin:'https://guest.test','Content-Type':'application/json'},body:JSON.stringify({token:'a'.repeat(64)})});assert.equal(opened.status,200);
       const state=await (await req('editions/2026/state')).json() as {draft:Draft};assert.deepEqual(state.draft.photos[0].recipients,[oldPerson]);
@@ -97,11 +100,12 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
       await db.prepare('INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)').bind(await digest(newRaw),inviteId,expiry).run();
       assert.deepEqual(new Uint8Array(await (await guest('media/legacy-photo/original',newRaw)).arrayBuffer()),original);
       assert.equal((await guest('media/legacy-photo/original','a'.repeat(64))).status,404);
-      assert.equal((await guest('media/legacy-photo/original','b'.repeat(64))).status,200,'2027 still uses its untouched legacy manifest');
+      assert.equal((await guest('media/legacy-photo/original','b'.repeat(64))).status,409,'Inactive 2027 keeps its manifest but closes guest access');
     });
     await t.test('global edits use version checks and phone changes invalidate all linked sessions without rotating links',async()=>{
       const name=await req(`contacts/${oldPerson}/details`,{version:1,name:'Angela Updated',phone:'+15555550101'});assert.equal(name.status,200);
-      assert.equal((await guest('journal','b'.repeat(64))).status,200,'Name-only edits retain sessions');
+      assert.equal((await guest('journal',newRaw)).status,200,'Name-only edits retain active sessions');
+      assert.equal((await guest('journal','b'.repeat(64))).status,409,'Inactive year remains closed');
       assert.equal((await req(`contacts/${oldPerson}/details`,{version:1,name:'Stale',phone:'+15555550109'})).status,409);
       assert.equal((await req(`contacts/${oldPerson}/details`,{version:2,name:'Angela Updated',phone:'+15555550109'})).status,200);
       for(const raw of ['a'.repeat(64),'b'.repeat(64)])assert.equal((await guest('journal',raw)).status,401);

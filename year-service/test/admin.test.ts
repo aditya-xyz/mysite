@@ -17,10 +17,10 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
   const mf = new Miniflare(convertV4MiniflareOptions({workers:[{
     name:"admin",routes:["admin.test/*"],modules:true,scriptPath:".wrangler/admin-test-bundle/index.js",compatibilityDate:"2026-08-06",
     d1Databases:{DB:"shared-db"},r2Buckets:{MEDIA:"shared-media"},
-    bindings:{ADMIN_EMAIL:adminEmail,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:aud,JOURNAL_ORIGIN:"https://journal.test"},outboundService:outbound
+    bindings:{ADMIN_EMAIL:adminEmail,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:aud,JOURNAL_ORIGIN:"https://journal.test",SOCIAL_JOURNAL_ORIGIN:"https://scrapbook.test",INVITATION_LINK_KEY:"1".repeat(64)},outboundService:outbound
   },{
-    name:"guest",routes:["journal.test/*"],modules:true,scriptPath:".wrangler/test-bundle/index.js",compatibilityDate:"2026-08-06",
-    d1Databases:{DB:"shared-db"},r2Buckets:{MEDIA:"shared-media"},bindings:{SMS_ENABLED:"false"},outboundService:outbound
+    name:"guest",routes:["journal.test/*","scrapbook.test/*"],modules:true,scriptPath:".wrangler/test-bundle/index.js",compatibilityDate:"2026-08-06",
+    d1Databases:{DB:"shared-db"},r2Buckets:{MEDIA:"shared-media"},bindings:{SMS_ENABLED:"false",JOURNAL_ORIGIN:"https://journal.test",SOCIAL_JOURNAL_ORIGIN:"https://scrapbook.test"},outboundService:outbound
   }]}));
   async function signed(email=adminEmail,audience=aud,expires="5m",iss=issuer) {
     return new SignJWT({email}).setProtectedHeader({alg:"RS256",kid:"test-key"})
@@ -33,6 +33,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
     await db.exec((await readFile("migrations/0006_photo_renditions_downloads.sql","utf8")).replace(/\n/g," "));
     await db.exec((await readFile('migrations/0007_photo_uploads.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0009_invitation_sharing.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     const expires=Math.floor(Date.now()/1000)+86400;
     await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',?1,'Angela','+15555550101',?2)").bind(await digest("a".repeat(64)),expires).run();
     let assertion=await signed();
@@ -142,6 +143,39 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
       held.photos[0].hidden=true;await save();assert.equal((await req("/api/publish",{version})).status,400,"All-hidden publication is rejected");
       held.photos[0].hidden=false;await save();assert.equal((await req("/api/publish",{version})).status,200);
     });
+    await t.test("invitation socials choose the URL and footer flag, while links reopen without rotation",async()=>{
+      const {person:contact}=await (await req("/api/contacts",{name:"Social test",phone:"+15555550108"})).json() as {person:{id:string}};
+      const created=await req("/api/editions/2026/invitations",{memberIds:[contact.id],verificationContactId:contact.id,addressedTo:"Test household",shareSocials:true});
+      assert.equal(created.status,201,await created.clone().text());const invite=await created.json() as {id:string;url:string};
+      assert.equal(new URL(invite.url).origin,"https://scrapbook.test");const raw=new URL(invite.url).hash.slice(1);
+      const openAt=(origin:string)=>mf.dispatchFetch(origin+"/api/open",{method:"POST",headers:{Origin:origin,"Content-Type":"application/json"},body:JSON.stringify({token:raw})});
+      const redirected=await openAt("https://journal.test");assert.equal((await redirected.json() as {redirectUrl:string}).redirectUrl,invite.url);assert.equal(redirected.headers.get("Set-Cookie"),null);
+      const canonical=await openAt("https://scrapbook.test");assert.ok(canonical.headers.get("Set-Cookie")?.includes("__Host-year_invite="));
+      const stored=await db.prepare("SELECT token_hash,token_encrypted,version FROM invites WHERE id=?1").bind(invite.id).first<{token_hash:string;token_encrypted:string;version:number}>();
+      assert.equal(stored!.token_hash,await digest(raw));assert.ok(!stored!.token_encrypted.includes(raw));
+      const link=()=>req(`/api/editions/2026/invitations/${invite.id}/link`,{});
+      assert.equal((await link()).status,200);assert.equal((await (await link()).json() as {url:string}).url,invite.url);
+      assert.equal((await req(`/api/editions/2027/invitations/${invite.id}/link`,{})).status,404);
+      assert.equal((await req(`/api/editions/2026/invitations/${invite.id}/link`,{},"https://evil.test")).status,403);
+      assert.equal((await req(`/api/editions/2026/invitations/${invite.id}/link`,{},undefined,"")).status,401);
+      const previewOn=await (await req(`/api/preview?invitation=${invite.id}`)).json() as {shareSocials:boolean};assert.equal(previewOn.shareSocials,true);
+      const session="e".repeat(64);await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)").bind(await digest(session),invite.id,expires).run();
+      assert.equal((await (await guestReq("journal",session)).json() as {shareSocials:boolean}).shareSocials,true);
+      const edited=await req(`/api/editions/2026/invitations/${invite.id}/details`,{memberIds:[contact.id],verificationContactId:contact.id,addressedTo:"Test household",shareSocials:false,version:stored!.version});assert.equal(edited.status,200);
+      const cloudflareUrl=(await (await link()).json() as {url:string}).url;assert.equal(new URL(cloudflareUrl).origin,"https://journal.test");assert.equal(new URL(cloudflareUrl).hash,new URL(invite.url).hash);
+      assert.equal((await (await openAt("https://scrapbook.test")).json() as {redirectUrl:string}).redirectUrl,cloudflareUrl);
+      assert.equal((await (await guestReq("journal",session)).json() as {shareSocials:boolean}).shareSocials,false,"Preference applies to existing sessions without publishing");
+      assert.equal((await (await req(`/api/preview?invitation=${invite.id}`)).json() as {shareSocials:boolean}).shareSocials,false);
+      // A legacy hash-only invitation can retain its exact token, sessions and version.
+      await db.prepare("UPDATE invites SET token_encrypted=NULL WHERE id=?1").bind(invite.id).run();
+      assert.equal((await link()).status,409);
+      assert.equal((await req(`/api/editions/2026/invitations/${invite.id}/link`,{url:"https://journal.test/#"+"f".repeat(64)})).status,400);
+      assert.equal((await req(`/api/editions/2026/invitations/${invite.id}/link`,{url:cloudflareUrl})).status,200);
+      assert.equal((await (await link()).json() as {url:string}).url,cloudflareUrl);
+      const rotated=await req(`/api/people/${invite.id}/invite`,{});assert.equal(rotated.status,200);const rotatedUrl=(await rotated.json() as {url:string}).url;assert.notEqual(rotatedUrl,cloudflareUrl);assert.equal((await (await link()).json() as {url:string}).url,rotatedUrl);
+      assert.equal((await guestReq("journal",session)).status,401);
+      assert.equal((await req(`/api/people/${invite.id}/revoke`,{})).status,200);assert.equal((await link()).status,409);
+    });
     let nextPerson="",nextPhoto="",nextInvite="",nextVersion=1;
     const next=(path:string,data?:unknown)=>req("/api/editions/2027/"+path,data);
     let nextDraft:import("../src/edition.ts").Draft;
@@ -192,24 +226,28 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
     await t.test("unpublished scrapbooks never fall back to the 2026 pilot or send SMS",async()=>{
       await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)").bind(await digest(nextSession),nextPerson,expires).run();
       assert.equal((await guestReq("journal",nextSession)).status,409);
-      assert.equal((await guestReq(`media/${photoId}`,nextSession)).status,404);
-      assert.equal((await guestReq(`media/${nextPhoto}`,nextSession)).status,404);
+      assert.equal((await guestReq(`media/${photoId}`,nextSession)).status,409);
+      assert.equal((await guestReq(`media/${nextPhoto}`,nextSession)).status,409);
       for(const [path,data] of [["invitation",undefined],["send",{}]] as const){
         const r=await mf.dispatchFetch("https://journal.test/api/"+path,{method:data?"POST":"GET",headers:{Origin:"https://journal.test",Cookie:"__Host-year_invite="+nextInvite,"Content-Type":"application/json"},...(data?{body:"{}"}:{})});
         assert.equal(r.status,409);
       }
       const opened=await mf.dispatchFetch("https://journal.test/api/open",{method:"POST",headers:{Origin:"https://journal.test","Content-Type":"application/json",Cookie:"__Host-year_session="+samToken},body:JSON.stringify({token:nextInvite})});
-      assert.equal(opened.status,200);assert.ok(opened.headers.getSetCookie().some(c=>c.startsWith("__Host-year_session=")&&c.includes("Max-Age=0")));
+      assert.equal(opened.status,409);assert.equal(opened.headers.get("Set-Cookie"),null);
     });
-    await t.test("publication and guest access resolve the invitation's year without affecting older editions",async()=>{
+    await t.test("publishing activates exactly one year and closes old invitation and media access",async()=>{
       assert.equal((await next("publish",{version:nextVersion})).status,200);
       const journal=await (await guestReq("journal",nextSession)).json() as {year:number;title:string;photos:{id:string;canSave:boolean}[]};
       assert.equal(journal.year,2027);assert.equal(journal.title,"Our 2027");assert.deepEqual(journal.photos.map(p=>p.id),[nextPhoto]);assert.equal(journal.photos[0].canSave,true);
       assert.deepEqual(new Uint8Array(await (await guestReq(`media/${nextPhoto}/original`,nextSession)).arrayBuffer()),original);
       assert.equal((await guestReq(`media/${photoId}`,nextSession)).status,404);
-      assert.equal((await guestReq(`media/${nextPhoto}`,samToken)).status,404);
-      assert.deepEqual(await (await req("/api/state")).json(),oldBefore);
-      const oldJournal=await (await guestReq("journal",samToken)).json() as {year:number;photos:{id:string}[]};assert.equal(oldJournal.year,2026);assert.equal(oldJournal.photos[0].id,photoId);
+      assert.equal((await guestReq(`media/${nextPhoto}`,samToken)).status,409);
+      assert.deepEqual(await (await req("/api/state")).json(),{...(oldBefore as object),isActive:false});
+      for(const path of ["journal",`media/${photoId}`,`media/${photoId}/viewer`,`media/${photoId}/original`])assert.equal((await guestReq(path,samToken)).status,409);
+      const oldOpen=await mf.dispatchFetch("https://journal.test/api/open",{method:"POST",headers:{Origin:"https://journal.test","Content-Type":"application/json"},body:JSON.stringify({token:"a".repeat(64)})});assert.equal(oldOpen.status,409);
+      for(const path of ["send","verify"]){const closed=await mf.dispatchFetch("https://journal.test/api/"+path,{method:"POST",headers:{Origin:"https://journal.test",Cookie:"__Host-year_invite="+"a".repeat(64),"Content-Type":"application/json"},body:JSON.stringify({code:"123456"})});assert.equal(closed.status,409);}
+      assert.deepEqual((await db.prepare("SELECT year FROM editions WHERE is_active=1").all()).results,[{year:2027}]);
+      assert.equal((await req("/api/publish",{version:-1})).status,409);assert.deepEqual((await db.prepare("SELECT year FROM editions WHERE is_active=1").all()).results,[{year:2027}],"Failed publish does not deactivate the active year");
       nextDraft.photos[0].recipients=[];const saved=await next("draft",{version:nextVersion,draft:nextDraft});assert.equal(saved.status,200);
       assert.equal((await guestReq(`media/${nextPhoto}/original`,nextSession)).status,200,"New draft edits must not change the published edition");
     });

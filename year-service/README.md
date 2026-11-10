@@ -295,3 +295,16 @@ cutout is `web/pixel-santa.png`, with a matching admin preview copy; the raw
 source photo stays outside the repository. No other private photos are included.
 The admin preview mirrors these opening/closing touches. The gallery and photo
 viewer remain unchanged from the pre-seasonal checkpoint, commit 48abe58.
+
+## Invitation presentation and the active year
+
+The guest Worker also serves `scrapbook.adityapatil.xyz`. Each invitation chooses
+its preferred origin and Instagram-footer visibility using Share our socials in
+admin. Existing copied links follow the current preference when opened. The
+Cloudflare and custom origins retain the same phone verification and private media
+checks; cookies remain specific to each host.
+
+Only one scrapbook is active for guests. Publishing activates the chosen year and
+closes older invitation/session access while retaining their content in admin.
+Migration 0009 and the private-admin encrypted link recovery setup are documented
+in admin/README.md. No scrapbook is published by a code deployment.

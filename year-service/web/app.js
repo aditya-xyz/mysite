@@ -25,19 +25,20 @@ function footerProfile(name,profileUrl){
     link.target='_blank';link.rel='noopener noreferrer';link.setAttribute('aria-label',name+' on Instagram');return link;
   }catch{return document.createTextNode(name);}
 }
-function renderFooter(){
-  document.querySelector('.edition-stamp').insertAdjacentHTML('afterbegin','<img class="header-pixel" src="/pixel-santa.png" alt="Pixel wearing a Santa hat" width="369" height="400" decoding="async">');
+function renderFooter(shareSocials=false){
+  if(!document.querySelector('.header-pixel'))document.querySelector('.edition-stamp').insertAdjacentHTML('afterbegin','<img class="header-pixel" src="/pixel-santa.png" alt="Pixel wearing a Santa hat" width="369" height="400" decoding="async">');
   document.querySelector('.footer-ornament').innerHTML=winterSnowflake;
-  const links=scrapbookConfig.instagram;
+  const links=shareSocials?scrapbookConfig.instagram:{};
   document.querySelector('footer > span').replaceChildren('By ',footerProfile('Aditya',links.aditya),' & ',footerProfile('Angela',links.angela),', with help from ',footerProfile('Pixel',links.pixel));
 }
 function sharedHeading(title){return !title||['A little of our year','A little of our year.'].includes(title.trim())?'Meanwhile, in our camera roll…':title;}
 function message(error) { app.innerHTML = `<section class="entry"><p class="kicker">A private edition</p><h1>A little<br><em>patience.</em></h1><p>${escape(error.message)}</p><button class="text-button" id="retry">Try again</button></section>`; document.querySelector('#retry').onclick = start; }
 async function start() {
+  renderFooter(false);
   try {
     // Invitation secrets travel in the fragment, never the request URL or Referer.
     const raw = location.hash.slice(1);
-    if (/^[a-f0-9]{64}$/.test(raw)) { history.replaceState(null, '', location.pathname); await api('open', {token:raw}); }
+    if (/^[a-f0-9]{64}$/.test(raw)) { history.replaceState(null, '', location.pathname); const opened=await api('open', {token:raw}); if(opened.redirectUrl){location.replace(opened.redirectUrl);return;} }
     try { journal = await api('journal'); showJournal(); return; } catch {}
     const invite = await api('invitation');
     applyBrand(invite.authors,invite.year);
@@ -64,6 +65,7 @@ function layoutPhotoGrid(grid){
   });
 }
 function showJournal() {
+  renderFooter(journal.shareSocials===true);
   imageObserver?.disconnect();layoutObserver?.disconnect();
   applyBrand(journal.authors,journal.year);
   const cards = personal => journal.photos.filter(p=>p.personal===personal).map(p=>`<button class="card" data-photo="${escape(p.id)}" aria-label="Open photo: ${escape(p.caption)}"><img data-src="${escape(p.src)}" alt="${escape(p.alt)}" loading="lazy" decoding="async" ${p.width&&p.height?`width="${p.width}" height="${p.height}"`:'class="pending-dimensions"'}/><span>${escape(p.caption)}</span></button>`).join('');

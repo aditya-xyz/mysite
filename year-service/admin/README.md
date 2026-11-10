@@ -470,3 +470,43 @@ invitations for publication. At least one included photo is required to publish.
 Save and Publish are separate: hiding a previously published photo changes guest
 access only after publishing again. A code deployment never changes photo flags
 or publishes the owner's draft.
+
+## Invitation domains, socials, and reopening QR codes
+
+Share our socials is a per-invitation checkbox on Create/Edit invitation. On uses
+`scrapbook.adityapatil.xyz`; off uses the guest workers.dev origin. The preference
+also controls Instagram footer links in the guest page and invitation preview.
+Both origins serve the same protected guest Worker. Opening a copied invitation
+on the other origin routes to the invitation’s current preferred origin with its
+token in the fragment, never an HTTP path/query. Invalid/inactive invitations do
+not redirect. Host-only cookies remain separate, so moving origins may require
+phone verification again. Editing the preference keeps the token and takes effect
+without publishing; changing a domain does not itself grant access.
+
+View link & QR reopens saved invitations without rotating links or ending sessions.
+Tokens remain hashed for verification; the admin additionally stores an AES-256-GCM
+encrypted copy, using the INVITATION_LINK_KEY Worker secret (64 hex characters).
+Ciphertext is bound to the invitation ID and year. This key must stay stable and
+private; it is not exposed to guests, static assets, state responses, or source
+control. Back it up securely before rotating it. Existing hash-only invitations
+show Restore link & QR: paste the original once, validate its hash, and store it
+encrypted. No old invitation is rotated automatically. Create fresh link remains
+an explicit replacement and invalidates the previous token/sessions.
+
+Migration 0009 adds the preference and encrypted-token columns. Existing
+invitations default to socials off, retaining tokens, expiry, and memberships.
+Provision the admin secret before using recoverable links. The two public guest
+origins are declared in both Worker configurations; admin Access is unchanged.
+
+## One active scrapbook
+
+Migration 0009 adds editions.is_active, a partial unique index, and an activation
+trigger. The most recently published edition starts active (2026 pilot fallback
+if none is published). The collection displays Active/Inactive guest-access status.
+Publishing a year atomically activates it and closes access to every other year.
+A stale or failed publication cannot deactivate the current year. Older content,
+people, and invitation records stay in admin; no tokens or stored originals are
+removed. Guest opening, verification, journals, previews, and originals check the
+invitation’s year on every request and reject inactive editions with an explicit
+message. Older invitations never open a newer year’s content. Admin draft previews
+remain available for inactive years. Deployment itself publishes no content.

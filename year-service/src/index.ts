@@ -9,6 +9,8 @@ interface Env {
   MEDIA: R2Bucket;
   ASSETS: Fetcher;
   SMS_ENABLED: string;
+  JOURNAL_ORIGIN?:string;
+  SOCIAL_JOURNAL_ORIGIN?:string;
   TWILIO_ACCOUNT_SID: string;
   TWILIO_API_KEY_SID: string;
   TWILIO_API_KEY_SECRET: string;
@@ -29,12 +31,17 @@ async function limited(env: Env, key: string, max: number, seconds: number) {
     .bind(key, now() + seconds, now()).first<{ count: number }>();
   if (!row || row.count > max) throw new Failure(429, "A few too many attempts. Please try again later.");
 }
+async function requireActive(env:Env,year:number){
+  const row=await env.DB.prepare("SELECT is_active FROM editions WHERE year=?1").bind(year).first<{is_active:number}>();
+  if(!row?.is_active)throw new Failure(409,"This scrapbook is no longer active. Please ask for a current invitation.");
+}
 async function invitation(request: Request, env: Env) {
   const raw = cookie(request, INVITE);
   if (!validToken(raw)) throw new Failure(401, "Please open your original invitation link.");
   const row = await env.DB.prepare("SELECT * FROM invites WHERE token_hash=?1 AND revoked_at IS NULL AND expires_at>?2")
     .bind(await digest(raw), now()).first<Invite>();
   if (!row) throw new Failure(401, "This invitation has expired or is no longer available.");
+  await requireActive(env,row.edition_year);
   return row;
 }
 async function authenticated(request: Request, env: Env) {
@@ -44,6 +51,7 @@ async function authenticated(request: Request, env: Env) {
     WHERE s.token_hash=?1 AND s.expires_at>?2 AND i.expires_at>?2 AND i.revoked_at IS NULL`)
     .bind(await digest(raw), now()).first<Invite>();
   if (!row) throw new Failure(401, "Your session has ended. Please open your invitation again.");
+  await requireActive(env,row.edition_year);
   return row;
 }
 async function body(request: Request) {
@@ -86,9 +94,12 @@ async function route(request: Request, env: Env) {
   if (path === "/api/open" && request.method === "POST") {
     const data = await body(request);
     if (!validToken(data.token)) throw new Failure(401, "This invitation link is not valid.");
-    const row = await env.DB.prepare("SELECT name,addressed_to FROM invites WHERE token_hash=?1 AND revoked_at IS NULL AND expires_at>?2")
-      .bind(await digest(data.token), now()).first<{ name: string; addressed_to:string|null }>();
+    const row = await env.DB.prepare("SELECT name,addressed_to,edition_year,share_socials FROM invites WHERE token_hash=?1 AND revoked_at IS NULL AND expires_at>?2")
+      .bind(await digest(data.token), now()).first<{ name: string; addressed_to:string|null;edition_year:number;share_socials:number }>();
     if (!row) throw new Failure(401, "This invitation link is not valid or has expired.");
+    await requireActive(env,row.edition_year);
+    const preferred=row.share_socials?env.SOCIAL_JOURNAL_ORIGIN:env.JOURNAL_ORIGIN;
+    if(preferred && new URL(preferred).origin!==url.origin)return json({redirectUrl:new URL(preferred).origin+"/#"+data.token});
     const headers=new Headers();headers.append("Set-Cookie",sessionCookie(INVITE,data.token,86400));
     headers.append("Set-Cookie",sessionCookie(SESSION,"",0));
     return json({ name: invitationName(row) }, 200, headers);
@@ -146,6 +157,7 @@ async function route(request: Request, env: Env) {
     const edition = await publishedEdition(env.DB,i.edition_year);
     if (edition) {
       const data=clientEdition(edition,i.id,invitationName(i),i.edition_year,await invitationAudience(env.DB,i));
+      data.shareSocials=!!i.share_socials;
       // Old publications remain unchanged; resolve missing preview dimensions read-only.
       for(let offset=0;offset<data.photos.length;offset+=8)await Promise.all(data.photos.slice(offset,offset+8).map(async photo=>{
         if(!photo.width||!photo.height)Object.assign(photo,await previewDimensions(env.MEDIA,edition.photos.find(p=>p.id===photo.id)!.preview_key));
@@ -155,7 +167,7 @@ async function route(request: Request, env: Env) {
     if (i.edition_year !== 2026) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
     const photos = await env.DB.prepare(`SELECT id,caption,alt,invite_id,preview_key,original_key FROM photos
       WHERE invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?1)) ORDER BY invite_id IS NULL,sort_order,id`).bind(JSON.stringify(await invitationAudience(env.DB,i))).all<Photo>();
-    return json({ year:i.edition_year,name: invitationName(i), verificationName:i.name, photos: await Promise.all(photos.results.map(async p => ({ id: p.id, caption: p.caption, alt: p.alt,...await previewDimensions(env.MEDIA,p.preview_key),
+    return json({ year:i.edition_year,name: invitationName(i), verificationName:i.name,shareSocials:!!i.share_socials, photos: await Promise.all(photos.results.map(async p => ({ id: p.id, caption: p.caption, alt: p.alt,...await previewDimensions(env.MEDIA,p.preview_key),
       personal: p.invite_id !== null, src: `/api/media/${p.id}`,viewerSrc:`/api/media/${p.id}/viewer`, canSave: !!p.invite_id && !!p.original_key }))) });
   }
   const media = /^\/api\/media\/([a-z0-9-]+)(\/(original|viewer))?$/.exec(path);

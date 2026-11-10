@@ -12,7 +12,8 @@
     "ADMIN_EMAIL": "aditya.patil.gverse@gmail.com",
     "ACCESS_TEAM_DOMAIN": "https://billowing-truth-eac1.cloudflareaccess.com",
     "ACCESS_AUD": "4e3ce74bfb8b88284386d0717ab85ab84a236ace37b649fbeb2e0dc63c85a0aa",
-    "JOURNAL_ORIGIN": "https://aditya-year-2026.aditya-year-service.workers.dev"
+    "JOURNAL_ORIGIN": "https://aditya-year-2026.aditya-year-service.workers.dev",
+    "SOCIAL_JOURNAL_ORIGIN": "https://scrapbook.adityapatil.xyz"
   },
   "d1_databases": [{
     "binding": "DB",

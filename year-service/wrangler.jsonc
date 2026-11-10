@@ -4,11 +4,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-06",
   "workers_dev": true,
+  "routes": [{ "pattern": "scrapbook.adityapatil.xyz", "custom_domain": true }],
   "preview_urls": false,
   "observability": { "enabled": false },
   "triggers": { "crons": ["23 9 * * *"] },
   "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },
-  "vars": { "SMS_ENABLED": "true" },
+  "vars": { "SMS_ENABLED": "true", "JOURNAL_ORIGIN": "https://aditya-year-2026.aditya-year-service.workers.dev", "SOCIAL_JOURNAL_ORIGIN": "https://scrapbook.adityapatil.xyz" },
   "d1_databases": [{
     "binding": "DB",
     "database_name": "aditya-year-2026",
