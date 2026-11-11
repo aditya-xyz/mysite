@@ -515,3 +515,8 @@ Subtle pagination dots sit inside the bottom edge, with at most seven visible;
 the exact “Photo x of y” counter remains available to screen readers. Full res and
 download controls sit below authorized personal photos, with the caption below.
 Shared photos retain preview-only access and no original/download controls.
+
+On touch screens, a deliberate downward drag on an unzoomed viewer photo dismisses
+it; shorter drags return to place. Horizontal swipes still navigate, and a second
+pointer or zoomed viewport cancels dismissal so pinch zoom remains available.
+The close icon is visually quieter while retaining a 44px tap target.

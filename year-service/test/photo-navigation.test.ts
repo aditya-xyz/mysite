@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error The browser module is intentionally plain JavaScript.
-import {photoOrder,adjacentIndex,swipeStep,wheelNavigation,paginationDots} from '../web/photo-navigation.js';
+import {photoOrder,adjacentIndex,swipeStep,wheelNavigation,paginationDots,dismissDrag} from '../web/photo-navigation.js';
 test('the viewer contains exactly the supplied authorized photos in visible gallery order',()=>{
   const personal={id:'personal',personal:true,canSave:true},shared={id:'common',personal:false,canSave:false},other={id:'other-personal',personal:true,canSave:false};
   const supplied=[shared,personal,other],ordered=photoOrder(supplied);
@@ -31,4 +31,9 @@ test('pagination stays bounded and marks the current photo at either end and thr
     assert.ok(!dots.find((dot:{active:boolean;small:boolean})=>dot.active&&dot.small));
   }
   assert.equal(paginationDots(0,59)[0].index,0);assert.equal(paginationDots(58,59).at(-1).index,58);
+});
+
+test('drag dismissal requires a deliberate predominantly downward movement',()=>{
+  assert.equal(dismissDrag(0,96),true);assert.equal(dismissDrag(30,140),true);
+  for(const [dx,dy] of [[0,0],[0,95],[0,-140],[150,120],[-150,120],[100,100]])assert.equal(dismissDrag(dx,dy),false);
 });

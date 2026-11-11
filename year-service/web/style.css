@@ -161,3 +161,10 @@ h1,h2,.signature,.recipient-greeting .recipient-name{font-weight:600}.opening-no
 #photo .photo-dot.is-small{width:3px;height:3px;opacity:.65}
 
 @media(max-width:600px){#photo .photo-stage{padding-inline:48px}#photo img{max-width:calc(100vw - 136px)}#photo #previous-photo{left:-48px}#photo #next-photo{right:-48px}}
+
+/* Keep a full tap target around the quieter close glyph. */
+#photo .close{width:44px;height:44px;top:4px;right:4px;background:transparent;color:#ffffffe0;box-shadow:none}
+#photo .close::before{content:'';position:absolute;inset:8px;border-radius:50%;background:#08110d45;z-index:-1}
+#photo .close svg{width:15px;height:15px;filter:drop-shadow(0 1px 2px #0008)}
+#photo .close:hover::before,#photo .close:focus-visible::before{background:#08110d99}
+@media(pointer:coarse),(max-width:600px){#photo .photo-image{touch-action:pinch-zoom}#photo.is-zoomed .photo-image{touch-action:pan-x pan-y pinch-zoom}}

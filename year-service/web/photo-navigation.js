@@ -21,3 +21,5 @@ export function paginationDots(index,length){
   const start=Math.max(0,Math.min(length-count,current-Math.floor(count/2)));
   return Array.from({length:count},(_,offset)=>({index:start+offset,active:start+offset===current,small:(offset===0&&start>0)||(offset===count-1&&start+count<length)}));
 }
+
+export function dismissDrag(dx,dy){return dy>=96&&dy>Math.abs(dx)*1.4;}

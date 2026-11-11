@@ -1,7 +1,7 @@
 import {mountKeepsake} from './keepsake.js';
 import {scrapbookConfig} from './config.js';
 import {winterLights,winterSnowflake} from './seasonal.js';
-import {photoOrder,adjacentIndex,swipeStep,wheelNavigation,paginationDots} from './photo-navigation.js';
+import {photoOrder,adjacentIndex,swipeStep,wheelNavigation,paginationDots,dismissDrag} from './photo-navigation.js';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#photo');
 const save = document.querySelector('#save');
@@ -154,19 +154,37 @@ document.addEventListener('keydown',event=>{
   if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();movePhoto(event.key==='ArrowRight'?1:-1);}
 });
 let swipeStart=null;const pointers=new Set();
+function resetPhotoDrag(animate=false){
+  const transform=photoStage.style.transform,opacity=photoStage.style.opacity;
+  photoStage.style.transform='';photoStage.style.opacity='';
+  if(animate&&transform&&!matchMedia('(prefers-reduced-motion: reduce)').matches)photoStage.animate([{transform,opacity},{transform:'none',opacity:1}],{duration:180,easing:'ease-out'});
+}
+function syncPhotoZoom(){const zoomed=(window.visualViewport?.scale||1)>1;dialog.classList.toggle('is-zoomed',zoomed);if(zoomed){swipeStart=null;resetPhotoDrag();}}
+window.visualViewport?.addEventListener('resize',syncPhotoZoom);syncPhotoZoom();
 photoStage.addEventListener('pointerdown',event=>{
   pointers.add(event.pointerId);
-  if(pointers.size>1){swipeStart=null;return;}
+  if(pointers.size>1){swipeStart=null;resetPhotoDrag();return;}
   if(event.button!==0||event.target.closest('button')||(window.visualViewport?.scale||1)>1)return;
-  swipeStart={id:event.pointerId,x:event.clientX,y:event.clientY};photoStage.setPointerCapture(event.pointerId);
+  photoStage.getAnimations().forEach(animation=>animation.cancel());resetPhotoDrag();
+  swipeStart={id:event.pointerId,x:event.clientX,y:event.clientY,dismiss:event.pointerType==='touch'&&!!event.target.closest('.photo-image'),dragging:false,horizontal:false};photoStage.setPointerCapture(event.pointerId);
+});
+photoStage.addEventListener('pointermove',event=>{
+  if(!swipeStart||swipeStart.id!==event.pointerId||!swipeStart.dismiss||pointers.size!==1)return;
+  const dx=event.clientX-swipeStart.x,dy=event.clientY-swipeStart.y;
+  if(!swipeStart.dragging&&Math.abs(dx)>8&&Math.abs(dx)>Math.abs(dy)*1.2)swipeStart.horizontal=true;
+  if(!swipeStart.horizontal&&dy>8&&dy>Math.abs(dx)*1.2)swipeStart.dragging=true;
+  if(!swipeStart.dragging)return;
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches){photoStage.style.transform=`translateY(${Math.max(0,dy)}px)`;photoStage.style.opacity=String(Math.max(.55,1-Math.max(0,dy)/700));}
 });
 photoStage.addEventListener('pointerup',event=>{
   pointers.delete(event.pointerId);
   if(!swipeStart||swipeStart.id!==event.pointerId)return;
-  const step=swipeStep(event.clientX-swipeStart.x,event.clientY-swipeStart.y);swipeStart=null;
-  if(step)movePhoto(step);
+  const dx=event.clientX-swipeStart.x,dy=event.clientY-swipeStart.y,dragging=swipeStart.dragging,dismiss=swipeStart.dismiss&&swipeStart.dragging&&!swipeStart.horizontal&&dismissDrag(dx,dy);swipeStart=null;
+  if(dismiss){closePhoto();return;}
+  resetPhotoDrag(true);
+  if(!dragging){const step=swipeStep(dx,dy);if(step)movePhoto(step);}
 });
-photoStage.addEventListener('pointercancel',event=>{pointers.delete(event.pointerId);swipeStart=null;});
+photoStage.addEventListener('pointercancel',event=>{pointers.delete(event.pointerId);swipeStart=null;resetPhotoDrag();});
 const wheelStep=wheelNavigation(movePhoto);
 dialog.addEventListener('wheel',event=>{if((window.visualViewport?.scale||1)===1&&wheelStep(event))event.preventDefault();},{passive:false});
 
@@ -221,6 +239,6 @@ dialog.querySelector('.close').onclick=closePhoto;
 dialog.addEventListener('cancel',event=>{event.preventDefault();closePhoto();});
 dialog.addEventListener('animationend',event=>{if(event.target===dialog&&event.animationName==='photo-exit'&&dialog.classList.contains('is-closing'))dialog.close();});
 dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closePhoto();}});
-dialog.addEventListener('close',()=>{clearTimeout(closeTimer);dialog.classList.remove('is-closing');generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;selected=null;swipeStart=null;pointers.clear();viewerPhotos=[];viewerIndex=-1;dialog.querySelector('img').removeAttribute('src');if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}const restore=viewerReturnFocus;viewerReturnFocus=null;restore?.focus({preventScroll:true});});
+dialog.addEventListener('close',()=>{clearTimeout(closeTimer);dialog.classList.remove('is-closing');resetPhotoDrag();generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;selected=null;swipeStart=null;pointers.clear();viewerPhotos=[];viewerIndex=-1;dialog.querySelector('img').removeAttribute('src');if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}const restore=viewerReturnFocus;viewerReturnFocus=null;restore?.focus({preventScroll:true});});
 renderFooter();
 start();
