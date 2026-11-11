@@ -142,3 +142,22 @@ footer .footer-ornament-bottom{top:auto;right:auto;left:22px;bottom:20px;transfo
 @media(max-width:600px){footer .footer-ornament-bottom{left:16px;bottom:16px}}
 
 h1,h2,.signature,.recipient-greeting .recipient-name{font-weight:600}.opening-note-top .kicker{font:600 11px/1.5 Manrope,system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase}.signature{letter-spacing:-.04em}.entry .kicker{font-family:Manrope,system-ui,sans-serif;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+
+/* Arrows sit outside; pagination dots sit quietly inside the photo. */
+#photo .photo-image{position:relative;width:fit-content;margin:auto}
+#photo .photo-image #previous-photo,#photo .photo-image #next-photo{position:absolute;top:50%;bottom:auto;transform:translateY(-50%);z-index:2;box-shadow:0 2px 12px #0003}
+#photo .photo-stage{padding-inline:56px}#photo img{max-width:min(1000px,calc(100vw - 152px))}
+#photo #previous-photo{left:-54px;right:auto}#photo #next-photo{right:-54px;left:auto}
+#photo .photo-image .photo-control[hidden]{display:none}
+#photo .photo-image .photo-control:disabled{cursor:default;opacity:.3}
+#photo .photo-toolbar{display:flex;justify-content:flex-end;gap:0;margin-top:10px}
+#photo .photo-actions{margin-left:auto;min-width:0}
+#photo .photo-toolbar:not(:has(button:not([hidden]))){display:none}
+#photo-count{position:absolute;width:1px;height:1px;min-width:0;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#photo .photo-pagination{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;gap:5px;padding:6px 9px;border-radius:20px;background:#08110d30;pointer-events:none}
+#photo .photo-pagination[hidden]{display:none}
+#photo .photo-dot{display:block;flex:none;width:5px;height:5px;border-radius:50%;background:#ffffff75;box-shadow:0 1px 3px #0006}
+#photo .photo-dot.is-current{width:6px;height:6px;background:#fff}
+#photo .photo-dot.is-small{width:3px;height:3px;opacity:.65}
+
+@media(max-width:600px){#photo .photo-stage{padding-inline:48px}#photo img{max-width:calc(100vw - 136px)}#photo #previous-photo{left:-48px}#photo #next-photo{right:-48px}}

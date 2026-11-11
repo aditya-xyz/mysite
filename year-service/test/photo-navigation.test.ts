@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error The browser module is intentionally plain JavaScript.
-import {photoOrder,adjacentIndex,swipeStep,wheelNavigation} from '../web/photo-navigation.js';
+import {photoOrder,adjacentIndex,swipeStep,wheelNavigation,paginationDots} from '../web/photo-navigation.js';
 test('the viewer contains exactly the supplied authorized photos in visible gallery order',()=>{
   const personal={id:'personal',personal:true,canSave:true},shared={id:'common',personal:false,canSave:false},other={id:'other-personal',personal:true,canSave:false};
   const supplied=[shared,personal,other],ordered=photoOrder(supplied);
@@ -20,4 +20,15 @@ test('one trackpad gesture advances once, including its momentum; vertical scrol
   wheel(event(30,0,10));wheel(event(35,0,30));wheel(event(80,0,70));wheel(event(10,0,150));
   assert.deepEqual(steps,[1]);wheel(event(-80,0,400));assert.deepEqual(steps,[1,-1]);
   wheel(event(4,0,800,false,1));assert.deepEqual(steps,[1,-1,1]);
+});
+
+test('pagination stays bounded and marks the current photo at either end and throughout large galleries',()=>{
+  assert.deepEqual(paginationDots(0,0),[]);assert.deepEqual(paginationDots(0,1),[]);
+  for(const length of [2,3,7,8,59])for(let index=0;index<length;index++){
+    const dots=paginationDots(index,length);assert.equal(dots.length,Math.min(7,length));
+    assert.deepEqual(dots.filter((dot:{active:boolean})=>dot.active).map((dot:{index:number})=>dot.index),[index]);
+    assert.ok(dots.every((dot:{index:number})=>dot.index>=0&&dot.index<length));
+    assert.ok(!dots.find((dot:{active:boolean;small:boolean})=>dot.active&&dot.small));
+  }
+  assert.equal(paginationDots(0,59)[0].index,0);assert.equal(paginationDots(58,59).at(-1).index,58);
 });

@@ -13,3 +13,11 @@ export function wheelNavigation(onStep){
     return true;
   };
 }
+
+// A short moving window avoids a line of dozens of dots in a large scrapbook.
+export function paginationDots(index,length){
+  if(length<2)return [];
+  const count=Math.min(7,length),current=Math.max(0,Math.min(length-1,index));
+  const start=Math.max(0,Math.min(length-count,current-Math.floor(count/2)));
+  return Array.from({length:count},(_,offset)=>({index:start+offset,active:start+offset===current,small:(offset===0&&start>0)||(offset===count-1&&start+count<length)}));
+}

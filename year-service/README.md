@@ -509,3 +509,9 @@ The legacy provisioning helper uses generic `INITIAL_RECIPIENT_NAME` and
 `INITIAL_RECIPIENT_PHONE_E164` placeholders. Real values stay in ignored local
 configuration. Existing live people and invitations are managed in admin; changing
 this example does not change production records or require reseeding.
+
+The viewer places previous/next arrows outside the image at its vertical center.
+Subtle pagination dots sit inside the bottom edge, with at most seven visible;
+the exact “Photo x of y” counter remains available to screen readers. Full res and
+download controls sit below authorized personal photos, with the caption below.
+Shared photos retain preview-only access and no original/download controls.

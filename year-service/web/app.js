@@ -1,7 +1,7 @@
 import {mountKeepsake} from './keepsake.js';
 import {scrapbookConfig} from './config.js';
 import {winterLights,winterSnowflake} from './seasonal.js';
-import {photoOrder,adjacentIndex,swipeStep,wheelNavigation} from './photo-navigation.js';
+import {photoOrder,adjacentIndex,swipeStep,wheelNavigation,paginationDots} from './photo-navigation.js';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#photo');
 const save = document.querySelector('#save');
@@ -132,10 +132,11 @@ function showPhoto(photo,direction=0){
   if(photo.viewerSrc&&photo.viewerSrc!==photo.src){
     const detailed=new Image();detailed.decoding='async';detailed.onload=()=>{if(current===generation&&!preparedFile)image.src=photo.viewerSrc;};detailed.src=photo.viewerSrc;
   }
-  document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full resolution';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');
+  document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full res';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');
   previousPhoto.disabled=viewerIndex===0;nextPhoto.disabled=viewerIndex===viewerPhotos.length-1;
   document.querySelector('#photo-count').textContent=`Photo ${viewerIndex+1} of ${viewerPhotos.length}`;
   previousPhoto.hidden=nextPhoto.hidden=viewerPhotos.length<2;
+  const dots=dialog.querySelector('.photo-pagination');dots.hidden=viewerPhotos.length<2;dots.replaceChildren(...paginationDots(viewerIndex,viewerPhotos.length).map(dot=>{const marker=document.createElement('span');marker.className='photo-dot'+(dot.active?' is-current':'')+(dot.small?' is-small':'');return marker;}));
   if(direction&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
     photoStage.getAnimations().forEach(a=>a.cancel());
     photoStage.animate([{opacity:.45,transform:`translateX(${direction*24}px)`},{opacity:1,transform:'translateX(0)'}],{duration:180,easing:'ease-out'});
@@ -184,7 +185,7 @@ save.onclick=async()=>{
   // A same-origin download starts directly from the tap, without fetching an original.
   const anchor=document.createElement('a');anchor.href=selected.viewerSrc||selected.src;
   anchor.download='photo-preview.jpg';document.body.append(anchor);anchor.click();anchor.remove();
-  document.querySelector('#save-status').textContent='Preview downloaded. Load Full resolution if you’d like the original.';
+  document.querySelector('#save-status').textContent='Preview downloaded. Load Full res if you’d like the original.';
 };
 fullResolution.onclick=async()=>{
   if(!selected?.canSave||downloadPending||preparedFile)return;
@@ -202,10 +203,10 @@ fullResolution.onclick=async()=>{
     const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]||'photo.jpg';
     preparedFile=new File([blob],filename,{type:blob.type});
     fullImageUrl=URL.createObjectURL(preparedFile);dialog.querySelector('img').src=fullImageUrl;
-    fullResolution.textContent='Full resolution ✓';fullResolution.classList.add('is-ready');
+    fullResolution.textContent='Full res ✓';fullResolution.classList.add('is-ready');
     save.disabled=false;save.setAttribute('aria-label','Save original photo');save.title='Save original photo';
     status.textContent='Full resolution loaded. Tap the download icon to save or share.';
-  }catch(error){if(current===generation&&error.name!=='AbortError'){status.textContent=error.message;fullResolution.disabled=limited;fullResolution.textContent=limited?'Limit reached':'Retry full resolution';}}
+  }catch(error){if(current===generation&&error.name!=='AbortError'){status.textContent=error.message;fullResolution.disabled=limited;fullResolution.textContent=limited?'Limit reached':'Retry full res';}}
   finally{if(current===generation){downloadPending=false;fullResolution.removeAttribute('aria-busy');}}
 };
 function closePhoto(){
