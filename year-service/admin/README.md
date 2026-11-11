@@ -522,3 +522,41 @@ clicking outside, or moving focus away closes the panel; Escape/Done restore foc
 to its summary. Reopening clears the search. The invitation creation picker keeps
 its existing chip layout. No audience rules or saved assignments change in this
 UI update.
+
+
+## Print flow — disabled until a provider is connected
+
+People has a Mailing address editor for structured US addresses. Save unverified
+stores an address; Verify & save locally simulates validation only in the local
+fixture. Address edits invalidate verification. The phone verification contact
+supplies the invitation's mailing name/address; this avoids a second contact
+selector for households.
+
+Stories includes a generic printed note (350 characters maximum), saved and
+published with the scrapbook, plus a back-of-postcard proof. Sharing includes an
+immediate Allow print orders switch, default off. Each invitation has a separate
+print permission gated by a verified address and three distinct included personal
+photos across the household. Hidden/shared photos do not count. Permission clears
+when eligibility is lost and must be enabled explicitly after it is restored.
+Save draft and publish to make invitation permission/note changes visible to
+guests. Changing an address or the verification contact requires approval again.
+
+The invitation counter and order history preserve the one-print allowance across
+permission changes. Disabling printing blocks new orders and keeps submitted
+snapshots intact. The history offers a private saved-artwork proof. Counts query
+the full ledger independently of the recent-history display limit.
+
+No live USPS verification, Lob submission, payment, or mailing is connected.
+`PRINT_PROVIDER=local_mock` is accepted only on explicit HTTP loopback/test hosts;
+HTTPS cannot enable it. Local successes are labeled simulated. Apply migration
+0010 before deploying this support. Production print ordering stays off, and
+provider verification/fulfillment must be connected before enabling live orders.
+
+
+Invitation rows are collapsed by default. More details reveals sharing/link
+controls and print permissions; only one invitation can be expanded at once.
+Reset print allowance appears for a used allowance and requires confirmation.
+It grants one additional print without canceling existing orders or deleting their
+history. Processing/uncertain orders cannot be reset. Lifetime prints ordered and
+current allowance availability are displayed separately. Reset history is marked
+on the original order. Apply migration 0011 before deploying reset support.

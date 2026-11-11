@@ -375,8 +375,12 @@ arrow/plus/minus keyboard controls are available; there are no sliders.
 
 Only authorized viewer previews (grid fallback) are fetched. Originals and their
 quotas are untouched. Canvas assembly and JPEG encoding happen in the browser;
-there is no AI or external upload. Save downloads the prepared image; Share opens
-native file sharing when supported, otherwise downloads it for sharing later.
+there is no AI or external upload for digital exports. On mobile, Share opens
+native file sharing when supported. Unsupported or failed sharing offers an
+explicit Save file instead action; canceling the share sheet does not download.
+Desktop offers Save image in the same position. The complimentary-print action
+sits to its left with a gift icon and Christmas gift styling. Moss uses a soft
+green paper tone (#e3e8d5), with Classic remaining white.
 Selection/crops live only in memory, and closing aborts pending requests and
 releases decoded images. No backend migrations, auth changes, or publication
 operations are involved.
@@ -385,3 +389,68 @@ The ignored .private/preview-keepsake.mjs harness serves synthetic local guest
 content on localhost:8809 (admin8808), with fake people and mocked verification.
 Never deploy this fixture. Device-size browser checks are not a substitute for
 checking real iOS pinch and native sharing on an iPhone.
+
+
+## Print flow — disabled until a provider is connected
+
+Migration `0010_print_orders.sql` adds global contact mailing/verification fields,
+a scrapbook `allow_print_orders` switch (default false), and a private order
+ledger. Apply it before deploying the print-aware Workers. Existing and new
+scrapbooks default to printing disabled.
+
+The scrapbook note is draft content, published with the photos. Its back-of-card
+proof includes the authors' signature and the phone verification contact's
+mailing address. The 4:5 keepsake is retained as the front artwork master.
+Guests order from their prepared keepsake with one confirmation dialog. The note
+and mailing address are not shown or sent to the guest; owners manage those in
+admin. One complimentary print is allowed per invitation/year. Saved orders freeze the note, address,
+artwork, selected-photo recipe, and publication version.
+
+Printing requires an active invitation/year, the immediate scrapbook switch,
+published invitation permission, at least three distinct included personal photos
+across its people, and the verification contact's verified US address. Shared and
+hidden photos do not count. Losing eligibility clears draft permission; restoring
+eligibility requires explicitly enabling it again. Permission is tied to the
+verified address, so changing the mailing contact/address blocks new orders until
+reverified and approved. Disabling the scrapbook switch immediately blocks new
+orders while preserving existing ones and their allowance usage.
+
+This implementation intentionally has **no live Lob or USPS adapter**. Only
+`PRINT_PROVIDER=local_mock` on explicitly allowed HTTP loopback/test hosts permits
+simulated address normalization and orders. HTTPS rejects that mock mode. No
+provider secrets are configured, and live printing cannot be enabled. Production
+fulfillment still needs address-validation/provider integration, provider-safe
+idempotency/reconciliation, and a bleed-safe final print render. The current
+proof and JPEG master are for local review, not a claim of print-ready delivery.
+
+Authenticated endpoints are `/api/print/status` and `/api/print/orders`. The server
+rechecks published authorization and a snapshot confirmation key, validates the exact
+three-photo recipe and JPEG dimensions/size, and atomically reserves one order.
+Concurrent retries return the existing reservation; uncertain orders keep the
+allowance reserved rather than risking a second print. Artwork stays in private
+R2 and is available only through the authenticated, year-scoped admin proof route.
+
+The ignored `.private/preview-print-flow.mjs` fixture serves synthetic admin on
+`localhost:8810` and guest on `localhost:8811`; use mocked code `123456`. It seeds
+a fictional locally verified US address and eligible household, but leaves the
+scrapbook switch off. External provider traffic is blocked. Never deploy this
+fixture or treat its verification badge as real USPS verification.
+
+
+### Print allowance resets
+
+Migration `0011_print_allowance_resets.sql` keeps fulfillment status separate from
+allowance use. An authenticated admin can reset the current confirmed order's
+allowance from invitation details. Its timestamp remains on the original order;
+artwork, note, address, fulfillment status, and lifetime counts are preserved.
+The invitation can then place one more order if all other gates are satisfied.
+In-progress or uncertain submissions cannot be reset. The reset targets a specific
+order, so retrying an old reset cannot release a newer order's allowance.
+
+Guests see no print action or exhausted-allowance message once it is used. Opening
+the keepsake again refreshes eligibility after an admin reset. Apply migration
+0011 before deploying this allowance-reset support.
+
+A successful order closes its confirmation dialog automatically and shows a
+centered, accessible mailbox toast for eight seconds. It requires no extra Done
+step. Local simulation has a separate “nothing mailed” note.

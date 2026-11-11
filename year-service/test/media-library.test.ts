@@ -34,6 +34,8 @@ test('private media reuse and guarded permanent library deletion',async t=>{
     for(const file of ['0006_photo_renditions_downloads.sql','0007_photo_uploads.sql'])await db.exec((await readFile('migrations/'+file,'utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0009_invitation_sharing.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0010_print_orders.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0011_print_allowance_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     const setDraft=(photos:unknown[])=>db.prepare("UPDATE editions SET draft_json=json_set(draft_json,'$.photos',json(?1)) WHERE year=2026").bind(JSON.stringify(photos)).run();
     const manifest=(id:string)=>({title:'Synthetic',authors:'Test',intro:'Test',note:'Test',sharedTitle:'Test',stories:[],photos:[{...photo(id),preview_key:`2026/${id}/preview.jpg`,viewer_key:`2026/${id}/viewer.jpg`,original_key:`2026/${id}/original`,filename:'synthetic.jpg',mime:'image/jpeg'}]});
     await t.test('lookup, fingerprints and deletion require authentication and same-origin writes',async()=>{

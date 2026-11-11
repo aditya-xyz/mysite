@@ -1,3 +1,4 @@
+import {createPrintFlow} from './print-flow.js';
 import {CARD_WIDTH,CARD_HEIGHT,cardSlots,coverCrop,anchoredCrop,personalPhotos} from './keepsake-layout.js';
 const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const arrow='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6M8 12h12"/></svg>';
@@ -15,12 +16,20 @@ export function mountKeepsake(journal,section){
   section.prepend(entry);
   const launch=entry.querySelector('button'),modal=document.createElement('dialog');
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
-  let chosen=[],crops=new Map(),frame='moss',step='pick',editing=0,file=null,busy=false,revision=0,abort=null,returnFocus;
-  const images=new Map(),urls=new Set();let cropImage=null;
+  let chosen=[],crops=new Map(),frame='moss',step='pick',editing=0,file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
+  const images=new Map(),urls=new Set();let cropImage=null,orderToast=null,toastTimer=null;
+  const printFlow=createPrintFlow({getData:()=>({file,recipe:{photoIds:[...chosen],crops:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:()=>{if(modal.open&&step==='edit')updateExport();},onOrdered:(message,simulated)=>{if(modal.open){showOrderToast(message,simulated);modal.querySelector('[data-share],[data-save]')?.focus();}}});
   const currentPhotos=()=>chosen.map(id=>photos.find(p=>p.id===id));
   const setStatus=text=>{const status=modal.querySelector('.ks-status');if(status)status.textContent=text;};
+  function clearOrderToast(){clearTimeout(toastTimer);toastTimer=null;orderToast?.remove();orderToast=null;}
+  function showOrderToast(message,simulated){
+    clearOrderToast();orderToast=document.createElement('div');orderToast.className='ks-order-toast';orderToast.setAttribute('role','status');orderToast.setAttribute('aria-live','polite');
+    const text=document.createElement('p');text.textContent=message;orderToast.append(text);
+    if(simulated){const note=document.createElement('small');note.textContent='Local preview only · Nothing mailed';orderToast.append(note);}
+    modal.append(orderToast);toastTimer=setTimeout(clearOrderToast,8000);
+  }
   function cleanup(){
-    revision++;abort?.abort();abort=null;images.forEach(p=>p.then(image=>image.close?.()).catch(()=>{}));images.clear();file=null;
+    clearOrderToast();printFlow.close();revision++;abort?.abort();abort=null;images.forEach(p=>p.then(image=>image.close?.()).catch(()=>{}));images.clear();file=null;
     urls.forEach(url=>URL.revokeObjectURL(url));urls.clear();modal.querySelectorAll('canvas').forEach(canvas=>{canvas.width=0;canvas.height=0;});cropImage=null;busy=false;returnFocus?.focus({preventScroll:true});
   }
   function close(){modal.close();}
@@ -42,7 +51,11 @@ export function mountKeepsake(journal,section){
   function actions(){
     if(step==='pick')return `<span class="ks-count" role="status">${chosen.length} of 3 selected</span><button class="ks-primary" data-continue ${chosen.length===3?'':'disabled'}>Continue ${arrow}</button>`;
     if(step==='crop')return '<span class="ks-count">Make room for the good bits.</span><button class="ks-primary" data-done>Done</button>';
-    return `<button class="ks-primary" data-save ${file?'':'disabled'}>${busy?'Preparing your card…':'Save image'} <span aria-hidden="true">↓</span></button><button class="ks-secondary" data-share ${file?'':'disabled'}>Share…</button>`;
+    const mobile=matchMedia('(pointer:coarse)').matches||innerWidth<=600;
+    const useShare=mobile&&!shareFallback;
+    const icon=useShare?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M6 11H4v10h16V11h-2"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></svg>';
+    return printFlow.buttonMarkup()+`<button class="ks-primary ks-digital" ${useShare?'data-share':'data-save'} ${file?'':'disabled'}>${icon}<span>${busy?'Preparing…':useShare?'Share':mobile?'Save file instead':'Save image'}</span></button>`;
+
   }
   function pickMarkup(){return `<p class="ks-description">Choose three from the photos picked for you.</p><div class="ks-picks">${photos.map(p=>{const n=chosen.indexOf(p.id);return `<button class="ks-pick" data-pick="${esc(p.id)}" aria-label="${esc(p.caption||p.alt)}" aria-pressed="${n>=0}"><img src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async"><span class="ks-badge" ${n<0?'hidden':''}>${n+1}</span></button>`;}).join('')}</div>`;}
   function editorMarkup(){return `<div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five keepsake: three selected photos, excellent company, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" aria-label="Adjust crop of photo ${i+1}"></button>`).join('')}</div></div><p class="ks-crop-hint">Tap a photo to adjust its crop.</p><div class="ks-options" role="group" aria-label="Frame style"><button class="ks-frame" data-frame="moss" aria-pressed="${frame==='moss'}"><span class="ks-swatch moss"></span>Moss</button><button class="ks-frame" data-frame="classic" aria-pressed="${frame==='classic'}"><span class="ks-swatch classic"></span>Classic</button></div><div class="ks-order" role="group" aria-label="Photo order">${currentPhotos().map((p,i)=>`<button data-hero="${i}" aria-pressed="${i===0}" aria-label="${i===0?'Main photo':'Make photo '+(i+1)+' the main photo'}"><img src="${esc(p.src)}" alt=""><span>${i===0?'Main':'Make main'}</span></button>`).join('')}<button class="ks-swap" data-swap aria-label="Swap the two bottom photos">Swap<br>bottom two</button></div>`;}
@@ -67,15 +80,16 @@ export function mountKeepsake(journal,section){
     const reset=modal.querySelector('[data-reset]');if(reset)reset.onclick=()=>{crops.set(chosen[editing],{x:.5,y:.5,zoom:1});render();};
     const save=modal.querySelector('[data-save]');if(save)save.onclick=download;
     const share=modal.querySelector('[data-share]');if(share)share.onclick=shareCard;
+    printFlow.bind(modal);
     if(step==='edit')paintCard();
     if(step==='crop'){cropImage=null;paintCrop();bindDrag();}
     if(modal.open)modal.querySelector('h2').focus();
   }
-  function updateExport(){const bottom=modal.querySelector('.ks-bottom');if(bottom&&step==='edit'){bottom.innerHTML=actions();bottom.querySelector('[data-save]').onclick=download;bottom.querySelector('[data-share]').onclick=shareCard;}}
+  function updateExport(){const bottom=modal.querySelector('.ks-bottom');if(bottom&&step==='edit'){bottom.innerHTML=actions();bottom.querySelector('[data-save]')?.addEventListener('click',download);bottom.querySelector('[data-share]')?.addEventListener('click',shareCard);printFlow.bind(bottom);}}
   async function paintCard(){
     const stamp=++revision;file=null;busy=true;updateExport();setStatus('');
     const canvas=modal.querySelector('.ks-preview');if(!canvas)return;
-    const ctx=canvas.getContext('2d');ctx.fillStyle=frame==='moss'?'#f8f6ec':'#fff';ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);
+    const ctx=canvas.getContext('2d');ctx.fillStyle=frame==='moss'?'#e3e8d5':'#fff';ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);
     try{
       const selected=currentPhotos(),wanted=new Set([...selected.map(p=>p.viewerSrc||p.src),'/pixel-santa.png']);
       images.forEach((promise,src)=>{if(!wanted.has(src)){images.delete(src);promise.then(image=>image.close?.()).catch(()=>{});}});
@@ -120,7 +134,7 @@ export function mountKeepsake(journal,section){
     canvas.onkeydown=e=>{const crop=crops.get(chosen[editing]);if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-','_'].includes(e.key))return;e.preventDefault();if(e.key==='ArrowLeft')crop.x=Math.max(0,crop.x-.04);if(e.key==='ArrowRight')crop.x=Math.min(1,crop.x+.04);if(e.key==='ArrowUp')crop.y=Math.max(0,crop.y-.04);if(e.key==='ArrowDown')crop.y=Math.min(1,crop.y+.04);if(['+','='].includes(e.key))crop.zoom=Math.min(2.5,crop.zoom+.1);if(['-','_'].includes(e.key))crop.zoom=Math.max(1,crop.zoom-.1);paintCrop();};
   }
   function download(){if(!file)return;const url=URL.createObjectURL(file);urls.add(url);const a=document.createElement('a');a.href=url;a.download=file.name;document.body.append(a);a.click();a.remove();setStatus('Your keepsake is ready. Your browser chooses where it saves.');setTimeout(()=>{URL.revokeObjectURL(url);urls.delete(url);},60000);}
-  async function shareCard(){if(!file)return;try{if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:'A little keepsake'});else{download();setStatus('Image downloaded. You can share it from your saved files.');}}catch(error){if(error.name!=='AbortError')setStatus('Sharing couldn’t open. Use Save image instead.');}}
-  launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();step='pick';render();modal.showModal();};
+  async function shareCard(){if(!file)return;try{if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:'A little keepsake'});else{shareFallback=true;updateExport();setStatus('File sharing isn’t supported in this browser. You can save the image as a file instead.');}}catch(error){if(error.name!=='AbortError'){shareFallback=true;updateExport();setStatus('Sharing couldn’t open. You can save the image as a file instead.');}}}
+  launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();shareFallback=false;step='pick';render();modal.showModal();printFlow.refresh();};
   return {destroy(){if(modal.open)modal.close();else cleanup();modal.remove();entry.remove();}};
 }

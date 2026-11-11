@@ -36,6 +36,8 @@ test('private bounded uploads of originals under 100 MB',async t=>{
     for(const file of ['0006_photo_renditions_downloads.sql','0007_photo_uploads.sql'])await db.exec((await readFile('migrations/'+file,'utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0009_invitation_sharing.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0010_print_orders.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0011_print_allowance_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await t.test('new upload APIs retain authentication, same-origin and year checks',async()=>{
       for(const path of ['uploads','uploads/photo-'+('a'.repeat(24))+'/parts/1','uploads/photo-'+('a'.repeat(24))+'/complete','uploads/photo-'+('a'.repeat(24))+'/abort']){
         assert.equal((await req('editions/2026/'+path,{},undefined,'')).status,401);

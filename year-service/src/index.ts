@@ -1,3 +1,4 @@
+import {printStatus,createPrintOrder,PrintProblem} from './printing.ts';
 import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionCookie } from "./security.ts";
 import { reserveDownload,releaseDownload } from "./downloads.ts";
 import { previewDimensions } from "./image-dimensions.ts";
@@ -9,6 +10,7 @@ interface Env {
   MEDIA: R2Bucket;
   ASSETS: Fetcher;
   SMS_ENABLED: string;
+  PRINT_PROVIDER?:string;
   JOURNAL_ORIGIN?:string;
   SOCIAL_JOURNAL_ORIGIN?:string;
   TWILIO_ACCOUNT_SID: string;
@@ -152,6 +154,8 @@ async function route(request: Request, env: Env) {
     if (validToken(raw)) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?1").bind(await digest(raw)).run();
     return json({ loggedOut: true }, 200, { "Set-Cookie": sessionCookie(SESSION, "", 0) });
   }
+  if(path==='/api/print/status'&&request.method==='GET')return json(await printStatus(request,env,await authenticated(request,env)));
+  if(path==='/api/print/orders'&&request.method==='POST')return json(await createPrintOrder(request,env,await authenticated(request,env)));
   if (path === "/api/journal" && request.method === "GET") {
     const i = await authenticated(request, env);
     const edition = await publishedEdition(env.DB,i.edition_year);
@@ -209,7 +213,7 @@ export default {
   async fetch(request: Request, env: Env) {
     let response: Response;
     try { response = await route(request, env); }
-    catch (error) { response = error instanceof Failure ? json({ error: error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
+    catch (error) { response = error instanceof PrintProblem ? json({error:error.message},error.status) : error instanceof Failure ? json({ error: error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store, private");
     headers.set("Referrer-Policy", "no-referrer");

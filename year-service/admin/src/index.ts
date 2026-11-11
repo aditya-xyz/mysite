@@ -1,3 +1,5 @@
+import {printAdminRoute} from './printing.ts';
+import {cleanPrintInvitations,PrintProblem,type PrintEnv} from '../../src/printing.ts';
 import {sealLink,unsealLink,invitationUrl,type LinkConfig} from './invitation-links.ts';
 import { previewDimensions,imageDimensions } from "../../src/image-dimensions.ts";
 import { invitationAudience, invitationName, type InvitationAudience } from "../../src/invitations.ts";
@@ -8,7 +10,7 @@ import { mediaLibraryRoute } from './media-library.ts';
 import { token, digest, now, sameOrigin } from "../../src/security.ts";
 import { clientEdition, type Draft, type Published, type PublishedPhoto } from "../../src/edition.ts";
 
-interface Env extends AuthConfig, LinkConfig { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
+interface Env extends AuthConfig, LinkConfig, PrintEnv { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
 interface EditionRow { draft_json: string; draft_version: number; published_version: number | null; published_at: number | null; is_active:number }
 interface Media { id: string; preview_key: string; viewer_key:string|null; original_key: string | null; filename: string; mime: string; bytes: number }
 class Problem extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -58,7 +60,10 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
     if (!s || typeof s.id !== "string" || !/^[a-z0-9-]{1,80}$/.test(s.id) || storyIds.has(s.id)) return fail("Check the stories.");
     storyIds.add(s.id); return {id:s.id,title:text(s.title,"story title",150),body:text(s.body,"story text",10000)};
   });
-  return {title:text(d.title,"title",150),authors:text(d.authors,"authors",100),intro:text(d.intro,"invitation introduction",1000),
+  const printNote=text(d.printNote??'','printed postcard note',350,false);
+  if(printNote.split('\n').length>11)return fail('Use at most 10 line breaks in the postcard note.');
+  const printSettings=await cleanPrintInvitations({...d,photos},env.DB,year);
+  return {printNote,...printSettings,title:text(d.title,"title",150),authors:text(d.authors,"authors",100),intro:text(d.intro,"invitation introduction",1000),
     note:text(d.note,"opening note",10000),sharedTitle:text(d.sharedTitle,"shared chapter title",150),stories,photos};
 }
 async function snapshot(draft: Draft, env: Env, year: number): Promise<Published> {
@@ -87,9 +92,10 @@ async function route(request: Request, env: Env, actor: string) {
   const url = new URL(request.url); let path = url.pathname;
   if (!["GET","HEAD","POST"].includes(request.method)) throw new Problem(405,"Method not allowed.");
   if (request.method === "POST" && !sameOrigin(request)) throw new Problem(403,"Use the admin dashboard to make changes.");
+  if(path.startsWith('/api/contacts/')){const globalPrint=await printAdminRoute(request,env,path,2026,()=>body(request));if(globalPrint)return globalPrint;}
   if (path === "/api/contacts") {
     if(request.method === "GET") {
-      const people=await env.DB.prepare("SELECT id,name,phone,version FROM people ORDER BY name COLLATE NOCASE,id").all<Contact>();
+      const people=await env.DB.prepare("SELECT id,name,phone,version,mailing_address,address_verified,address_verified_at,address_verifier,address_verification_key FROM people ORDER BY name COLLATE NOCASE,id").all<Contact>();
       return json({people:people.results});
     }
     if(request.method === "POST") {
@@ -148,11 +154,12 @@ async function route(request: Request, env: Env, actor: string) {
     year=Number(scoped[1]);path="/api"+scoped[2];
   }
   if (path.startsWith("/api/")) await edition(env,year);
+  if(scoped){const printing=await printAdminRoute(request,env,path,year,()=>body(request));if(printing)return printing;}
   if (path === "/api/state" && request.method === "GET") {
     const row = await edition(env,year);
     const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,share_socials,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
-    return json({actor,year,draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
+    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,printMode:env.PRINT_PROVIDER==='local_mock'&&url.protocol==='http:'?'local_mock':'disabled',draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
     const data = await body(request), draft = await validDraft(data.draft,env,year);
@@ -161,7 +168,7 @@ async function route(request: Request, env: Env, actor: string) {
       .bind(JSON.stringify(draft),data.version as number,year).first<{draft_version:number}>();
     if (!result) throw new Problem(409,"This edition changed in another window. Reload before saving again.");
     await audit(env,actor,"save-draft",String(year)).run();
-    return json({version:result.draft_version});
+    return json({version:result.draft_version,printInvitations:draft.printInvitations,printAddressKeys:draft.printAddressKeys});
   }
   if (path === "/api/publish" && request.method === "POST") {
     const data = await body(request), row = await edition(env,year);
@@ -366,7 +373,7 @@ export default {
       const actor = await adminIdentity(request,env);
       response = actor ? await route(request,env,actor) : json({error:"Sign in with the approved admin Google account to continue."},401);
     } catch (error) {
-      if (error instanceof Problem || error instanceof UploadProblem) response=json({error:error.message},error.status);
+      if (error instanceof Problem || error instanceof PrintProblem || error instanceof UploadProblem) response=json({error:error.message},error.status);
       else if(error instanceof Error&&error.message.includes('photo is no longer available'))response=json({error:'A photo was deleted in another tab. Remove it from this draft before saving or publishing.'},409);
       else if (error instanceof Error && error.message.includes("UNIQUE constraint failed: invites.edition_year, invites.phone"))
         response=json({error:"That phone number is already in this scrapbook. Refresh to see the latest invitations."},409);

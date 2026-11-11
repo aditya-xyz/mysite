@@ -1,3 +1,4 @@
+import {mountPrintAdmin,prunePrintPermissions} from './print-admin.js';
 import {photoUploadError,uploadPhoto,findUploadedPhoto,addPhotoToDraft,isFileDrag,bindPhotoDropzone} from './photo-upload.js';
 import {sendApiRequest} from './api-request.js';
 import QRCode from 'qrcode';
@@ -30,7 +31,7 @@ function updateEditionSummary(){
 }
 let toastTimer,modalReturnFocus;
 function toast(text){const el=byId('toast');el.textContent=text;el.dataset.visible='true';clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.dataset.visible='false',6500);}
-function mark(){editGeneration++;dirty=true;previewData=null;updateBadge();}
+function mark(){prunePrintPermissions(state,contacts);editGeneration++;dirty=true;previewData=null;updateBadge();}
 const icons={
   home:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   write:'<path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m13 6 5 5"/>',
@@ -69,7 +70,7 @@ function accessStatus(id){const invitation=invitationFor(id);return !invitation?
 function missingInvitations(){return [...new Set(state.draft.photos.filter(p=>!p.hidden).flatMap(p=>p.recipients))].filter(id=>accessStatus(id)!=='Invited');}
 async function contactApi(path='',data){pendingRequests++;updateBadge();try{return await requestApi('contacts'+path,data);}finally{pendingRequests--;updateBadge();}}
 function updateContacts(person){
-  contacts=[...contacts.filter(p=>p.id!==person.id),person].sort((a,b)=>a.name.localeCompare(b.name));
+  contacts=[...contacts.filter(p=>p.id!==person.id),{...contacts.find(p=>p.id===person.id),...person}].sort((a,b)=>a.name.localeCompare(b.name));
   const states=new Set([state,...[...draftCache.values()].map(c=>c.state)].filter(Boolean));
   for(const cached of states)cached.people=cached.people.map(invite=>invite.person_id===person.id?{...invite,name:person.name,phone:person.phone,addressedTo:invite.addressed_to||person.name}:invite);
   previewData=null;for(const cached of draftCache.values())cached.previewData=null;
@@ -163,7 +164,7 @@ function sharingRows(query=''){
   const invitations=state.people.filter(i=>(i.addressedTo+' '+i.name+' '+i.phone+' '+(i.memberIds||[]).map(id=>contacts.find(p=>p.id===id)?.name||'').join(' ')).toLocaleLowerCase().includes(q));
   return invitations.map(invite=>{
     const status=invitationStatus(invite),members=(invite.memberIds||[invite.person_id]).map(id=>contacts.find(p=>p.id===id)?.name||'Unknown person');
-    return `<article class="person invitation-row"><div class="person-identity"><span class="person-avatar">${icon('people')}</span><div><strong>${esc(invite.addressedTo)}</strong><p>Includes ${esc(members.join(' & '))}</p><p>Code to ${esc(invite.name)} · •••• ${esc(invite.phone.slice(-4))}</p><p>${invite.share_socials?'Socials shared · Personal domain':'Socials hidden · Cloudflare link'}</p></div></div><span class="badge ${status==='Invited'?'active-badge':''}">${status}</span><div class="actions"><button class="quiet" data-reset-downloads="${esc(invite.id)}">Reset download limits</button><button class="secondary" data-view-link="${esc(invite.id)}">${invite.has_link?'View link & QR':'Restore link & QR'}</button><button class="secondary" data-edit-invitation="${esc(invite.id)}">Edit invitation</button><button class="quiet" data-invite="${esc(invite.id)}">Create fresh link</button>${!invite.revoked_at?`<button class="quiet danger" data-revoke="${esc(invite.id)}">Revoke access</button>`:''}</div></article>`;
+    return `<details class="person invitation-row" name="invitations-${state.year}" data-print-invitation="${esc(invite.id)}"><summary class="invitation-summary"><span class="person-avatar">${icon('people')}</span><span class="invitation-heading"><strong>${esc(invite.addressedTo)}</strong><span>${members.length} ${members.length===1?'person':'people'} · Code to ${esc(invite.name)}</span></span><span class="badge ${status==='Invited'?'active-badge':''}">${status}</span><span class="invitation-expand"><span class="when-closed">More details</span><span class="when-open">Less details</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></span></summary><div class="invitation-options"><div class="invitation-meta"><p>Includes ${esc(members.join(' & '))}</p><p>Code to ${esc(invite.name)} · •••• ${esc(invite.phone.slice(-4))}</p><p>${invite.share_socials?'Socials shared · Personal domain':'Socials hidden · Cloudflare link'}</p></div><div class="actions"><button class="quiet" data-reset-downloads="${esc(invite.id)}">Reset download limits</button><button class="secondary" data-view-link="${esc(invite.id)}">${invite.has_link?'View link & QR':'Restore link & QR'}</button><button class="secondary" data-edit-invitation="${esc(invite.id)}">Edit invitation</button><button class="quiet" data-invite="${esc(invite.id)}">Create fresh link</button>${!invite.revoked_at?`<button class="quiet danger" data-revoke="${esc(invite.id)}">Revoke access</button>`:''}</div></div></details>`;
   }).join('')||'<div class="empty">No invitations found.<span>Create one for a person, couple, or household.</span></div>';
 }
 function sharing(){return `${head()}<div class="notice">One invitation, one QR code, one verification phone. Everyone included can view photos assigned to any person on that invitation. Creating or editing an invitation never sends a text.</div><section class="panel people-panel"><div class="row-head"><div><h2>Invitations <span class="badge">${state.people.length}</span></h2><a class="hint" href="#people" data-view="directory">Manage People directory</a></div><button class="button" id="new-invitation">+ Create invitation</button></div><label class="field"><span class="sr-only">Search invitations</span><input id="sharing-search" type="search" placeholder="Search invitations or people…" autocomplete="off"></label><div class="people-list" id="sharing-list">${sharingRows()}</div></section><p class="hint">Twilio trial verification contacts must still be verified in Twilio before receiving login codes. Invitation changes apply immediately; photo edits require publishing.</p>${continueFlow('preview',false)}`;}
@@ -216,7 +217,7 @@ function render(){
   const section=editionViews.includes(view)?'Scrapbooks / '+state.year:pages[view].section;
   byId('breadcrumb').textContent=section+' / '+pages[view].title;
   document.title=pages[view].title+(editionViews.includes(view)?' · '+state.year:'')+' · Aditya';
-  app.innerHTML=({home,scrapbooks,articles,directory,new:newScrapbook,story,photos,sharing,preview,server}[view]||home)();updateBadge();bind();
+  app.innerHTML=({home,scrapbooks,articles,directory,new:newScrapbook,story,photos,sharing,preview,server}[view]||home)();updateBadge();bind();mountPrintAdmin({view,state,contacts,api,requestApi,mark,saveDraft,showModal,updateContacts,render,toast});
 }
 function closeNavigation(restoreFocus=false){document.body.classList.remove('nav-open');document.querySelector('.workspace').inert=false;byId('nav-toggle').setAttribute('aria-expanded','false');byId('nav-backdrop').hidden=true;if(restoreFocus)byId('nav-toggle').focus();}
 async function navigate(next,push=true,year=state?.year){
@@ -296,7 +297,7 @@ async function saveDraft(){
     const label=first.photo.caption.trim()||state.media.find(m=>m.id===first.photo.id)?.filename||'Untitled photo';
     throw new Error(`Photo ${first.index+1} (“${label}”) needs an accessibility description.${missingDescriptions.length>1?` ${missingDescriptions.length===2?'1 more photo also needs a description.':`${missingDescriptions.length-1} more photos also need descriptions.`}`:''}`);
   }
-  const saveGeneration=editGeneration;busy=true;updateBadge();try{const result=await api('draft',{draft:state.draft,version:state.version});state.version=result.version;dirty=editGeneration!==saveGeneration;updateEditionSummary();toast('Draft saved. Your changes stay private until you publish.');}finally{busy=false;updateBadge();}
+  const saveGeneration=editGeneration;busy=true;updateBadge();try{const result=await api('draft',{draft:state.draft,version:state.version});state.version=result.version;if(result.printInvitations)state.draft.printInvitations=result.printInvitations;if(result.printAddressKeys)state.draft.printAddressKeys=result.printAddressKeys;dirty=editGeneration!==saveGeneration;updateEditionSummary();toast('Draft saved. Your changes stay private until you publish.');}finally{busy=false;updateBadge();}
 }
 function showModal(html){modalContent.innerHTML=html;const title=modalContent.querySelector('h2');if(title){title.id='modal-title';modal.setAttribute('aria-labelledby','modal-title');}if(!modal.open)modal.showModal();}
 let previewCloseTimer;
@@ -319,6 +320,7 @@ function confirmPublish(){
 }
 function bindContactActions(){app.querySelectorAll('[data-edit-contact]').forEach(button=>button.onclick=()=>editPerson(button.dataset.editContact));}
 function bindSharingActions(){
+  app.querySelectorAll('.invitation-row').forEach(row=>row.ontoggle=()=>{if(row.open)app.querySelectorAll('.invitation-row[open]').forEach(other=>{if(other!==row)other.open=false;});});
   app.querySelectorAll('[data-view-link]').forEach(button=>button.onclick=()=>viewInvitationLink(button.dataset.viewLink));
   byId('new-invitation')?.addEventListener('click',()=>editInvitation());
   app.querySelectorAll('[data-edit-invitation]').forEach(button=>button.onclick=()=>editInvitation(button.dataset.editInvitation));

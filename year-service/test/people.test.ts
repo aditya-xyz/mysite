@@ -53,6 +53,8 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
     await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.prepare('UPDATE editions SET published_at=unixepoch() WHERE year=2026').run();
     await db.batch((await readFile('migrations/0009_invitation_sharing.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0010_print_orders.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0011_print_allowance_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     let oldPerson='',newPerson='',version=1,inviteId='',newRaw='';
     await t.test('migration links existing invitations without changing tokens, sessions, or manifests',async()=>{
       const contacts=await (await req('contacts')).json() as {people:{id:string;name:string;version:number}[]};

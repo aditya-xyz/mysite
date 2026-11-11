@@ -29,6 +29,8 @@ test("invitation, SMS verification, and private media boundaries", async t => {
     await db.exec((await readFile('migrations/0007_photo_uploads.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     await db.batch((await readFile('migrations/0008_media_library.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0009_invitation_sharing.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0010_print_orders.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0011_print_allowance_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     const expiry = Math.floor(Date.now()/1000) + 86400;
     await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES(?,?,?,?,?)")
       .bind("angela", await digest("a".repeat(64)), "Angela", "+15555550101", expiry).run();

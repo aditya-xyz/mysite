@@ -2,7 +2,7 @@ export interface DraftPhoto { id: string; caption: string; alt: string; recipien
 export interface Story { id: string; title: string; body: string }
 export interface Draft {
   title: string; authors: string; intro: string; note: string; sharedTitle: string;
-  stories: Story[]; photos: DraftPhoto[];
+  stories: Story[]; photos: DraftPhoto[]; printNote?:string; printInvitations?:string[]; printAddressKeys?:Record<string,string>;
 }
 export interface PublishedPhoto extends DraftPhoto {
   preview_key: string; viewer_key?:string|null; original_key: string | null; filename: string; mime: string; width?:number; height?:number;
