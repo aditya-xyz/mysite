@@ -122,7 +122,7 @@ function openPhoto(photo) {
   if(viewerIndex<0)return;
   viewerReturnFocus=document.activeElement;
   clearTimeout(closeTimer);dialog.classList.remove('is-closing');
-  showPhoto(photo);dialog.showModal();
+  showPhoto(photo);dialog.showModal();dialog.focus({preventScroll:true});
 }
 function showPhoto(photo,direction=0){
   originalRequest?.abort();originalRequest=null;

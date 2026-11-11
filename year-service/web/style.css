@@ -168,3 +168,6 @@ h1,h2,.signature,.recipient-greeting .recipient-name{font-weight:600}.opening-no
 #photo .close svg{width:15px;height:15px;filter:drop-shadow(0 1px 2px #0008)}
 #photo .close:hover::before,#photo .close:focus-visible::before{background:#08110d99}
 @media(pointer:coarse),(max-width:600px){#photo .photo-image{touch-action:pinch-zoom}#photo.is-zoomed .photo-image{touch-action:pan-x pan-y pinch-zoom}}
+
+/* Initial dialog focus should not draw a ring around the close tap target. */
+#photo:focus{outline:none}
