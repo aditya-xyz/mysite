@@ -358,3 +358,30 @@ The viewer toolbar stays below the image: navigation at left, Full resolution an
 Download snapped to its right edge. Shared photos have navigation only. Small
 images can wrap the two groups without shrinking the 44px touch targets. Original
 quotas, cancellation, download behavior, keyboard and swipe controls are unchanged.
+
+## Keepsake builder
+
+Guests with at least three authorized personal photos can choose Make a keepsake
+above their personalized gallery. The full-screen phone flow selects exactly
+three distinct personal photos, offers Moss/Classic frames and main/bottom-photo
+ordering, and exports one 1200×1500 JPEG (4:5 including the paper border/footer).
+Santa Pixel uses the existing approved cutout and is part of the saved image.
+Shared photos are excluded from this picker.
+
+Tap an image in the card to reframe it. Drag pans, a two-finger pinch zooms on
+touchscreens, and a grab cursor/drag icon with wheel zoom serves desktop. Crops
+stay inside source bounds and follow the pinch/cursor focal point. Reset and
+arrow/plus/minus keyboard controls are available; there are no sliders.
+
+Only authorized viewer previews (grid fallback) are fetched. Originals and their
+quotas are untouched. Canvas assembly and JPEG encoding happen in the browser;
+there is no AI or external upload. Save downloads the prepared image; Share opens
+native file sharing when supported, otherwise downloads it for sharing later.
+Selection/crops live only in memory, and closing aborts pending requests and
+releases decoded images. No backend migrations, auth changes, or publication
+operations are involved.
+
+The ignored .private/preview-keepsake.mjs harness serves synthetic local guest
+content on localhost:8809 (admin8808), with fake people and mocked verification.
+Never deploy this fixture. Device-size browser checks are not a substitute for
+checking real iOS pinch and native sharing on an iPhone.
