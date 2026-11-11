@@ -101,7 +101,7 @@ async function route(request: Request, env: Env) {
       .bind(await digest(data.token), now()).first<{ name: string; addressed_to:string|null;edition_year:number;share_socials:number }>();
     if (!row) throw new Failure(401, "This invitation link is not valid or has expired.");
     await requireActive(env,row.edition_year);
-    const preferred=row.share_socials?env.SOCIAL_JOURNAL_ORIGIN:env.JOURNAL_ORIGIN;
+    const preferred=env.SOCIAL_JOURNAL_ORIGIN||env.JOURNAL_ORIGIN;
     if(preferred && new URL(preferred).origin!==url.origin)return json({redirectUrl:new URL(preferred).origin+"/#"+data.token});
     const headers=new Headers();headers.append("Set-Cookie",sessionCookie(INVITE,data.token,86400));
     headers.append("Set-Cookie",sessionCookie(SESSION,"",0));

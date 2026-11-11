@@ -1,0 +1,15 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="350" height="274" viewBox="0 0 350 274" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Editable sample landscape">
+<g clip-path="url(#clip0_0_36)">
+<path id="Vector" d="M350 14.5H5.96046e-06V259.5H350V14.5Z" fill="#C8D8CF"/>
+<path id="Vector_2" d="M274.167 104.333C291.564 104.333 305.667 90.2303 305.667 72.8333C305.667 55.4364 291.564 41.3333 274.167 41.3333C256.77 41.3333 242.667 55.4364 242.667 72.8333C242.667 90.2303 256.77 104.333 274.167 104.333Z" fill="#F5E7BA"/>
+<path id="Vector_3" d="M5.96046e-06 222.167L114.333 86.8333L235.667 229.167L312.667 162.667L350 205.833V259.5H5.96046e-06V222.167Z" fill="#7A9D88"/>
+<path id="Vector_4" d="M5.96046e-06 259.5L210 176.667L350 239.667V259.5H5.96046e-06Z" fill="#355B4A"/>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_0_36">
+<rect width="350" height="274" rx="12" fill="white"/>
+</clipPath>
+</defs>
+</svg>

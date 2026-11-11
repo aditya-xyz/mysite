@@ -146,7 +146,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
       held.photos[0].hidden=true;await save();assert.equal((await req("/api/publish",{version})).status,400,"All-hidden publication is rejected");
       held.photos[0].hidden=false;await save();assert.equal((await req("/api/publish",{version})).status,200);
     });
-    await t.test("invitation socials choose the URL and footer flag, while links reopen without rotation",async()=>{
+    await t.test("invitation socials only control the footer, while all links use the scrapbook domain",async()=>{
       const {person:contact}=await (await req("/api/contacts",{name:"Social test",phone:"+15555550108"})).json() as {person:{id:string}};
       const created=await req("/api/editions/2026/invitations",{memberIds:[contact.id],verificationContactId:contact.id,addressedTo:"Test household",shareSocials:true});
       assert.equal(created.status,201,await created.clone().text());const invite=await created.json() as {id:string;url:string};
@@ -165,8 +165,9 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
       const session="e".repeat(64);await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)").bind(await digest(session),invite.id,expires).run();
       assert.equal((await (await guestReq("journal",session)).json() as {shareSocials:boolean}).shareSocials,true);
       const edited=await req(`/api/editions/2026/invitations/${invite.id}/details`,{memberIds:[contact.id],verificationContactId:contact.id,addressedTo:"Test household",shareSocials:false,version:stored!.version});assert.equal(edited.status,200);
-      const cloudflareUrl=(await (await link()).json() as {url:string}).url;assert.equal(new URL(cloudflareUrl).origin,"https://journal.test");assert.equal(new URL(cloudflareUrl).hash,new URL(invite.url).hash);
-      assert.equal((await (await openAt("https://scrapbook.test")).json() as {redirectUrl:string}).redirectUrl,cloudflareUrl);
+      const cloudflareUrl=(await (await link()).json() as {url:string}).url;assert.equal(new URL(cloudflareUrl).origin,"https://scrapbook.test");assert.equal(new URL(cloudflareUrl).hash,new URL(invite.url).hash);
+      assert.ok((await openAt("https://scrapbook.test")).headers.get("Set-Cookie")?.includes("__Host-year_invite="));
+      assert.equal((await (await openAt("https://journal.test")).json() as {redirectUrl:string}).redirectUrl,cloudflareUrl);
       assert.equal((await (await guestReq("journal",session)).json() as {shareSocials:boolean}).shareSocials,false,"Preference applies to existing sessions without publishing");
       assert.equal((await (await req(`/api/preview?invitation=${invite.id}`)).json() as {shareSocials:boolean}).shareSocials,false);
       // A legacy hash-only invitation can retain its exact token, sessions and version.

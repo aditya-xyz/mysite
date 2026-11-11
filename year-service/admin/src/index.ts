@@ -1,3 +1,4 @@
+import {deleteContact} from './contact-delete.ts';
 import {addressAutocompleteRoute} from './address-autocomplete.ts';
 import {addressAdminRoute,addressMode,type AddressEnv} from './address-verification.ts';
 import {printAdminRoute} from './printing.ts';
@@ -111,6 +112,12 @@ async function route(request: Request, env: Env, actor: string) {
       return json({person},201);
     }
   }
+  const deleteRoute=/^\/api\/contacts\/([a-z0-9-]{1,100})\/delete$/.exec(path);
+  if(deleteRoute && request.method==='POST'){
+    const data=await body(request),result=await deleteContact(env.DB,deleteRoute[1],data.version);
+    await audit(env,actor,'delete-contact',deleteRoute[1]).run();
+    return json(result);
+  }
   const contactRoute=/^\/api\/contacts\/([a-z0-9-]{1,100})\/details$/.exec(path);
   if(contactRoute && request.method === "POST") {
     const data=await body(request),name=text(data.name,"name",100),phone=text(data.phone??"","phone number",20,false)||null;
@@ -223,7 +230,7 @@ async function route(request: Request, env: Env, actor: string) {
       try{raw=await unsealLink(invite.token_encrypted,env.INVITATION_LINK_KEY,id,year);}catch{throw new Problem(503,"The stored link couldn’t be reopened. Try restoring the original link.");}
       if(await digest(raw)!==invite.token_hash)throw new Problem(409,"This link was replaced. Reopen the invitation.");
     }
-    return json({name:invitationName(invite),url:invitationUrl(env,raw,!!invite.share_socials)});
+    return json({name:invitationName(invite),url:invitationUrl(env,raw)});
   }
   const invitationRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/details$/.exec(path);
   if ((path === "/api/invitations" || invitationRoute) && request.method === "POST") {
@@ -258,7 +265,7 @@ async function route(request: Request, env: Env, actor: string) {
       .bind(id,contact.id,await digest(raw),contact.name,contact.phone,now()+90*86400,year,addressedTo,JSON.stringify(members),contact.version,Number(!!data.shareSocials),await sealLink(raw,env.INVITATION_LINK_KEY,id,year)).first();
     if(!created)throw new Problem(409,"This verification contact already has an invitation here. Edit their existing invitation to include both people.");
     await audit(env,actor,"create-invitation",id).run();
-    return json({id,personId:contact.id,url:invitationUrl(env,raw,!!data.shareSocials)},201);
+    return json({id,personId:contact.id,url:invitationUrl(env,raw)},201);
   }
   if (path === "/api/people" && request.method === "POST") {
     const data = await body(request), name = text(data.name,"name",100), phone = text(data.phone,"phone number",20);
@@ -307,7 +314,7 @@ async function route(request: Request, env: Env, actor: string) {
         env.DB.prepare("UPDATE invites SET version=version+1,token_hash=?1,revoked_at=NULL,expires_at=?2,last_sent_at=0,challenge_expires_at=0,attempts=0,token_encrypted=?4 WHERE id=?3").bind(await digest(raw),now()+90*86400,id,await sealLink(raw,env.INVITATION_LINK_KEY,id,year)),
       env.DB.prepare("DELETE FROM sessions WHERE invite_id=?1").bind(id), audit(env,actor,revoke?"revoke-invite":"rotate-invite",id)
     ]);
-    return json(revoke ? {revoked:true} : {url:invitationUrl(env,raw,!!person.share_socials)});
+    return json(revoke ? {revoked:true} : {url:invitationUrl(env,raw)});
   }
   const library=await mediaLibraryRoute(request,env,actor,year,path,body);
   if(library)return library;

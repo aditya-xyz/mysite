@@ -473,15 +473,14 @@ or publishes the owner's draft.
 
 ## Invitation domains, socials, and reopening QR codes
 
-Share our socials is a per-invitation checkbox on Create/Edit invitation. On uses
-`scrapbook.adityapatil.xyz`; off uses the guest workers.dev origin. The preference
-also controls Instagram footer links in the guest page and invitation preview.
-Both origins serve the same protected guest Worker. Opening a copied invitation
-on the other origin routes to the invitation’s current preferred origin with its
-token in the fragment, never an HTTP path/query. Invalid/inactive invitations do
-not redirect. Host-only cookies remain separate, so moving origins may require
-phone verification again. Editing the preference keeps the token and takes effect
-without publishing; changing a domain does not itself grant access.
+Share our socials is a per-invitation checkbox on Create/Edit invitation. It only
+controls Instagram footer links in the guest page and invitation preview. All
+created, reopened, and refreshed invitation links use `scrapbook.adityapatil.xyz`.
+Existing workers.dev links route to the custom domain with the same token in the
+fragment, never an HTTP path/query. Invalid/inactive invitations do not redirect.
+Host-only cookies remain separate, so moving origins may require phone verification
+again. Editing the socials preference keeps the token and takes effect without
+publishing. Both origins retain the same phone verification and private media checks.
 
 View link & QR reopens saved invitations without rotating links or ending sessions.
 Tokens remain hashed for verification; the admin additionally stores an AES-256-GCM
@@ -635,3 +634,20 @@ Official references: [Google setup](https://developers.google.com/maps/documenta
 [pricing](https://developers.google.com/maps/billing-and-pricing/pricing),
 [autocomplete sessions](https://developers.google.com/maps/documentation/places/web-service/session-pricing),
 [validation data storage](https://cloud.google.com/maps-platform/terms/maps-service-terms).
+
+## Scrapbook studio interface
+
+The studio opens in light mode, with a persistent dark toggle and an explicit
+Safari color-scheme declaration. Scrapbooks open on Photos. Filters separate all,
+selected-person, shared, hidden, and attention-needed photos; selecting a tile
+opens its editor, with a dedicated editing view on small screens. Missing
+accessibility descriptions highlight their field. Review & publish lists missing
+items in a dialog with links to the corresponding photo or task. Saving and
+publishing remain separate actions.
+
+People show phone and mailing address together. Deleting an unused person requires
+a confirmation and the current record version. Saved drafts (including hidden
+photos), publications from any year, and invitation memberships block deletion;
+existing invitation and print history are preserved. Invitation rows expand one
+at a time, while print-order history starts collapsed. Save print permissions to
+draft saves the draft; publish separately to apply those invitation permissions.

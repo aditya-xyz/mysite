@@ -303,9 +303,9 @@ viewer remain unchanged from the pre-seasonal checkpoint, commit 48abe58.
 
 ## Invitation presentation and the active year
 
-The guest Worker also serves `scrapbook.adityapatil.xyz`. Each invitation chooses
-its preferred origin and Instagram-footer visibility using Share our socials in
-admin. Existing copied links follow the current preference when opened. The
+The guest Worker also serves `scrapbook.adityapatil.xyz`. All invitation links use that custom domain. Share our socials in admin controls
+only Instagram footer links. Existing copied workers.dev links route to the custom
+domain when opened. The
 Cloudflare and custom origins retain the same phone verification and private media
 checks; cookies remain specific to each host.
 
@@ -489,3 +489,18 @@ References: [Google quotas](https://developers.google.com/maps/documentation/add
 [Twilio Verify rate limits](https://www.twilio.com/docs/verify/api/programmable-rate-limits),
 [Twilio usage triggers](https://www.twilio.com/docs/usage/api/usage-trigger),
 [Netlify credit/recharge controls](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/configure-auto-recharge/).
+
+### Local typography refresh
+
+The current local scrapbook/admin refresh self-hosts the Google Fonts OFL version
+of Manrope (`web/fonts/Manrope-OFL.txt` and the admin copy). Headings and body copy
+share this family; Caveat remains only for the guest's handwritten sign-off.
+The keepsake export waits for Manrope before drawing its title and credit.
+
+The refreshed guest view keeps Christmas lights and diagonally placed footer
+snowflakes, with Pixel's curator card and a compact centered footer. Handwriting
+is reserved for the sign-off. The keepsake picker uses selection borders inside
+each tile and scrolls selected photos clear of its action bar. The exported card
+reads “a few of our favorite humans” without a period. Missing or slow font loads
+fall back without preventing image creation or download. Print ordering remains
+disabled by default and is controlled independently of presentation changes.

@@ -5,9 +5,9 @@
   try{dark=localStorage.getItem(key)==='dark';}catch{}
   function apply(){
     root.dataset.palette=dark?'night':'moss';
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content',dark?'#172922':'#ecf0e5');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content',dark?'#17251d':'#f7f3e8');
     const button=document.getElementById('theme-toggle');
-    if(button){button.hidden=false;button.setAttribute('aria-pressed',String(dark));button.title=dark?'Return to moss-and-cream colors':'Turn on dark mode';}
+    if(button){button.hidden=false;button.setAttribute('aria-pressed',String(dark));button.title=dark?'Switch to light mode':'Switch to dark mode';button.setAttribute('aria-label',button.title);}
   }
   apply();
   function bind(){

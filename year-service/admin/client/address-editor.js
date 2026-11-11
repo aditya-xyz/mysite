@@ -6,7 +6,7 @@ export function mountAddressEditor({app,contacts,requestApi,showModal,updateCont
  function bind(){app.querySelectorAll('[data-edit-contact]').forEach(button=>{
   const person=contacts.find(p=>p.id===button.dataset.editContact),row=button.closest('.person');if(row.querySelector('[data-address]'))return;
   const action=document.createElement('button');action.className='secondary';action.dataset.address=person.id;
-  action.textContent=addressIsCurrent(person)?person.address_verifier==='google'?'USPS verified · Google':'Address verified · Local test':person.address_verified?'Verify address again':'Mailing address';row.append(action);
+  action.textContent=person.mailing_address?'Edit address':'Mailing address';row.append(action);
   action.onclick=async()=>{
    const config=await settings;let original={country:'US'};try{original=JSON.parse(person.mailing_address)||original;}catch{}
    let suggestion=null;

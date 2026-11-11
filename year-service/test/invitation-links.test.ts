@@ -7,5 +7,5 @@ test('recoverable invitation tokens use authenticated encryption bound to invita
  for(const [key,id,year] of [[secret,'invite-two',2026],[secret,'invite-one',2027],['c'.repeat(64),'invite-one',2026]] as const)await assert.rejects(unsealLink(cipher,key,id,year));
  assert.equal(await sealLink(raw,undefined,'invite-one',2026),null);
  const env={JOURNAL_ORIGIN:'https://cloudflare.test',SOCIAL_JOURNAL_ORIGIN:'https://scrapbook.test'};
- assert.equal(invitationUrl(env,raw,true),'https://scrapbook.test/#'+raw);assert.equal(invitationUrl(env,raw,false),'https://cloudflare.test/#'+raw);
+ assert.equal(invitationUrl(env,raw),'https://scrapbook.test/#'+raw);assert.equal(invitationUrl({JOURNAL_ORIGIN:'https://local.test'},raw),'https://local.test/#'+raw);
 });

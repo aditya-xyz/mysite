@@ -12,8 +12,8 @@ export function mountKeepsake(journal,section){
   const photos=personalPhotos(journal.photos);
   if(!section||photos.length<3)return {destroy(){}};
   const entry=document.createElement('div');entry.className='ks-entry';
-  entry.innerHTML='<div><p class="kicker">A little something to keep</p><h2>Good company. In a frame.</h2><p>Pick three of your photos and make a little keepsake. Pixel insists on joining.</p></div><button class="button" type="button">Make a keepsake <span aria-hidden="true">↗</span></button>';
-  section.prepend(entry);
+  entry.innerHTML='<div><p class="kicker">this one’s a keeper</p><h2>Take a little piece with you.</h2><p>Pick three of your photos and make a little keepsake. Pixel insists on joining.</p></div><button class="button" type="button">Make a keepsake <span aria-hidden="true">↗</span></button>';
+  section.append(entry);
   const launch=entry.querySelector('button'),modal=document.createElement('dialog');
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
   let chosen=[],crops=new Map(),frame='moss',step='pick',editing=0,file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
@@ -58,7 +58,7 @@ export function mountKeepsake(journal,section){
 
   }
   function pickMarkup(){return `<p class="ks-description">Choose three from the photos picked for you.</p><div class="ks-picks">${photos.map(p=>{const n=chosen.indexOf(p.id);return `<button class="ks-pick" data-pick="${esc(p.id)}" aria-label="${esc(p.caption||p.alt)}" aria-pressed="${n>=0}"><img src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async"><span class="ks-badge" ${n<0?'hidden':''}>${n+1}</span></button>`;}).join('')}</div>`;}
-  function editorMarkup(){return `<div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five keepsake: three selected photos, excellent company, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" aria-label="Adjust crop of photo ${i+1}"></button>`).join('')}</div></div><p class="ks-crop-hint">Tap a photo to adjust its crop.</p><div class="ks-options" role="group" aria-label="Frame style"><button class="ks-frame" data-frame="moss" aria-pressed="${frame==='moss'}"><span class="ks-swatch moss"></span>Moss</button><button class="ks-frame" data-frame="classic" aria-pressed="${frame==='classic'}"><span class="ks-swatch classic"></span>Classic</button></div><div class="ks-order" role="group" aria-label="Photo order">${currentPhotos().map((p,i)=>`<button data-hero="${i}" aria-pressed="${i===0}" aria-label="${i===0?'Main photo':'Make photo '+(i+1)+' the main photo'}"><img src="${esc(p.src)}" alt=""><span>${i===0?'Main':'Make main'}</span></button>`).join('')}<button class="ks-swap" data-swap aria-label="Swap the two bottom photos">Swap<br>bottom two</button></div>`;}
+  function editorMarkup(){return `<div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five keepsake: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" aria-label="Adjust crop of photo ${i+1}"></button>`).join('')}</div></div><p class="ks-crop-hint">Tap a photo to adjust its crop.</p><div class="ks-options" role="group" aria-label="Frame style"><button class="ks-frame" data-frame="moss" aria-pressed="${frame==='moss'}"><span class="ks-swatch moss"></span>Moss</button><button class="ks-frame" data-frame="classic" aria-pressed="${frame==='classic'}"><span class="ks-swatch classic"></span>Classic</button></div><div class="ks-order" role="group" aria-label="Photo order">${currentPhotos().map((p,i)=>`<button data-hero="${i}" aria-pressed="${i===0}" aria-label="${i===0?'Main photo':'Make photo '+(i+1)+' the main photo'}"><img src="${esc(p.src)}" alt=""><span>${i===0?'Main':'Make main'}</span></button>`).join('')}<button class="ks-swap" data-swap aria-label="Swap the two bottom photos">Swap<br>bottom two</button></div>`;}
   function cropMarkup(){return `<p class="ks-description ks-gesture-hint"><svg class="ks-drag-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18m-12-6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg><span>Drag to move. Pinch or scroll to zoom.</span></p><canvas class="ks-crop-preview" tabindex="0" role="img" aria-label="Crop photo ${editing+1}. Drag to move, pinch or scroll to zoom. Use arrow keys to move, plus and minus to zoom." aria-describedby="ks-crop-help"></canvas><p id="ks-crop-help" class="ks-crop-help">Find your favorite framing.</p><div class="ks-crop-controls"><button class="ks-text" data-reset>Reset crop</button></div>`;}
   function render(){
     revision++;file=null;busy=step==='edit';
@@ -69,6 +69,7 @@ export function mountKeepsake(journal,section){
       const id=button.dataset.pick,index=chosen.indexOf(id);
       if(index>=0)chosen.splice(index,1);else if(chosen.length<3){chosen.push(id);if(!crops.has(id))crops.set(id,{x:.5,y:.5,zoom:1});}else{setStatus('Three’s the sweet spot. Deselect one to choose another.');return;}
       modal.querySelectorAll('[data-pick]').forEach(b=>{const n=chosen.indexOf(b.dataset.pick);b.setAttribute('aria-pressed',String(n>=0));b.querySelector('span').hidden=n<0;b.querySelector('span').textContent=n+1;});
+      button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
       modal.querySelector('.ks-count').textContent=`${chosen.length} of 3 selected`;modal.querySelector('[data-continue]').disabled=chosen.length!==3;setStatus('');
     });
     const next=modal.querySelector('[data-continue]');if(next)next.onclick=()=>{if(chosen.length===3){step='edit';render();}};
@@ -95,11 +96,16 @@ export function mountKeepsake(journal,section){
       images.forEach((promise,src)=>{if(!wanted.has(src)){images.delete(src);promise.then(image=>image.close?.()).catch(()=>{});}});
       const loaded=await Promise.all([...selected.map(p=>loadImage(p.viewerSrc||p.src)),loadImage('/pixel-santa.png')]);
       if(stamp!==revision||!modal.open)return;
+      // Typography is optional: a missing or slow font must not block the photos/export.
+      let fontTimer;
+      try{await Promise.race([Promise.allSettled([document.fonts.load('600 64px Manrope'),document.fonts.load('400 30px Manrope')]),new Promise(resolve=>{fontTimer=setTimeout(resolve,1500);})]);}
+      finally{clearTimeout(fontTimer);}
+      if(stamp!==revision||!modal.open)return;
       ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
       selected.forEach((p,i)=>drawPhoto(ctx,loaded[i],cardSlots[i],crops.get(p.id)));
       ctx.fillStyle=frame==='moss'?'#20392f':'#272727';ctx.textAlign='center';
-      fittedText(ctx,'excellent company.',530,1300,890,64,'italic $px Georgia, serif');
-      fittedText(ctx,`${(journal.authors||'Aditya & Angela').toLowerCase()} · ${journal.year||''}`,530,1363,890,30,'$px system-ui, sans-serif');
+      fittedText(ctx,'a few of our favorite humans',530,1300,890,64,'600 $px Manrope, sans-serif');
+      fittedText(ctx,`${(journal.authors||'Aditya & Angela').toLowerCase()} · ${journal.year||''}`,530,1363,890,30,'$px Manrope, sans-serif');
       ctx.font='24px Georgia, serif';ctx.fillText('♥',530,1420);
       const pixel=loaded[3],height=176,width=height*pixel.width/pixel.height;
       ctx.drawImage(pixel,1090-width/2,1248,width,height);

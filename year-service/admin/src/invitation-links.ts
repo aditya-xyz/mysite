@@ -18,7 +18,7 @@ export async function unsealLink(value:string,secret:string|undefined,id:string,
  const clear=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(iv),additionalData:new TextEncoder().encode(`${year}/${id}`)},await key(secret),bytes(ciphertext));
  const raw=new TextDecoder().decode(clear);if(!validToken(raw))throw new Error('Invalid stored invitation.');return raw;
 }
-export function invitationUrl(env:LinkConfig,raw:string,shareSocials:boolean){
- const origin=shareSocials?(env.SOCIAL_JOURNAL_ORIGIN||env.JOURNAL_ORIGIN):env.JOURNAL_ORIGIN;
+export function invitationUrl(env:LinkConfig,raw:string){
+ const origin=env.SOCIAL_JOURNAL_ORIGIN||env.JOURNAL_ORIGIN;
  return new URL(origin).origin+'/#'+raw;
 }

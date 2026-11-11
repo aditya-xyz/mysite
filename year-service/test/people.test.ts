@@ -184,5 +184,32 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
       assert.equal((await mf.dispatchFetch('https://guest.test/api/invitation',{headers:inviteCookie()})).status,401);
       assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
     });
+    await t.test('contact deletion requires auth and current version, and protects all stored references',async()=>{
+      const created=await req('contacts',{name:'Disposable contact'});assert.equal(created.status,201);
+      const {person}=await created.json() as {person:{id:string;version:number}};
+      const path=`contacts/${person.id}/delete`;
+      assert.equal((await req(path,{version:person.version},'https://evil.test')).status,403);
+      assert.equal((await req(path,{version:person.version},undefined,'')).status,401);
+      assert.equal((await req(path,{})).status,400);
+      assert.equal((await req(path,{version:person.version+1})).status,409);
+      await db.prepare("INSERT INTO editions(year,draft_json) SELECT 2028,json_set(draft_json,'$.photos',json('[]')) FROM editions WHERE year=2026").run();
+      const saved=await db.prepare('SELECT draft_json,published_json FROM editions WHERE year=2028').first<{draft_json:string;published_json:string|null}>();
+      await db.prepare("INSERT INTO media_objects(id,year,preview_key,filename,mime,bytes) VALUES('reference-check',2028,'reference-preview','sample.jpg','image/jpeg',10)").run();
+      const referenced={...JSON.parse(saved!.draft_json),photos:[{id:'reference-check',caption:'Sample',alt:'Sample',recipients:[person.id],hidden:true}]};
+      await db.prepare('UPDATE editions SET draft_json=? WHERE year=2028').bind(JSON.stringify(referenced)).run();
+      assert.equal((await req(path,{version:person.version})).status,409,'Hidden draft assignments stay protected');
+      await db.prepare('UPDATE editions SET draft_json=?,published_json=? WHERE year=2028').bind(saved!.draft_json,JSON.stringify(referenced)).run();
+      assert.equal((await req(path,{version:person.version})).status,409,'Older publications stay protected');
+      await db.prepare('UPDATE editions SET published_json=? WHERE year=2028').bind(saved!.published_json).run();
+      const active=await db.prepare('SELECT id,member_ids,person_id FROM invites LIMIT 1').first<{id:string;member_ids:string;person_id:string}>();
+      await db.prepare('UPDATE invites SET member_ids=? WHERE id=?').bind(JSON.stringify([active!.person_id,person.id]),active!.id).run();
+      assert.equal((await req(path,{version:person.version})).status,409,'Household invitation membership stays protected');
+      await db.prepare('UPDATE invites SET member_ids=? WHERE id=?').bind(active!.member_ids,active!.id).run();
+      await db.prepare("INSERT INTO address_verification_challenges VALUES('delete-test',?,?,?,'local_mock',?,?)").bind(person.id,person.version,'{}',expiry-86400,expiry).run();
+      assert.equal((await req(path,{version:person.version})).status,200);
+      assert.equal(await db.prepare('SELECT id FROM people WHERE id=?').bind(person.id).first(),null);
+      assert.equal(await db.prepare("SELECT id FROM address_verification_challenges WHERE id='delete-test'").first(),null);
+      assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
+    });
   }finally{await mf.dispose();}
 });
