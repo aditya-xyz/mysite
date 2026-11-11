@@ -560,3 +560,78 @@ It grants one additional print without canceling existing orders or deleting the
 history. Processing/uncertain orders cannot be reset. Lifetime prints ordered and
 current allowance availability are displayed separately. Reset history is marked
 on the original order. Apply migration 0011 before deploying reset support.
+
+
+## Google address verification and autocomplete
+
+Google Address Validation replaces the simulated verifier when configured. Lob
+remains the future fulfillment provider; enabling Google never enables prints.
+Apply migration `0012_google_address_verification.sql` before deploying either
+Worker. It adds one-use suggestion challenges, request counters, and verification
+expiry. The admin deployment config enables Google and the request guards; install
+`GOOGLE_ADDRESS_VALIDATION_API_KEY` as an admin Worker secret. An optional
+`GOOGLE_PLACES_API_KEY` secret overrides the shared key. Never bulk-upload the
+local fixture settings or enable a print provider during this rollout.
+
+Google Cloud setup:
+
+1. Use the scrapbook's Google Cloud project and enable billing. The OAuth client
+   used for admin sign-in is separate; do not change its credentials or consent.
+2. Enable **Address Validation API** and **Places API (New)**.
+3. Create a server-side API key restricted to those two APIs. A separate
+   Places-only key is also supported. Keep the key out of chat, client JavaScript,
+   URLs, logs, Git, and VITE variables. HTTP-referrer restrictions are for browser
+   keys, not this server-side integration. Local IP restrictions can use your
+   stable public outbound IP; Cloudflare production egress needs a separate plan
+   before applying an IP restriction there.
+4. Copy `admin/.dev.vars.example` to the ignored `admin/.dev.vars`. Set
+   `ADDRESS_VERIFICATION_PROVIDER="google"`, `GOOGLE_ADDRESS_VALIDATION_API_KEY`
+   to your key, and `GOOGLE_PLACES_ENABLED="true"`. Optionally set a separate
+   `GOOGLE_PLACES_API_KEY`; otherwise the validation key must allow both APIs.
+5. Review quotas and billing alerts before real requests. Application
+   guards are 50 validation attempts/day and 1,000/month, plus 200 combined Places
+   search/details attempts/day and 2,000/month. Zero pauses the corresponding
+   service. The guards count attempts conservatively, including provider failures;
+   they reset by UTC day/calendar month. These guards are enforced by the admin Worker, separately from account
+   quotas and billing alerts.
+
+The ignored `.private/preview-google-address.mjs` runs admin localhost:8812 and
+synthetic guest localhost:8813. By default suggestions/verification are simulated,
+Google traffic is blocked, and print orders are off. Real Google checks require an
+explicit local provider/key configuration. To use an owner-supplied key locally,
+from year-service with Node22: `LONG_PREVIEW=1 node --env-file=admin/.dev.vars
+.private/preview-google-address.mjs` (one shell line). In real mode enter a genuine
+address manually; never submit the synthetic sample addresses to Google. Nothing
+calls Google on page load. Never deploy this fixture or its mock authentication.
+
+Street suggestions start after three characters and a350ms debounce. Keyboard
+arrows/Enter select, Escape dismisses suggestions, and manual entry works if the
+service is disabled or fails. Selection requests only `id,addressComponents` from
+Place Details Essentials and fills the form; it does not verify or save a contact.
+Suggestions float over the form in a bounded scrolling list, keeping the modal
+size and position stable; keyboard selection scrolls the active option into view.
+Autocomplete uses a session terminating at Place Details, while address validation
+is a separate request without that session token. No map, photos, coordinates, or
+higher-tier Places fields are fetched. The API key stays in the admin Worker.
+
+**Verify & review** sends only the address to Google, with US CASS enabled. Complete
+US premise/subpremise results with USPS DPV confirmation Y are eligible for review.
+Missing/incorrect units, unconfirmed components, vacant/no-stat addresses, and
+incomplete/malformed results remain unverified. **Use address & save** accepts a
+server-stored suggestion bound to that contact/version and a15-minute lifetime.
+The suggestion is consumed once; the client cannot replace its verified address.
+A stale contact or expired suggestion requires another check. Save unverified
+remains available and clears any previous verification.
+
+Only the admin-confirmed address becomes permanent contact input. Raw Google
+responses/coordinates are never stored. Temporary suggestions are deleted on use,
+expired on access, and swept daily; verification metadata expires after28days and
+is cleared by the existing daily Worker sweep. Expired checks cannot grant print
+permission even before the sweep. Address edits still invalidate verification and
+print approval. The short lifetime is a conservative implementation choice around
+Google's data handling rules, not a guarantee of delivery or a USPS endorsement.
+
+Official references: [Google setup](https://developers.google.com/maps/documentation/address-validation/get-api-key),
+[pricing](https://developers.google.com/maps/billing-and-pricing/pricing),
+[autocomplete sessions](https://developers.google.com/maps/documentation/places/web-service/session-pricing),
+[validation data storage](https://cloud.google.com/maps-platform/terms/maps-service-terms).

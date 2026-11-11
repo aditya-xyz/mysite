@@ -1,22 +1,5 @@
-import {localPrintProvider,mailingAddress,PrintProblem,type PrintEnv} from '../../src/printing.ts';
-import {now,token} from '../../src/security.ts';
+import {localPrintProvider,PrintProblem,type PrintEnv} from '../../src/printing.ts';
 export async function printAdminRoute(request:Request,env:PrintEnv,path:string,year:number,readBody:()=>Promise<Record<string,unknown>>){
- const address=/^\/api\/contacts\/([a-z0-9-]{1,100})\/address$/.exec(path);
- if(address&&request.method==='POST'){
-  const data=await readBody();if(!Number.isInteger(data.version)||typeof data.verify!=='boolean')throw new PrintProblem(400,'Check the person version and verification choice.');
-  const a=mailingAddress(data.address);
-  if(data.verify&&!localPrintProvider(request,env))throw new PrintProblem(503,'Address validation is not configured. Save unverified until a provider is connected.');
-  // Local normalization is explicitly a simulation, never a claim of live USPS validation.
-  if(data.verify)for(const k of ['line1','line2','city'] as const)a[k]=a[k].toUpperCase();
-  const encoded=JSON.stringify(a);
-  const current=await env.DB.prepare('SELECT * FROM people WHERE id=?1 AND version=?2').bind(address[1],data.version as number).first();
-  if(!current)throw new PrintProblem(409,'This person changed in another window. Refresh before saving the address.');
-  if(data.verify&&current.mailing_address===encoded&&current.address_verified===1&&current.address_verifier==='local_mock')return Response.json({person:current,simulated:true});
-  let person=await env.DB.prepare('UPDATE people SET mailing_address=?1,address_verified=0,address_verified_at=NULL,address_verifier=NULL,address_verification_key=NULL,version=version+1,updated_at=unixepoch() WHERE id=?2 AND version=?3 RETURNING *').bind(encoded,address[1],data.version as number).first();
-  if(!person)throw new PrintProblem(409,'This person changed in another window. Refresh before saving the address.');
-  if(data.verify){person=await env.DB.prepare("UPDATE people SET address_verified=1,address_verified_at=?1,address_verifier='local_mock',address_verification_key=?5,version=version+1 WHERE id=?2 AND version=?3 AND mailing_address=?4 RETURNING *").bind(now(),address[1],(data.version as number)+1,encoded,token()).first();if(!person)throw new PrintProblem(409,'The address changed before verification completed. Verify it again.');}
-  return Response.json({person,simulated:!!data.verify});
- }
  if(path==='/api/print-settings'&&request.method==='POST'){
   const data=await readBody();if(typeof data.allowPrintOrders!=='boolean')throw new PrintProblem(400,'Choose whether print orders are allowed.');
   if(data.allowPrintOrders&&!localPrintProvider(request,env))throw new PrintProblem(503,'Live printing is not configured. Orders remain disabled.');

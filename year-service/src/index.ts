@@ -1,3 +1,4 @@
+import {clearExpiredAddressVerifications} from './address-state.ts';
 import {printStatus,createPrintOrder,PrintProblem} from './printing.ts';
 import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionCookie } from "./security.ts";
 import { reserveDownload,releaseDownload } from "./downloads.ts";
@@ -226,6 +227,7 @@ export default {
     return new Response(response.body, { status: response.status, headers });
   },
   async scheduled(_event: ScheduledEvent, env: Env) {
+    await clearExpiredAddressVerifications(env.DB);
     await env.DB.batch([
       env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?1").bind(now()),
       env.DB.prepare("DELETE FROM rate_limits WHERE expires_at<=?1").bind(now())

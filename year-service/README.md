@@ -415,10 +415,11 @@ verified address, so changing the mailing contact/address blocks new orders unti
 reverified and approved. Disabling the scrapbook switch immediately blocks new
 orders while preserving existing ones and their allowance usage.
 
-This implementation intentionally has **no live Lob or USPS adapter**. Only
+The deployed print release has **no live Lob fulfillment adapter**. Google address
+verification and autocomplete run in the admin Worker; see its README. Only
 `PRINT_PROVIDER=local_mock` on explicitly allowed HTTP loopback/test hosts permits
 simulated address normalization and orders. HTTPS rejects that mock mode. No
-provider secrets are configured, and live printing cannot be enabled. Production
+mailing provider secrets are configured, and live printing cannot be enabled. Production
 fulfillment still needs address-validation/provider integration, provider-safe
 idempotency/reconciliation, and a bleed-safe final print render. The current
 proof and JPEG master are for local review, not a claim of print-ready delivery.
@@ -454,3 +455,37 @@ the keepsake again refreshes eligibility after an admin reset. Apply migration
 A successful order closes its confirmation dialog automatically and shows a
 centered, accessible mailbox toast for eight seconds. It requires no extra Done
 step. Local simulation has a separate “nothing mailed” note.
+
+
+## Usage controls and remaining recommendations (2026-11-10)
+
+Account audit: Google has a $1 monthly alert at 50%, 90%, and 100%; Cloudflare
+has $5 and $10 spending alerts. These notify rather than stop spending. Google
+request quota editing was unavailable in the console. Twilio trial restrictions
+and an empty usage-category selector prevented alert setup. Netlify remains on
+Free Legacy with no saved payment card; credit auto-recharge does not apply.
+No Lob account exists yet. No plans were upgraded or payment methods added.
+
+| Service | Proposed controls | What is currently in this app |
+| --- | --- | --- |
+| Google Maps | 50 validations/day, 1,000/month; 200 combined autocomplete/details calls/day, 2,000/month; low per-minute provider quotas and a $1 budget alert | Admin Worker atomic request guards; server-only key; $1 monthly budget alert |
+| Twilio Verify | Add global 50 sends/day and500/month guards; $5/$10 monthly usage alerts; Fraud Guard on; geo-permissions only for actual guest countries (US/India/Netherlands discussed) | Per-invitation5 sends/hour,60sec resend lease,5 checks/challenge,15 checks/hour, hashed-IP limits; no global daily/monthly send cap in code |
+| Cloudflare Workers/D1/R2 | Usage alerts at $5/$10; consider a1,000ms CPU request cap after checking large-upload CPU; watch R2 storage at5GB/8GB | Private/authenticated media, bounded uploads and per-photo downloads; no overall dollar hard cap or configured CPU override; $5/$10 alerts saved |
+| Lob | Keep print orders off; later pilot:5 cards/day,20/month and a separate approved postal budget | Live mailing not connected; scrapbook defaultoff and one active allowance/invitation with owner reset |
+| Netlify | Keep the present plan, disable credit auto-recharge if available; usage notifications at50/80/100% | Static portfolio. Free Legacy plan; no credit auto-recharge or saved card; custom percentage alerts unavailable |
+| GitHub / domain | $0 paid Actions/Packages budget if unused; review domain renewal separately | Manual Worker deployments; domain renewal is an annual expense, not a usage quota |
+
+Google's budget alerts and Cloudflare's budget alerts are notifications, not hard
+spending brakes. Twilio usage triggers likewise need application enforcement to
+stop sends. Netlify credit-plan sites can pause when credits run out with recharge
+off; this may affect all sites on the team. Do not change plans or shut down
+resources to enforce these recommendations without owner review. Railway is no
+longer used; older MongoDB/backend resources should be checked separately for any
+remaining subscriptions, rather than assuming an old browser tab means active use.
+
+References: [Google quotas](https://developers.google.com/maps/documentation/address-validation/usage-and-billing),
+[Cloudflare budget alerts](https://developers.cloudflare.com/billing/manage/budget-alerts/),
+[Workers CPU limits](https://developers.cloudflare.com/workers/platform/limits/),
+[Twilio Verify rate limits](https://www.twilio.com/docs/verify/api/programmable-rate-limits),
+[Twilio usage triggers](https://www.twilio.com/docs/usage/api/usage-trigger),
+[Netlify credit/recharge controls](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/configure-auto-recharge/).

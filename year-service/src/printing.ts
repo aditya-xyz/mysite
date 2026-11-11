@@ -1,3 +1,4 @@
+import {addressVerificationCurrent,type AddressState} from './address-state.ts';
 import {digest,now,token} from './security.ts';
 import {invitationAudience,type InvitationAudience} from './invitations.ts';
 import {visiblePhotos,type Published,type Draft} from './edition.ts';
@@ -19,16 +20,16 @@ export const personalCount=(draft:Draft,ids:string[])=>new Set(draft.photos.filt
 export async function cleanPrintInvitations(draft:Draft,db:D1Database,year:number){
  const list=draft.printInvitations??[];
  if(!Array.isArray(list)||list.some(id=>typeof id!=='string')||list.length>100)throw new PrintProblem(400,'Check the print invitations.');
- const invites=await db.prepare('SELECT i.*,p.address_verified,p.address_verifier,p.mailing_address,p.address_verification_key FROM invites i JOIN people p ON p.id=i.person_id WHERE i.edition_year=?1').bind(year).all<InvitationAudience&{address_verified:number;mailing_address:string|null;address_verification_key:string|null}>();
+ const invites=await db.prepare('SELECT i.*,p.address_verified,p.address_verifier,p.address_verified_at,p.address_verified_until,p.mailing_address,p.address_verification_key FROM invites i JOIN people p ON p.id=i.person_id WHERE i.edition_year=?1').bind(year).all<InvitationAudience&AddressState&{address_verified:number;mailing_address:string|null;address_verification_key:string|null}>();
  const allowed:string[]=[];
- for(const i of invites.results)if(list.includes(i.id)&&i.address_verified&&i.mailing_address&&i.address_verification_key&&draft.printAddressKeys?.[i.id]===i.address_verification_key&&personalCount(draft,await invitationAudience(db,i))>=3)allowed.push(i.id);
+ for(const i of invites.results)if(list.includes(i.id)&&addressVerificationCurrent(i)&&i.mailing_address&&i.address_verification_key&&draft.printAddressKeys?.[i.id]===i.address_verification_key&&personalCount(draft,await invitationAudience(db,i))>=3)allowed.push(i.id);
  return {printInvitations:allowed,printAddressKeys:Object.fromEntries(invites.results.filter(i=>allowed.includes(i.id)).map(i=>[i.id,i.address_verification_key!]))};
 }
 export async function printContext(request:Request,env:PrintEnv,invite:InvitationAudience){
  const i=await env.DB.prepare('SELECT * FROM invites WHERE id=?1 AND revoked_at IS NULL AND expires_at>?2').bind(invite.id,now()).first<InvitationAudience&{version:number}>();
  if(!i)throw new PrintProblem(401,'This invitation is no longer available.');
  const edition=await env.DB.prepare('SELECT published_json,published_version,is_active,allow_print_orders FROM editions WHERE year=?1').bind(i.edition_year).first<{published_json:string|null;published_version:number;is_active:number;allow_print_orders:number}>();
- const person=await env.DB.prepare('SELECT id,name,version,mailing_address,address_verified,address_verifier,address_verification_key FROM people WHERE id=?1').bind(i.person_id).first<{id:string;name:string;version:number;mailing_address:string|null;address_verified:number;address_verifier:string|null;address_verification_key:string|null}>();
+ const person=await env.DB.prepare('SELECT id,name,version,mailing_address,address_verified,address_verified_at,address_verified_until,address_verifier,address_verification_key FROM people WHERE id=?1').bind(i.person_id).first<AddressState&{id:string;name:string;version:number;mailing_address:string|null;address_verified:number;address_verifier:string|null;address_verification_key:string|null}>();
  const published:Published|null=edition?.published_json?JSON.parse(edition.published_json):null;
  const photos=published?visiblePhotos(published,i.id,await invitationAudience(env.DB,i)).filter(p=>p.recipients.length):[];
  const existing=await env.DB.prepare("SELECT id,status,created_at FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<{id:string;status:string;created_at:number}>();
@@ -40,9 +41,9 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  else if(!published?.printNote?.trim())reason='The postcard note is not published yet.';
  else if(!published.printInvitations?.includes(i.id))reason='Printing is not enabled for this invitation.';
  else if(photos.length<3)reason='At least three personal photos are needed.';
- else if(!person?.address_verified||!person.mailing_address)reason='The mailing contact needs a verified US address.';
+ else if(!addressVerificationCurrent(person)||!person?.mailing_address)reason='The mailing contact needs a verified US address.';
  else if(published.printAddressKeys?.[i.id]!==person.address_verification_key)reason='The mailing address changed. Ask us to re-enable printing.';
- else if(mode==='disabled'||person.address_verifier!=='local_mock')reason='The print provider is not configured. No orders can be placed.';
+ else if(mode==='disabled')reason='The print provider is not configured. No orders can be placed.';
  const confirmationKey=await digest(JSON.stringify([i.id,i.version,edition?.published_version,person?.version,person?.mailing_address,published?.printNote]));
  return {i,edition,person,published,photos,existing,mode,reason,confirmationKey};
 }
@@ -74,7 +75,7 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  SELECT ?1,i.id,e.year,?2,'preparing',p.mailing_address,p.name,json_extract(e.published_json,'$.printNote'),json_extract(e.published_json,'$.authors'),?3,?4,e.published_version
  FROM invites i JOIN editions e ON e.year=i.edition_year JOIN people p ON p.id=i.person_id
  WHERE i.id=?5 AND i.version=?6 AND i.revoked_at IS NULL AND i.expires_at>?7 AND e.is_active=1 AND e.allow_print_orders=1 AND e.published_version=?8
- AND p.id=?9 AND p.version=?10 AND p.address_verified=1 AND p.address_verifier='local_mock'
+ AND p.id=?9 AND p.version=?10 AND p.address_verified=1 AND p.address_verifier IN ('local_mock','google') AND (p.address_verifier!='google' OR p.address_verified_until>?7)
  AND EXISTS(SELECT 1 FROM json_each(e.published_json,'$.printInvitations') WHERE value=i.id)
  AND json_extract(e.published_json,'$.printAddressKeys."'||i.id||'"')=p.address_verification_key
  AND NOT EXISTS(SELECT 1 FROM print_orders WHERE invitation_id=i.id AND year=e.year AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')) ON CONFLICT DO NOTHING RETURNING id`)

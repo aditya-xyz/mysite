@@ -1,0 +1,18 @@
+# Local admin Worker only. Copy to .dev.vars in this directory.
+# Never paste API keys into chat or expose them in browser/VITE_ variables.
+# Leave the provider blank to disable address verification.
+ADDRESS_VERIFICATION_PROVIDER=""
+GOOGLE_ADDRESS_VALIDATION_API_KEY=""
+# Optional local application request guards (defaults: 50/day, 1000/month).
+# Zero pauses Google verification. UTC periods; counts attempts, including errors.
+ADDRESS_VALIDATION_DAILY_LIMIT=""
+ADDRESS_VALIDATION_MONTHLY_LIMIT=""
+# Print ordering remains disabled independently of address verification.
+
+# Optional autocomplete via Places API (New). Same Cloud project as validation.
+# Enable explicitly with true. A separate Places-only key is optional; otherwise
+# the validation key must allow both APIs. No key is ever sent to the browser.
+GOOGLE_PLACES_ENABLED=""
+GOOGLE_PLACES_API_KEY=""
+ADDRESS_AUTOCOMPLETE_DAILY_LIMIT=""
+ADDRESS_AUTOCOMPLETE_MONTHLY_LIMIT=""

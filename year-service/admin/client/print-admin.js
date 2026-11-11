@@ -1,9 +1,10 @@
+import {mountAddressEditor,addressIsCurrent} from './address-editor.js';
 import {drawPostcardBack} from '../../web/print-design.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function invitationPrintEligibility(state,contacts,invite){
  const person=contacts.find(p=>p.id===invite.person_id),ids=new Set([invite.id,...(invite.memberIds||[invite.person_id])]);
  const count=new Set(state.draft.photos.filter(p=>!p.hidden&&p.recipients.length&&p.recipients.some(id=>ids.has(id))).map(p=>p.id)).size;
- const reason=count<3?`${count} of 3 personal photos`:!person?.address_verified?'Mailing contact needs a verified US address':invite.revoked_at||invite.expires_at<=Date.now()/1000?'Invitation is inactive':'';
+ const reason=count<3?`${count} of 3 personal photos`:!addressIsCurrent(person)?'Mailing contact needs a current verified US address':invite.revoked_at||invite.expires_at<=Date.now()/1000?'Invitation is inactive':'';
  return {count,person,reason};
 }
 export function prunePrintPermissions(state,contacts){
@@ -13,16 +14,7 @@ export function prunePrintPermissions(state,contacts){
 }
 export function mountPrintAdmin({view,state,contacts,api,requestApi,mark,saveDraft,showModal,updateContacts,render,toast}){
  const app=document.querySelector('#app');
- function addressActions(){app.querySelectorAll('[data-edit-contact]').forEach(b=>{
-  const person=contacts.find(p=>p.id===b.dataset.editContact),row=b.closest('.person');if(row.querySelector('[data-address]'))return;
-  const button=document.createElement('button');button.className='secondary';button.dataset.address=person.id;button.textContent=person.address_verified?(person.address_verifier==='local_mock'?'Address verified · Local test':'USPS verified address'):'Mailing address';row.append(button);
-  button.onclick=()=>{
-   let a={country:'US'};try{a=JSON.parse(person.mailing_address)||a;}catch{}
-   showModal(`<p class="kicker">People · Mailing address</p><h2>${esc(person.name)}</h2><p class="hint">US only. The phone-verification contact receives the household’s print. Address edits clear verification and require print permission to be enabled again.</p><form id="address-form">${[['line1','Street address'],['line2','Apartment / unit (optional)'],['city','City'],['state','State (two letters)'],['postalCode','ZIP code']].map(([key,label])=>`<label class="field"><span>${label}</span><input name="${key}" value="${esc(a[key])}" maxlength="120" ${key==='line2'?'':'required'}></label>`).join('')}<p class="notice">Local prototype: verification is simulated, not a live USPS check.</p><div class="actions"><button class="button" type="submit" name="verify" value="yes">Verify & save locally</button><button class="secondary" type="submit" name="verify" value="no">Save unverified</button></div><p class="error" role="alert" id="address-error"></p></form>`);
-   const form=document.querySelector('#address-form');form.onsubmit=async e=>{e.preventDefault();const buttons=form.querySelectorAll('button');buttons.forEach(b=>b.disabled=true);try{const result=await requestApi(`contacts/${person.id}/address`,{version:person.version,address:{...Object.fromEntries(new FormData(form)),country:'US'},verify:e.submitter?.value==='yes'});updateContacts(result.person);document.querySelector('#modal').close();if(state){prunePrintPermissions(state,contacts);mark();}render();toast(result.simulated?'Address saved with simulated verification. No USPS request was sent.':'Address saved unverified.');}catch(error){document.querySelector('#address-error').textContent=error.message;buttons.forEach(b=>b.disabled=false);}};
-  };
- });}
- if(view==='directory'){addressActions();document.querySelector('#directory-search')?.addEventListener('input',addressActions);}
+ if(view==='directory')mountAddressEditor({app,contacts,requestApi,showModal,updateContacts,mark,render,toast,state});
  if(view==='story'){
   const panel=document.createElement('section');panel.className='panel form-panel';panel.innerHTML=`<h2>Printed postcard note</h2><p class="hint">The same note appears on the back of every postcard. Save and publish it with the scrapbook. Up to 350 characters and 10 line breaks.</p><label class="field"><span>A little note from us</span><textarea maxlength="350" rows="5" id="print-note">${esc(state.draft.printNote||'')}</textarea></label><p class="hint">Signed “With love, ${esc(state.draft.authors)}”. Print orders start disabled.</p><button class="secondary" type="button" id="preview-print-note">Preview postcard back</button>`;app.querySelector('.editor-width').append(panel);panel.querySelector('textarea').oninput=e=>{state.draft.printNote=e.target.value;mark();};panel.querySelector('#preview-print-note').onclick=()=>{showModal('<p class="kicker">Draft postcard note</p><h2>A little note from us</h2><canvas id="print-note-proof" class="print-note-proof" role="img" aria-label="Draft postcard back with a sample address"></canvas><p class="hint">Sample address only. Save and publish to use this note on future orders.</p>');drawPostcardBack(document.querySelector('#print-note-proof'),{note:state.draft.printNote||'',authors:state.draft.authors,recipientName:'Your guest',address:{line1:'123 EXAMPLE LANE',line2:'',city:'PORTLAND',state:'OR',postalCode:'97201',country:'US'}});};
  }

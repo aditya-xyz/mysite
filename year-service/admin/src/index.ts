@@ -1,3 +1,5 @@
+import {addressAutocompleteRoute} from './address-autocomplete.ts';
+import {addressAdminRoute,addressMode,type AddressEnv} from './address-verification.ts';
 import {printAdminRoute} from './printing.ts';
 import {cleanPrintInvitations,PrintProblem,type PrintEnv} from '../../src/printing.ts';
 import {sealLink,unsealLink,invitationUrl,type LinkConfig} from './invitation-links.ts';
@@ -10,7 +12,7 @@ import { mediaLibraryRoute } from './media-library.ts';
 import { token, digest, now, sameOrigin } from "../../src/security.ts";
 import { clientEdition, type Draft, type Published, type PublishedPhoto } from "../../src/edition.ts";
 
-interface Env extends AuthConfig, LinkConfig, PrintEnv { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
+interface Env extends AuthConfig, LinkConfig, AddressEnv { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
 interface EditionRow { draft_json: string; draft_version: number; published_version: number | null; published_at: number | null; is_active:number }
 interface Media { id: string; preview_key: string; viewer_key:string|null; original_key: string | null; filename: string; mime: string; bytes: number }
 class Problem extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -92,10 +94,10 @@ async function route(request: Request, env: Env, actor: string) {
   const url = new URL(request.url); let path = url.pathname;
   if (!["GET","HEAD","POST"].includes(request.method)) throw new Problem(405,"Method not allowed.");
   if (request.method === "POST" && !sameOrigin(request)) throw new Problem(403,"Use the admin dashboard to make changes.");
-  if(path.startsWith('/api/contacts/')){const globalPrint=await printAdminRoute(request,env,path,2026,()=>body(request));if(globalPrint)return globalPrint;}
+  if(path.startsWith('/api/contacts/')||path.startsWith('/api/address-verification/')){const autocomplete=await addressAutocompleteRoute(request,env,path,()=>body(request));if(autocomplete)return autocomplete;const address=await addressAdminRoute(request,env,path,()=>body(request));if(address)return address;}
   if (path === "/api/contacts") {
     if(request.method === "GET") {
-      const people=await env.DB.prepare("SELECT id,name,phone,version,mailing_address,address_verified,address_verified_at,address_verifier,address_verification_key FROM people ORDER BY name COLLATE NOCASE,id").all<Contact>();
+      const people=await env.DB.prepare("SELECT id,name,phone,version,mailing_address,address_verified,address_verified_at,address_verified_until,address_verifier,address_verification_key FROM people ORDER BY name COLLATE NOCASE,id").all<Contact>();
       return json({people:people.results});
     }
     if(request.method === "POST") {
@@ -159,7 +161,7 @@ async function route(request: Request, env: Env, actor: string) {
     const row = await edition(env,year);
     const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,share_socials,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
-    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,printMode:env.PRINT_PROVIDER==='local_mock'&&url.protocol==='http:'?'local_mock':'disabled',draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
+    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,printMode:env.PRINT_PROVIDER==='local_mock'&&url.protocol==='http:'?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
     const data = await body(request), draft = await validDraft(data.draft,env,year);
