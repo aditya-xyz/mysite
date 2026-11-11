@@ -16,12 +16,12 @@ function wrangler(args) {
 }
 const action=process.argv[2];
 if(action==='seed') {
-  if(!/^\+[1-9]\d{7,14}$/.test(vars.ANGELA_PHONE_E164||'')) throw new Error('Set ANGELA_PHONE_E164 in .dev.vars first.');
+  if(!/^\+[1-9]\d{7,14}$/.test(vars.INITIAL_RECIPIENT_PHONE_E164||'')) throw new Error('Set INITIAL_RECIPIENT_PHONE_E164 in .dev.vars first.');
   let invite;
   try {invite=JSON.parse(await readFile(new URL('angela.json',privateDir),'utf8'));}
   catch {invite={token:randomBytes(32).toString('hex'),expiresAt:Math.floor(Date.now()/1000)+90*86400};await writeFile(new URL('angela.json',privateDir),JSON.stringify(invite),{mode:0o600});}
   const hash=createHash('sha256').update(invite.token).digest('hex');
-  const rows=[`INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',${quote(hash)},'Angela',${quote(vars.ANGELA_PHONE_E164)},${invite.expiresAt}) ON CONFLICT(id) DO NOTHING;`];
+  const rows=[`INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',${quote(hash)},${quote(vars.INITIAL_RECIPIENT_NAME||'Guest')},${quote(vars.INITIAL_RECIPIENT_PHONE_E164)},${invite.expiresAt}) ON CONFLICT(id) DO NOTHING;`];
   for(const [id,personal,caption,alt,order] of [
     ['personal-coast',true,'Some days are worth keeping.','Illustrative coastal sample',1],
     ['personal-evening',true,'The little moments, together.','Illustrative evening sample',2],
@@ -34,7 +34,7 @@ if(action==='seed') {
   }
   const sql=new URL('seed.sql',privateDir);await writeFile(sql,rows.join('\n'),{mode:0o600});
   wrangler(['d1','execute','DB',mode,'--file',sql.pathname]);
-  console.log('Seeded Angela’s invitation and four illustrative samples. No SMS sent.');
+  console.log('Seeded the initial recipient invitation and four illustrative samples. No SMS sent.');
 } else if(action==='secrets') {
   const keys=['TWILIO_ACCOUNT_SID','TWILIO_API_KEY_SID','TWILIO_API_KEY_SECRET','TWILIO_VERIFY_SERVICE_SID'];
   if(keys.some(k=>!vars[k])) throw new Error('Missing Twilio settings in .dev.vars.');

@@ -1,3 +1,5 @@
+import {contactUsage} from './contact-usage.ts';
+import {deleteInvitation} from './invitation-delete.ts';
 import {deleteContact} from './contact-delete.ts';
 import {addressAutocompleteRoute} from './address-autocomplete.ts';
 import {addressAdminRoute,addressMode,type AddressEnv} from './address-verification.ts';
@@ -112,6 +114,8 @@ async function route(request: Request, env: Env, actor: string) {
       return json({person},201);
     }
   }
+  const usageRoute=/^\/api\/contacts\/([a-z0-9-]{1,100})\/usage$/.exec(path);
+  if(usageRoute&&request.method==='GET')return json(await contactUsage(env.DB,usageRoute[1]));
   const deleteRoute=/^\/api\/contacts\/([a-z0-9-]{1,100})\/delete$/.exec(path);
   if(deleteRoute && request.method==='POST'){
     const data=await body(request),result=await deleteContact(env.DB,deleteRoute[1],data.version);
@@ -232,6 +236,8 @@ async function route(request: Request, env: Env, actor: string) {
     }
     return json({name:invitationName(invite),url:invitationUrl(env,raw)});
   }
+  const deleteInvitationRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/delete$/.exec(path);
+  if(deleteInvitationRoute&&request.method==='POST'){const data=await body(request),result=await deleteInvitation(env.DB,deleteInvitationRoute[1],year,data.version);await audit(env,actor,'delete-invitation',deleteInvitationRoute[1]).run();return json(result);}
   const invitationRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/details$/.exec(path);
   if ((path === "/api/invitations" || invitationRoute) && request.method === "POST") {
     const data=await body(request),personId=text(data.verificationContactId??data.personId,"verification contact",100);

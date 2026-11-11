@@ -651,3 +651,17 @@ photos), publications from any year, and invitation memberships block deletion;
 existing invitation and print history are preserved. Invitation rows expand one
 at a time, while print-order history starts collapsed. Save print permissions to
 draft saves the draft; publish separately to apply those invitation permissions.
+
+People's **Where used** action lists saved-draft photo numbers (including hidden
+photos), published references, and invitation status across all years. Items link
+to the relevant photo editor or invitation. The person filter beside Photos' tabs
+shows direct assignments only; All includes hidden assignments, while shared
+photos are not counted as individual assignments. Tab counts follow that filter.
+
+Revocation closes access but keeps the invitation. A revoked invitation now offers
+**Delete invitation** with confirmation and a current-version check. It removes
+the old link, sessions and download counters; it keeps People and photos. Any
+print-order history (including canceled/failed orders), legacy photo ownership or
+stored manifest references block deletion. After deleting an otherwise unused
+revoked invitation, its person can be explicitly deleted from People. No migration
+is required, and no deletion happens automatically on revocation.

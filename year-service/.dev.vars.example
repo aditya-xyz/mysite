@@ -7,7 +7,8 @@ TWILIO_VERIFY_SERVICE_SID=""
 
 # Full number including country code, e.g. +1 followed by the 10-digit number.
 # This is for the initial invitation setup; it will not be sent to the frontend.
-ANGELA_PHONE_E164=""
+INITIAL_RECIPIENT_NAME=""
+INITIAL_RECIPIENT_PHONE_E164=""
 
 # Sending stays off until the provider integration and recipient are checked.
 SMS_ENABLED="false"

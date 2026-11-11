@@ -38,12 +38,12 @@ Wrangler uses browser OAuth (`npx wrangler login`). No global Cloudflare key.
 the Worker. It never includes `../src/year/local-photos` or the public-site build.
 A daily scheduled task removes expired sessions and rate-limit entries.
 
-`node scripts/provision.mjs seed --remote` seeds Angela and nonpersonal sample
+`node scripts/provision.mjs seed --remote` seeds the configured initial recipient and nonpersonal sample
 media from `.private/samples`. It is idempotent and does not re-enable revoked
 invitations or overwrite the phone on an existing record. Existing invitation
 credentials are reused from `.private/angela.json`; the link expires in 90 days.
 `node scripts/provision.mjs invitation <https-pilot-url>` writes the local QR.
-`node scripts/provision.mjs revoke --remote` revokes Angela and her sessions.
+`node scripts/provision.mjs revoke --remote` revokes the legacy pilot invitation and its sessions.
 Phone changes and reissuing invitations need an explicit administrative migration.
 There is no remotely accessible admin endpoint.
 
@@ -504,3 +504,8 @@ each tile and scrolls selected photos clear of its action bar. The exported card
 reads “a few of our favorite humans” without a period. Missing or slow font loads
 fall back without preventing image creation or download. Print ordering remains
 disabled by default and is controlled independently of presentation changes.
+
+The legacy provisioning helper uses generic `INITIAL_RECIPIENT_NAME` and
+`INITIAL_RECIPIENT_PHONE_E164` placeholders. Real values stay in ignored local
+configuration. Existing live people and invitations are managed in admin; changing
+this example does not change production records or require reseeding.

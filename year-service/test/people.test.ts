@@ -198,6 +198,8 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
       const referenced={...JSON.parse(saved!.draft_json),photos:[{id:'reference-check',caption:'Sample',alt:'Sample',recipients:[person.id],hidden:true}]};
       await db.prepare('UPDATE editions SET draft_json=? WHERE year=2028').bind(JSON.stringify(referenced)).run();
       assert.equal((await req(path,{version:person.version})).status,409,'Hidden draft assignments stay protected');
+      const usagePath=`contacts/${person.id}/usage`;assert.equal((await req(usagePath,undefined,undefined,'')).status,401);
+      const usage=await (await req(usagePath)).json() as {drafts:{year:number;number:number;hidden:number;id:string}[]};assert.deepEqual(usage.drafts.map(p=>[p.year,p.number,p.hidden,p.id]),[[2028,1,1,'reference-check']]);
       await db.prepare('UPDATE editions SET draft_json=?,published_json=? WHERE year=2028').bind(saved!.draft_json,JSON.stringify(referenced)).run();
       assert.equal((await req(path,{version:person.version})).status,409,'Older publications stay protected');
       await db.prepare('UPDATE editions SET published_json=? WHERE year=2028').bind(saved!.published_json).run();
@@ -209,6 +211,32 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
       assert.equal((await req(path,{version:person.version})).status,200);
       assert.equal(await db.prepare('SELECT id FROM people WHERE id=?').bind(person.id).first(),null);
       assert.equal(await db.prepare("SELECT id FROM address_verification_challenges WHERE id='delete-test'").first(),null);
+      assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
+    });
+    await t.test('revoked invitation deletion releases its person while preserving print and legacy photo history',async()=>{
+      const {person}=await (await req('contacts',{name:'Delete invitation test',phone:'+15555550155'})).json() as {person:{id:string;version:number}};
+      const created=await req('editions/2026/invitations',{memberIds:[person.id],verificationContactId:person.id,addressedTo:'Delete test'});assert.equal(created.status,201,await created.clone().text());
+      const {id}=await created.json() as {id:string};const path=`editions/2026/invitations/${id}/delete`;
+      const version=async()=>(await db.prepare('SELECT version FROM invites WHERE id=?').bind(id).first<{version:number}>())!.version;
+      assert.equal((await req(path,{version:await version()})).status,409,'Active invites cannot be deleted');
+      const old=await version();assert.equal((await req(`editions/2026/people/${id}/revoke`,{})).status,200);const current=await version();
+      assert.equal((await req(path,{version:current},'https://evil.test')).status,403);assert.equal((await req(path,{version:current},undefined,'')).status,401);
+      assert.equal((await req(path,{version:old})).status,409);assert.equal((await req('editions/2027/invitations/'+id+'/delete',{version:current})).status,409);
+      const usage=await (await req(`contacts/${person.id}/usage`)).json() as {invitations:{status:string;year:number}[]};assert.equal(usage.invitations[0].status,'Revoked');assert.equal(usage.invitations[0].year,2026);
+      await db.prepare("INSERT INTO print_orders(id,invitation_id,year,request_key,status,address_json,recipient_name,note,authors,recipe_json,artwork_key,published_version) VALUES('delete-protected',?,2026,'test','canceled','{}','Sample','Sample','Sample','{}','test',1)").bind(id).run();
+      assert.equal((await req(path,{version:current})).status,409,'Even canceled print history is preserved');
+      await db.prepare("DELETE FROM print_orders WHERE id='delete-protected'").run();
+      await db.prepare("INSERT INTO photos(id,invite_id,preview_key,caption,alt) VALUES('legacy-delete-check',?,'test','Sample','Sample')").bind(id).run();
+      assert.equal((await req(path,{version:current})).status,409,'Legacy photo authorization cannot be orphaned');
+      await db.prepare("DELETE FROM photos WHERE id='legacy-delete-check'").run();
+      await db.prepare('INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,?)').bind('delete-session',id,expiry).run();
+      await db.prepare('INSERT INTO original_downloads VALUES(?,?,?,?)').bind(id,'test-photo',expiry,1).run();
+      assert.equal((await req(path,{version:current})).status,200);
+      assert.equal(await db.prepare('SELECT id FROM invites WHERE id=?').bind(id).first(),null);
+      assert.equal(await db.prepare('SELECT token_hash FROM sessions WHERE invite_id=?').bind(id).first(),null);
+      assert.equal(await db.prepare('SELECT invite_id FROM original_downloads WHERE invite_id=?').bind(id).first(),null);
+      assert.ok(await db.prepare('SELECT id FROM people WHERE id=?').bind(person.id).first(),'Person is kept until explicitly deleted');
+      assert.equal((await req(`contacts/${person.id}/delete`,{version:person.version})).status,200);
       assert.deepEqual((await db.prepare('PRAGMA foreign_key_check').all()).results,[]);
     });
   }finally{await mf.dispose();}
