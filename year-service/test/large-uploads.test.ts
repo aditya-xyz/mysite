@@ -39,6 +39,7 @@ test('private bounded uploads of originals under 100 MB',async t=>{
     await db.batch((await readFile('migrations/0010_print_orders.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0011_print_allowance_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0012_google_address_verification.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0013_unpublish.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await t.test('new upload APIs retain authentication, same-origin and year checks',async()=>{
       for(const path of ['uploads','uploads/photo-'+('a'.repeat(24))+'/parts/1','uploads/photo-'+('a'.repeat(24))+'/complete','uploads/photo-'+('a'.repeat(24))+'/abort']){
         assert.equal((await req('editions/2026/'+path,{},undefined,'')).status,401);

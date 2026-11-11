@@ -13,10 +13,19 @@ const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<'
 async function api(path, data) {
   const response = await fetch('/api/' + path, data === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'Please try again.');
+  if (!response.ok) {const error=new Error(result.error || 'Please try again.');error.code=result.code;throw error;}
   return result;
 }
-function applyBrand(authors='Aditya & Angela',year) { document.querySelector('.signature').textContent=authors.toLowerCase(); document.title=(year?year+' · ':'')+authors; document.querySelector('.edition-label').textContent=year||''; }
+function applyBrand(authors='Aditya & Angela',year) {
+  const signature=document.querySelector('.signature');
+  signature.textContent=authors.toLowerCase();signature.href='https://adityapatil.xyz';signature.setAttribute('aria-label','Aditya’s public website');signature.hidden=false;
+  document.title=(year?year+' · ':'')+authors;document.querySelector('.edition-label').textContent=year||'';
+}
+function clearBrand(){
+  const signature=document.querySelector('.signature');
+  signature.hidden=true;signature.replaceChildren();signature.removeAttribute('href');signature.removeAttribute('aria-label');
+  document.title='A private scrapbook';document.querySelector('.edition-label').textContent='';
+}
 function footerProfile(name,profileUrl){
   if(!profileUrl)return document.createTextNode(name);
   try{
@@ -27,23 +36,33 @@ function footerProfile(name,profileUrl){
   }catch{return document.createTextNode(name);}
 }
 function renderFooter(shareSocials=false){
+  const footer=document.querySelector('footer');
+  footer.innerHTML=`<div class="footer-ornament" aria-hidden="true"></div><div class="footer-ornament footer-ornament-bottom" aria-hidden="true"></div><p class="footer-closing">Here’s to the next chapter—<br><em>and having you in it.</em></p><span></span>`;
   document.querySelectorAll('.footer-ornament').forEach(ornament=>ornament.innerHTML=winterSnowflake);
   const links=shareSocials?scrapbookConfig.instagram:{};
   document.querySelector('footer > span').replaceChildren('By ',footerProfile('Aditya',links.aditya),' & ',footerProfile('Angela',links.angela),', with help from ',footerProfile('Pixel',links.pixel));
+  footer.hidden=false;
 }
 function sharedHeading(title){return !title||['A little of our year','A little of our year.'].includes(title.trim())?'Meanwhile, in our camera roll…':title;}
-function message(error) { app.innerHTML = `<section class="entry"><p class="kicker">A private edition</p><h1>A little<br><em>patience.</em></h1><p>${escape(error.message)}</p><button class="text-button" id="retry">Try again</button></section>`; document.querySelector('#retry').onclick = start; }
+function showOffline(){
+  clearBrand();const footer=document.querySelector('footer');footer.hidden=true;footer.replaceChildren();
+  app.innerHTML='<section class="entry"><p class="kicker">A private edition</p><h1>This scrapbook has<br><em>been taken offline.</em></h1><p>It’s unavailable to guests right now. Please check back later.</p><button class="text-button" id="retry">Check again</button></section>';
+  document.querySelector('#retry').onclick=start;
+}
+function message(error) { if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;} app.innerHTML = `<section class="entry"><p class="kicker">A private edition</p><h1>A little<br><em>patience.</em></h1><p>${escape(error.message)}</p><button class="text-button" id="retry">Try again</button></section>`; document.querySelector('#retry').onclick = start; }
 async function start() {
-  renderFooter(false);
+  clearBrand();
+  const footer=document.querySelector('footer');footer.hidden=true;footer.replaceChildren();
   try {
     // Invitation secrets travel in the fragment, never the request URL or Referer.
     const raw = location.hash.slice(1);
-    if (/^[a-f0-9]{64}$/.test(raw)) { history.replaceState(null, '', location.pathname); const opened=await api('open', {token:raw}); if(opened.redirectUrl){location.replace(opened.redirectUrl);return;} }
-    try { journal = await api('journal'); showJournal(); return; } catch {}
+    if (/^[a-f0-9]{64}$/.test(raw)) { history.replaceState(null, '', location.pathname); const opened=await api('open', {token:raw}); if(opened.redirectUrl){location.replace(opened.redirectUrl);return;} if(opened.offline){showOffline();return;} }
+    try { journal = await api('journal'); showJournal(); return; } catch(error) {if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}}
     const invite = await api('invitation');
     applyBrand(invite.authors,invite.year);
+    renderFooter();
     app.innerHTML = `<section class="entry"><div class="invitation-delivery"><img src="/pixel-santa.png" width="92" height="100" alt="Pixel wearing a Santa hat"><div><p class="handwritten">special delivery</p><p class="kicker">A little piece of our year</p></div></div><h1 class="invitation-greeting">A little something for <em>${escape(invite.name)}</em>.</h1><p class="intro">${escape(invite.intro || "A few places, some familiar faces, and the everyday things worth keeping. We’d love to share them with you.")}</p><p>We’ll send a code to ${escape(invite.verificationName || invite.name)}’s phone ending in <strong>${escape(invite.phoneHint)}</strong>.</p><button class="button" id="send">Text me a code →</button><p class="error" role="alert" id="error"></p><p class="signoff">With love, ${escape(invite.authors || "Aditya & Angela")}</p></section>`;
-    document.querySelector('#send').onclick = async e => { e.target.disabled = true; try { await api('send', {}); showCode(invite); } catch (error) { document.querySelector('#error').textContent = error.message; e.target.disabled = false; } };
+    document.querySelector('#send').onclick = async e => { e.target.disabled = true; try { await api('send', {}); showCode(invite); } catch (error) { if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;} document.querySelector('#error').textContent = error.message; e.target.disabled = false; } };
   } catch (error) { message(error); }
 }
 function showCode(invite) {
@@ -51,9 +70,9 @@ function showCode(invite) {
   let remaining = 60;
   const resend = document.querySelector('#resend');
   const timer = setInterval(() => { if (!resend.isConnected) {clearInterval(timer); return;} remaining--; resend.textContent = remaining > 0 ? `Resend available in ${remaining} seconds` : 'Text me a new code'; if (remaining <= 0) {resend.disabled=false; clearInterval(timer);} },1000);
-  resend.onclick = async () => {resend.disabled=true; try {await api('send',{}); showCode(invite);} catch(error) {document.querySelector('#error').textContent=error.message;resend.disabled=false;} };
+  resend.onclick = async () => {resend.disabled=true; try {await api('send',{}); showCode(invite);} catch(error) {if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}document.querySelector('#error').textContent=error.message;resend.disabled=false;} };
   const input = document.querySelector('#code'); input.focus(); input.oninput = () => {input.value=input.value.replace(/\D/g,'');};
-  app.querySelector('form').onsubmit = async e => {e.preventDefault(); const button=app.querySelector('[type=submit]');button.disabled=true;try {await api('verify',{code:input.value});journal=await api('journal');showJournal();} catch(error){document.querySelector('#error').textContent=error.message;button.disabled=false;}};
+  app.querySelector('form').onsubmit = async e => {e.preventDefault(); const button=app.querySelector('[type=submit]');button.disabled=true;try {await api('verify',{code:input.value});journal=await api('journal');showJournal();} catch(error){if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}document.querySelector('#error').textContent=error.message;button.disabled=false;}};
 }
 function layoutPhotoGrid(grid){
   if(!grid)return;
@@ -240,5 +259,4 @@ dialog.addEventListener('cancel',event=>{event.preventDefault();closePhoto();});
 dialog.addEventListener('animationend',event=>{if(event.target===dialog&&event.animationName==='photo-exit'&&dialog.classList.contains('is-closing'))dialog.close();});
 dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closePhoto();}});
 dialog.addEventListener('close',()=>{clearTimeout(closeTimer);dialog.classList.remove('is-closing');resetPhotoDrag();generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;selected=null;swipeStart=null;pointers.clear();viewerPhotos=[];viewerIndex=-1;dialog.querySelector('img').removeAttribute('src');if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}const restore=viewerReturnFocus;viewerReturnFocus=null;restore?.focus({preventScroll:true});});
-renderFooter();
 start();

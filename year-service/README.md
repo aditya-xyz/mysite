@@ -520,3 +520,20 @@ On touch screens, a deliberate downward drag on an unzoomed viewer photo dismiss
 it; shorter drags return to place. Horizontal swipes still navigate, and a second
 pointer or zoomed viewport cancels dismissal so pinch zoom remains available.
 The close icon is visually quieter while retaining a 44px tap target.
+
+## Taking a scrapbook offline
+
+Admin's Review & publish offers **Unpublish…**, followed by confirmation. This
+closes guest access immediately while retaining drafts, the last published
+snapshot, photos, invitations, sessions, and print history. It does not activate
+another year. Publishing again reopens the same invitation links. Apply migration
+`0013_unpublish.sql` before deploying the updated guest and admin Workers.
+
+A valid invitation to an explicitly unpublished scrapbook displays “This scrapbook
+has been taken offline” before SMS verification, even if the guest's verification
+session has expired. The offline page hides author branding and footer credits.
+Refreshing keeps the invitation context; no SMS is sent and no expired session is
+extended. Invalid, expired, and revoked invitations still receive generic invitation
+errors. Journals, previews/originals, and print requests remain blocked server-side
+while offline. Admin draft previews remain available. Once republished, an expired
+verification session must be verified normally before viewing private content.

@@ -665,3 +665,23 @@ print-order history (including canceled/failed orders), legacy photo ownership o
 stored manifest references block deletion. After deleting an otherwise unused
 revoked invitation, its person can be explicitly deleted from People. No migration
 is required, and no deletion happens automatically on revocation.
+
+## Unpublishing
+
+Review & publish has an explicit **Unpublish…** confirmation. It closes guest
+access without deleting drafts, publication snapshots, photos, invitations,
+sessions, or print history. Unsaved editor changes stay in memory. The collection
+and review screen show Offline; publishing again reopens the same links. No other
+year is activated automatically. Apply migration `0013_unpublish.sql` first.
+
+`POST /api/editions/{year}/unpublish` requires `confirm: true` and the current
+`publicationRevision` from state. Publication transitions advance that revision,
+so stale confirmations cannot take a newer publication offline. The client also
+sends it when publishing. Draft versions remain independent. Existing Access,
+server identity, same-origin, and audit protections apply.
+
+Valid invitations see a plain offline message before phone verification, including
+when their verification session has expired. No SMS or new session is required to
+read that message. Republishing does not extend expired verification sessions or
+change invitation expiry/revocation. Guest media and printing remain inaccessible
+while offline; admin saved-draft previews remain available.

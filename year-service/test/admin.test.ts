@@ -37,6 +37,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
     await db.batch((await readFile('migrations/0010_print_orders.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0011_print_allowance_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0012_google_address_verification.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0013_unpublish.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     const expires=Math.floor(Date.now()/1000)+86400;
     await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',?1,'Angela','+15555550101',?2)").bind(await digest("a".repeat(64)),expires).run();
     let assertion=await signed();
@@ -98,6 +99,47 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
         assert.equal(journal.note,draft.note);assert.equal(journal.photos[0].id,photoId);assert.equal(journal.photos[0].canSave,true);assert.equal(journal.stories.length,1);
         assert.deepEqual(new Uint8Array(await (await guestReq(`media/${photoId}/original`,raw)).arrayBuffer()),original);
       }
+    });
+    await t.test("unpublishing preserves content and links, blocks guest access, and needs no fresh 2FA for the offline message",async()=>{
+      const before=await db.prepare("SELECT * FROM editions WHERE year=2026").first<any>();
+      const revision=before.publication_revision;
+      const payload={confirm:true,publicationRevision:revision};
+      assert.equal((await req('/api/editions/2026/unpublish',payload,undefined,'')).status,401);
+      assert.equal((await req('/api/editions/2026/unpublish',payload,'https://other.test')).status,403);
+      assert.equal((await req('/api/editions/2026/unpublish',{...payload,confirm:false})).status,400);
+      assert.equal((await req('/api/editions/2026/unpublish',{...payload,publicationRevision:revision-1})).status,409);
+      const result=await req('/api/editions/2026/unpublish',payload);assert.equal(result.status,200);
+      const offline=await result.json() as any;assert.equal(offline.isActive,false);assert.ok(offline.takenOfflineAt);assert.equal(offline.publicationRevision,revision+1);
+      const after=await db.prepare("SELECT * FROM editions WHERE year=2026").first<any>();
+      for(const key of ['draft_json','draft_version','published_json','published_version','published_at','allow_print_orders'])assert.equal(after[key],before[key],key+' is preserved');
+      assert.equal((await req('/api/editions/2026/unpublish',payload)).status,409);
+      for(const route of ['journal',`media/${photoId}`,`media/${photoId}/viewer`,`media/${photoId}/original`,'print/status']){
+        const r=await guestReq(route);assert.equal(r.status,409,route);assert.equal((await r.json() as any).code,'SCRAPBOOK_OFFLINE');
+      }
+      const expired='09'.repeat(32);
+      await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?,?,1)").bind(await digest(expired),'angela').run();
+      const cookie='__Host-year_invite='+ 'a'.repeat(64)+'; __Host-year_session='+expired;
+      const guest=(path:string,data?:unknown,cookies=cookie)=>mf.dispatchFetch('https://scrapbook.test/api/'+path,{method:data===undefined?'GET':'POST',headers:{Cookie:cookies,Origin:'https://scrapbook.test','Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});
+      assert.equal((await guest('journal')).status,401,'Expired 2FA is not extended');
+      for(const [path,data] of [['invitation',undefined],['send',{}],['verify',{code:'123456'}]] as const){
+        const r=await guest(path,data);assert.equal(r.status,409);assert.equal((await r.json() as any).code,'SCRAPBOOK_OFFLINE');
+      }
+      const opened=await guest('open',{token:'a'.repeat(64)},'');assert.equal(opened.status,200);assert.deepEqual(await opened.json(),{offline:true});
+      assert.match(opened.headers.get('Set-Cookie')!,/__Host-year_invite=/,'Refreshing an offline link keeps invitation context');
+      assert.equal((await guest('invitation',undefined,'')).status,401);
+      assert.equal((await guest('open',{token:'f'.repeat(64)},'')).status,401);
+      await db.prepare("UPDATE invites SET revoked_at=1 WHERE id='angela'").run();
+      assert.equal((await guest('open',{token:'a'.repeat(64)},'')).status,401);
+      assert.equal((await guest('invitation')).status,401);
+      await db.prepare("UPDATE invites SET revoked_at=NULL WHERE id='angela'").run();
+      const preview=await req('/api/editions/2026/preview');assert.equal(preview.status,200,'Admin can preview offline drafts');
+      assert.equal((await req('/api/publish',{version,publicationRevision:revision})).status,409,'A stale tab cannot republish over an unpublish');
+      const republished=await req('/api/publish',{version,publicationRevision:offline.publicationRevision});assert.equal(republished.status,200);
+      assert.equal((await req('/api/editions/2026/unpublish',{confirm:true,publicationRevision:offline.publicationRevision})).status,409,'A stale unpublish cannot close a newer publication');
+      assert.equal((await guestReq('journal')).status,200,'Existing valid sessions reopen without re-verification');
+      assert.equal((await guest('invitation')).status,200,'Expired 2FA can use the same invitation when online again');
+      assert.equal((await guest('journal')).status,401,'Republishing does not bypass expired 2FA');
+      assert.equal((await db.prepare("SELECT count(*) AS n FROM admin_events WHERE action='unpublish'").first<any>())!.n,1);
     });
     await t.test("draft audience edits do not leak before publication; shared originals stay blocked",async()=>{
       draft.photos[0].recipients=[];

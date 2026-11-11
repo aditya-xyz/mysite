@@ -34,7 +34,7 @@ test('Google address verification requires admin review, respects quotas, and ne
  try{
   const db=await mf.getD1Database('DB','admin');
   for(const name of ['0001_invites.sql','0002_editor.sql','0003_scrapbooks.sql','0004_people.sql'])await db.exec((await readFile('migrations/'+name,'utf8')).replace(/\n/g,' '));
-  for(const name of ['0005_shared_invitations.sql','0006_photo_renditions_downloads.sql','0007_photo_uploads.sql','0008_media_library.sql','0009_invitation_sharing.sql','0010_print_orders.sql','0011_print_allowance_resets.sql','0012_google_address_verification.sql']){
+  for(const name of ['0005_shared_invitations.sql','0006_photo_renditions_downloads.sql','0007_photo_uploads.sql','0008_media_library.sql','0009_invitation_sharing.sql','0010_print_orders.sql','0011_print_allowance_resets.sql','0012_google_address_verification.sql','0013_unpublish.sql']){
    const sql=await readFile('migrations/'+name,'utf8');if(name.startsWith('0006')||name.startsWith('0007'))await db.exec(sql.replace(/^--.*$/gm,'').replace(/\n/g,' '));else await db.batch(sql.split('--> statement-breakpoint').map(part=>db.prepare(part)));
   }
   await db.prepare("INSERT INTO people(id,name,phone) VALUES('contact','Test Recipient','+15555550100'),('other','Another Recipient',NULL)").run();

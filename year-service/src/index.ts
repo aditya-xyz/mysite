@@ -22,7 +22,7 @@ interface Env {
 interface Invite extends InvitationAudience { version:number; person_id: string | null; edition_year: number; id: string; name: string; phone: string; expires_at: number; challenge_expires_at: number }
 interface Photo { id: string; invite_id: string | null; preview_key: string; original_key: string | null; filename: string | null; caption: string; alt: string }
 const INVITE = "__Host-year_invite", SESSION = "__Host-year_session";
-class Failure extends Error { constructor(public status: number, message: string, public retryAfter?:number) { super(message); } }
+class Failure extends Error { constructor(public status: number, message: string, public retryAfter?:number, public code?:string) { super(message); } }
 const json = (data: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(data, { status, headers });
 
@@ -35,7 +35,8 @@ async function limited(env: Env, key: string, max: number, seconds: number) {
   if (!row || row.count > max) throw new Failure(429, "A few too many attempts. Please try again later.");
 }
 async function requireActive(env:Env,year:number){
-  const row=await env.DB.prepare("SELECT is_active FROM editions WHERE year=?1").bind(year).first<{is_active:number}>();
+  const row=await env.DB.prepare("SELECT is_active,taken_offline_at FROM editions WHERE year=?1").bind(year).first<{is_active:number;taken_offline_at:number|null}>();
+  if(row?.taken_offline_at)throw new Failure(409,"This scrapbook has been taken offline. Please check back later.",undefined,"SCRAPBOOK_OFFLINE");
   if(!row?.is_active)throw new Failure(409,"This scrapbook is no longer active. Please ask for a current invitation.");
 }
 async function invitation(request: Request, env: Env) {
@@ -100,11 +101,16 @@ async function route(request: Request, env: Env) {
     const row = await env.DB.prepare("SELECT name,addressed_to,edition_year,share_socials FROM invites WHERE token_hash=?1 AND revoked_at IS NULL AND expires_at>?2")
       .bind(await digest(data.token), now()).first<{ name: string; addressed_to:string|null;edition_year:number;share_socials:number }>();
     if (!row) throw new Failure(401, "This invitation link is not valid or has expired.");
-    await requireActive(env,row.edition_year);
+    let offline=false;
+    try{await requireActive(env,row.edition_year);}catch(error){
+      if(error instanceof Failure && error.code==='SCRAPBOOK_OFFLINE')offline=true;
+      else throw error;
+    }
     const preferred=env.SOCIAL_JOURNAL_ORIGIN||env.JOURNAL_ORIGIN;
     if(preferred && new URL(preferred).origin!==url.origin)return json({redirectUrl:new URL(preferred).origin+"/#"+data.token});
     const headers=new Headers();headers.append("Set-Cookie",sessionCookie(INVITE,data.token,86400));
     headers.append("Set-Cookie",sessionCookie(SESSION,"",0));
+    if(offline)return json({offline:true},200,headers);
     return json({ name: invitationName(row) }, 200, headers);
   }
   if (path === "/api/invitation" && request.method === "GET") {
@@ -214,7 +220,7 @@ export default {
   async fetch(request: Request, env: Env) {
     let response: Response;
     try { response = await route(request, env); }
-    catch (error) { response = error instanceof PrintProblem ? json({error:error.message},error.status) : error instanceof Failure ? json({ error: error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
+    catch (error) { response = error instanceof PrintProblem ? json({error:error.message},error.status) : error instanceof Failure ? json({ error: error.message,...(error.code?{code:error.code}:{}),...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store, private");
     headers.set("Referrer-Policy", "no-referrer");

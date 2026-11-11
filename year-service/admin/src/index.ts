@@ -16,7 +16,7 @@ import { token, digest, now, sameOrigin } from "../../src/security.ts";
 import { clientEdition, type Draft, type Published, type PublishedPhoto } from "../../src/edition.ts";
 
 interface Env extends AuthConfig, LinkConfig, AddressEnv { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
-interface EditionRow { draft_json: string; draft_version: number; published_version: number | null; published_at: number | null; is_active:number }
+interface EditionRow { draft_json: string; draft_version: number; published_version: number | null; published_at: number | null; is_active:number; taken_offline_at:number|null; publication_revision:number }
 interface Media { id: string; preview_key: string; viewer_key:string|null; original_key: string | null; filename: string; mime: string; bytes: number }
 class Problem extends Error { constructor(public status: number, message: string) { super(message); } }
 const json = (value: unknown, status = 200) => Response.json(value, { status });
@@ -135,13 +135,13 @@ async function route(request: Request, env: Env, actor: string) {
   }
   if (path === "/api/editions") {
     if (request.method === "GET") {
-      const rows = await env.DB.prepare(`SELECT year,draft_json,draft_version,published_version,published_at,is_active,updated_at,
+      const rows = await env.DB.prepare(`SELECT year,draft_json,draft_version,published_version,published_at,is_active,taken_offline_at,publication_revision,updated_at,
         (SELECT count(DISTINCT m.value) FROM invites i,json_each(i.member_ids) m WHERE i.edition_year=editions.year) AS people_count
         FROM editions ORDER BY year DESC`).all<EditionRow & {year:number;updated_at:number;people_count:number}>();
       return json({editions:rows.results.map(row=>{
         const draft=JSON.parse(row.draft_json) as Draft;
         return {year:row.year,title:draft.title,authors:draft.authors,version:row.draft_version,
-          publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,updatedAt:row.updated_at,
+          publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,updatedAt:row.updated_at,
           photoCount:draft.photos.length,storyCount:draft.stories.length,peopleCount:row.people_count};
       })});
     }
@@ -172,7 +172,7 @@ async function route(request: Request, env: Env, actor: string) {
     const row = await edition(env,year);
     const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,share_socials,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
-    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,printMode:env.PRINT_PROVIDER==='local_mock'&&url.protocol==='http:'?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
+    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,printMode:env.PRINT_PROVIDER==='local_mock'&&url.protocol==='http:'?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
     const data = await body(request), draft = await validDraft(data.draft,env,year);
@@ -183,19 +183,30 @@ async function route(request: Request, env: Env, actor: string) {
     await audit(env,actor,"save-draft",String(year)).run();
     return json({version:result.draft_version,printInvitations:draft.printInvitations,printAddressKeys:draft.printAddressKeys});
   }
+  if (path === "/api/unpublish" && request.method === "POST") {
+    const data=await body(request);
+    if(data.confirm!==true || !Number.isInteger(data.publicationRevision))return fail("Confirm taking this scrapbook offline.");
+    const result=await env.DB.prepare(`UPDATE editions SET is_active=0,taken_offline_at=unixepoch(),publication_revision=publication_revision+1
+      WHERE year=?1 AND publication_revision=?2 AND taken_offline_at IS NULL AND (published_json IS NOT NULL OR is_active=1)
+      RETURNING taken_offline_at,publication_revision`).bind(year,data.publicationRevision as number).first<{taken_offline_at:number;publication_revision:number}>();
+    if(!result)throw new Problem(409,"Publication status changed. Refresh before taking this scrapbook offline.");
+    await audit(env,actor,"unpublish",String(year)).run();
+    return json({isActive:false,takenOfflineAt:result.taken_offline_at,publicationRevision:result.publication_revision});
+  }
   if (path === "/api/publish" && request.method === "POST") {
     const data = await body(request), row = await edition(env,year);
     if (data.version !== row.draft_version) throw new Problem(409,"Save and review the latest draft before publishing.");
+    if(data.publicationRevision!==undefined && data.publicationRevision!==row.publication_revision)throw new Problem(409,'Publication status changed. Refresh before publishing.');
     const draft = await validDraft(JSON.parse(row.draft_json),env,year), published = await snapshot(draft,env,year);
     if (!published.photos.length) return fail("Add at least one photo before publishing.");
     const invitations=await env.DB.prepare("SELECT m.value AS person_id FROM invites i,json_each(i.member_ids) m WHERE i.edition_year=?1 AND i.revoked_at IS NULL AND i.expires_at>?2").bind(year,now()).all<{person_id:string}>();
     const active=new Set(invitations.results.map(i=>i.person_id));
     if(draft.photos.some(p=>!p.hidden && p.recipients.some(id=>!active.has(id))))return fail("Invite every selected photo recipient to this scrapbook before publishing.");
-    const result = await env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch(),is_active=1 WHERE year=?3 AND draft_version=?2 RETURNING published_version")
-      .bind(JSON.stringify(published),row.draft_version,year).first<{published_version:number}>();
+    const result = await env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch(),is_active=1,taken_offline_at=NULL,publication_revision=publication_revision+1 WHERE year=?3 AND draft_version=?2 AND publication_revision=?4 RETURNING published_version,publication_revision")
+      .bind(JSON.stringify(published),row.draft_version,year,row.publication_revision).first<{published_version:number;publication_revision:number}>();
     if (!result) throw new Problem(409,"The draft changed while publishing. Review it again.");
     await audit(env,actor,"publish",String(year)).run();
-    return json({publishedVersion:result.published_version,isActive:true});
+    return json({publishedVersion:result.published_version,isActive:true,takenOfflineAt:null,publicationRevision:result.publication_revision});
   }
   if (path === "/api/preview" && request.method === "GET") {
     const id = url.searchParams.get("recipient") || "";
