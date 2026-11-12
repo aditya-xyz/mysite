@@ -33,7 +33,7 @@ commit and deploy them together. Keep original photo backups separately.
 
 The public site self-hosts the same width-95 Asap variable WOFF2 as Pixelbook,
 with regular body text and bold headings. Font source and license are in
-`src/assets/fonts/`. The hero photo expands, overshoots, and settles after decode.
+`src/assets/fonts/`. The hero photo scales smoothly into place after decode.
 Story cards and toolkit rows enter from the right in sequence as they come into
 view; the personal note enters from the left with a small overshoot. Initial
 hidden states are applied before paint, keyboard focus reveals controls, and
