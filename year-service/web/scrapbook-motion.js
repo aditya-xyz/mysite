@@ -4,7 +4,7 @@ export function mountScrapbookMotion(root){
   const cards=[...root.querySelectorAll('.grid .card')],seen=new WeakSet(),visible=new WeakSet();
   const stack=root.querySelector('.pb-mugshot-stack'),portraits=stack?[...stack.querySelectorAll('img')]:[];
   const tail=root.querySelector('.pb-tail-word');
-  const gifts=[...root.querySelectorAll('.ks-entry,.pb-gift')];
+  const gifts=[...root.querySelectorAll('.ks-entry,.pb-gift')],giftAnimations=new Map();
   const hero=root.querySelector('.pb-cover-art'),heroImage=hero?.querySelector('.pb-santa'),heroCredit=root.querySelector('.pb-cover-credit');
   let timer,swapTimer,stackVisible=false,destroyed=false,tailVisible=false,lastWag=-Infinity,heroPlayed=false;
   function animate(node,frames,options){
@@ -78,23 +78,43 @@ export function mountScrapbookMotion(root){
   cards.forEach(card=>{if(observer){if(!reduced.matches)card.classList.add('pb-photo-waiting');observer.observe(card);}else visible.add(card);});
   // Short keepsake cards need to be well inside the screen before their reveal.
   // The photo observer's early threshold can spend the whole entrance at the edge.
+  function revealGift(target,withMotion=true){
+    if(seen.has(target)){if(!withMotion){target.classList.remove('pb-gift-awaiting');giftAnimations.get(target)?.cancel();}return;}
+    seen.add(target);giftObserver?.unobserve(target);
+    const distance=window.innerWidth<360?16:window.innerWidth<=700?24:28;
+    const direction=target.classList.contains('ks-entry')?-1:1;
+    const animation=withMotion&&target.classList.contains('pb-gift-awaiting')?animate(target,[
+      {opacity:0,translate:`${distance*direction}px 8px`},
+      {opacity:1,translate:'0 0'}
+    ],{duration:650,easing:'cubic-bezier(.2,.75,.3,1)',fill:'both'}):null;
+    if(animation){
+      giftAnimations.set(target,animation);
+      // Keep the underlying card hidden until the animation has finished painting.
+      // Safari can otherwise show it in place before applying the first keyframe.
+      animation.finished.catch(()=>{}).finally(()=>{
+        target.classList.remove('pb-gift-awaiting');giftAnimations.delete(target);animation.cancel();
+      });
+    }else target.classList.remove('pb-gift-awaiting');
+  }
   const giftObserver='IntersectionObserver' in window?new IntersectionObserver(entries=>{
     entries.forEach(({target,isIntersecting,intersectionRatio})=>{
-      if(!isIntersecting||intersectionRatio<.25||seen.has(target))return;
-      seen.add(target);giftObserver.unobserve(target);
-      const distance=window.innerWidth<360?16:window.innerWidth<=700?24:28;
-      const direction=target.classList.contains('ks-entry')?-1:1;
-      animate(target,[{opacity:.15,translate:`${distance*direction}px 8px`},{opacity:1,translate:'0 0'}],{duration:650,easing:'cubic-bezier(.2,.75,.3,1)',fill:'backwards'});
+      if(isIntersecting&&intersectionRatio>=.25)revealGift(target);
     });
   },{threshold:.25,rootMargin:'0px 0px -64px 0px'}):null;
-  gifts.forEach(gift=>giftObserver?.observe(gift));
+  gifts.forEach(gift=>{
+    if(giftObserver&&!reduced.matches&&gift.animate)gift.classList.add('pb-gift-awaiting');
+    giftObserver?.observe(gift);
+  });
+  // Keyboard focus must never land on a visually hidden gift control.
+  const giftFocused=event=>{const gift=gifts.find(gift=>gift.contains(event.target));if(gift)revealGift(gift,false);};
+  root.addEventListener('focusin',giftFocused);
   if(stack)observer?.observe(stack);if(tail)observer?.observe(tail);
   function preferenceChanged(){
-    if(reduced.matches){hero?.classList.remove('pb-hero-awaiting');if(swapTimer&&stack)stack.dataset.previewDesign=portraits.find(p=>p.dataset.stackPosition==='0')?.dataset.mugshotId||'';clearTimeout(swapTimer);swapTimer=null;animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));}
+    if(reduced.matches){hero?.classList.remove('pb-hero-awaiting');if(swapTimer&&stack)stack.dataset.previewDesign=portraits.find(p=>p.dataset.stackPosition==='0')?.dataset.mugshotId||'';clearTimeout(swapTimer);swapTimer=null;animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));gifts.forEach(gift=>gift.classList.remove('pb-gift-awaiting'));}
     schedule();
   }
   reduced.addEventListener('change',preferenceChanged);document.addEventListener('visibilitychange',schedule);window.addEventListener('scroll',wag,{passive:true});
-  return {photoReady,destroy(){destroyed=true;heroImage?.removeEventListener('load',heroLoaded);heroImage?.removeEventListener('error',heroFailed);hero?.classList.remove('pb-hero-awaiting');clearTimeout(timer);clearTimeout(swapTimer);observer?.disconnect();giftObserver?.disconnect();animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));stack?.removeEventListener('click',onClick);reduced.removeEventListener('change',preferenceChanged);document.removeEventListener('visibilitychange',schedule);window.removeEventListener('scroll',wag);}};
+  return {photoReady,destroy(){destroyed=true;heroImage?.removeEventListener('load',heroLoaded);heroImage?.removeEventListener('error',heroFailed);hero?.classList.remove('pb-hero-awaiting');clearTimeout(timer);clearTimeout(swapTimer);observer?.disconnect();giftObserver?.disconnect();root.removeEventListener('focusin',giftFocused);gifts.forEach(gift=>gift.classList.remove('pb-gift-awaiting'));animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));stack?.removeEventListener('click',onClick);reduced.removeEventListener('change',preferenceChanged);document.removeEventListener('visibilitychange',schedule);window.removeEventListener('scroll',wag);}};
 }
 
 export function assembleKeepsake(canvas,slots){

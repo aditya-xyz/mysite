@@ -191,3 +191,8 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-cover-art{transform-origin:50% 60%}
 .pb-cover-art.pb-hero-awaiting,.pb-cover-portrait:has(.pb-hero-awaiting) .pb-cover-credit{opacity:0}
 @media(prefers-reduced-motion:reduce){.pb-cover-art.pb-hero-awaiting,.pb-cover-portrait:has(.pb-hero-awaiting) .pb-cover-credit{opacity:1}}
+
+
+/* Gift entrances start hidden, rather than jumping out of their resting position. */
+.pb-gift-awaiting{opacity:0}
+@media(prefers-reduced-motion:reduce){.pb-gift-awaiting{opacity:1}}
