@@ -22,12 +22,22 @@ the build, including when a non-root base is used.
 The public site no longer requests the Railway `/project` or `/experience`
 endpoints and needs no MongoDB connection, S3 bucket, or `VITE_API_BASE_URL`.
 The social footer links to GitHub, LinkedIn, and Medium. Links are maintained
-in `src/socials.ts`. The hero contains only Explore my work; its LinkedIn button
-has been removed. The header contains the wordmark and Work/Toolkit/About navigation,
+in `src/socials.ts`. The hero has no call-to-action button or photo caption. Pixel’s Instagram
+links have been removed from the public site. The header contains the wordmark and Work/Toolkit/About navigation,
 with no Let’s connect link. There is no contact form or Getform integration.
 
 To update content, edit the local arrays and add/import any new images, then
 commit and deploy them together. Keep original photo backups separately.
+
+## Typography and motion
+
+The public site self-hosts the same width-95 Asap variable WOFF2 as Pixelbook,
+with regular body text and bold headings. Font source and license are in
+`src/assets/fonts/`. The hero photo expands, overshoots, and settles after decode.
+Story cards and toolkit rows enter from the right in sequence as they come into
+view; the personal note enters from the left with a small overshoot. Initial
+hidden states are applied before paint, keyboard focus reveals controls, and
+reduced-motion users see everything without movement. Palette controls remain.
 
 ## Netlify
 
