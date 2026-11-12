@@ -5,12 +5,34 @@ export function mountScrapbookMotion(root){
   const stack=root.querySelector('.pb-mugshot-stack'),portraits=stack?[...stack.querySelectorAll('img')]:[];
   const tail=root.querySelector('.pb-tail-word');
   const gifts=[...root.querySelectorAll('.ks-entry,.pb-gift')];
-  let timer,swapTimer,stackVisible=false,destroyed=false,tailVisible=false,lastWag=-Infinity;
+  const hero=root.querySelector('.pb-cover-art'),heroImage=hero?.querySelector('.pb-santa'),heroCredit=root.querySelector('.pb-cover-credit');
+  let timer,swapTimer,stackVisible=false,destroyed=false,tailVisible=false,lastWag=-Infinity,heroPlayed=false;
   function animate(node,frames,options){
     if(reduced.matches||!node?.animate)return;
     const animation=node.animate(frames,options);animations.add(animation);
     animation.finished.catch(()=>{}).finally(()=>animations.delete(animation));
     return animation;
+  }
+  function revealHero(){
+    if(destroyed||heroPlayed||!hero)return;
+    heroPlayed=true;hero.classList.remove('pb-hero-awaiting');
+    animate(hero,[
+      {opacity:0,scale:.84},
+      {opacity:1,scale:1.055,offset:.62},
+      {opacity:1,scale:.99,offset:.82},
+      {opacity:1,scale:1}
+    ],{duration:740,easing:'cubic-bezier(.2,.7,.3,1)',fill:'backwards'});
+    animate(heroCredit,[{opacity:0,translate:'0 6px'},{opacity:1,translate:'0 0'}],{duration:620,delay:120,easing:'ease-out',fill:'backwards'});
+  }
+  function heroLoaded(){
+    if(heroImage.decode)heroImage.decode().catch(()=>{}).then(revealHero);
+    else revealHero();
+  }
+  function heroFailed(){heroPlayed=true;hero?.classList.remove('pb-hero-awaiting');}
+  if(heroImage){
+    if(!reduced.matches&&hero.animate)hero.classList.add('pb-hero-awaiting');
+    if(heroImage.complete){if(heroImage.naturalWidth)heroLoaded();else heroFailed();}
+    else{heroImage.addEventListener('load',heroLoaded,{once:true});heroImage.addEventListener('error',heroFailed,{once:true});}
   }
   function photoReady(card){
     if(!card||seen.has(card)||!visible.has(card)||!card.querySelector('.is-ready'))return;
@@ -68,11 +90,11 @@ export function mountScrapbookMotion(root){
   gifts.forEach(gift=>giftObserver?.observe(gift));
   if(stack)observer?.observe(stack);if(tail)observer?.observe(tail);
   function preferenceChanged(){
-    if(reduced.matches){if(swapTimer&&stack)stack.dataset.previewDesign=portraits.find(p=>p.dataset.stackPosition==='0')?.dataset.mugshotId||'';clearTimeout(swapTimer);swapTimer=null;animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));}
+    if(reduced.matches){hero?.classList.remove('pb-hero-awaiting');if(swapTimer&&stack)stack.dataset.previewDesign=portraits.find(p=>p.dataset.stackPosition==='0')?.dataset.mugshotId||'';clearTimeout(swapTimer);swapTimer=null;animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));}
     schedule();
   }
   reduced.addEventListener('change',preferenceChanged);document.addEventListener('visibilitychange',schedule);window.addEventListener('scroll',wag,{passive:true});
-  return {photoReady,destroy(){destroyed=true;clearTimeout(timer);clearTimeout(swapTimer);observer?.disconnect();giftObserver?.disconnect();animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));stack?.removeEventListener('click',onClick);reduced.removeEventListener('change',preferenceChanged);document.removeEventListener('visibilitychange',schedule);window.removeEventListener('scroll',wag);}};
+  return {photoReady,destroy(){destroyed=true;heroImage?.removeEventListener('load',heroLoaded);heroImage?.removeEventListener('error',heroFailed);hero?.classList.remove('pb-hero-awaiting');clearTimeout(timer);clearTimeout(swapTimer);observer?.disconnect();giftObserver?.disconnect();animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));stack?.removeEventListener('click',onClick);reduced.removeEventListener('change',preferenceChanged);document.removeEventListener('visibilitychange',schedule);window.removeEventListener('scroll',wag);}};
 }
 
 export function assembleKeepsake(canvas,slots){
