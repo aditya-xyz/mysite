@@ -192,9 +192,9 @@ async function route(request: Request, env: Env) {
       const data=clientEdition(edition,i.id,invitationName(i),i.edition_year,await invitationAudience(env.DB,i));
       data.shareSocials=!!i.share_socials;
       Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,i.edition_year)});
-      const mugSetting=await env.DB.prepare('SELECT allow_mug_orders FROM editions WHERE year=?1').bind(i.edition_year).first<{allow_mug_orders:number}>();
-      if(!i.allow_mug||!mugSetting?.allow_mug_orders){data.gift.enabled=false;data.gift.designs=[];}
-      Object.assign(data.gift,{orderingEnabled:!!i.allow_mug&&!!mugSetting?.allow_mug_orders&&simulatedOrders(request,env),mode:simulatedOrders(request,env)?'simulation':'disabled'});
+      const giftStatus=await mugStatus(request,env,i);
+      if(!giftStatus.eligible){data.gift.enabled=false;data.gift.designs=[];}
+      Object.assign(data.gift,{hasOrder:!!giftStatus.claim,orderingEnabled:giftStatus.eligible&&simulatedOrders(request,env),mode:giftStatus.mode});
       // Old publications remain unchanged; resolve missing preview dimensions read-only.
       for(let offset=0;offset<data.photos.length;offset+=8)await Promise.all(data.photos.slice(offset,offset+8).map(async photo=>{
         if(!photo.width||!photo.height)Object.assign(photo,await previewDimensions(env.MEDIA,edition.photos.find(p=>p.id===photo.id)!.preview_key));

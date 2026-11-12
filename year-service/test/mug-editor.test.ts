@@ -37,3 +37,12 @@ test('curated artwork stays fixed while captions can change',()=>{
  assert.equal(curatedMugChange(current,[current[0],...current.slice(0,-1)]),true);
  for(const change of [{id:'other'},{alt:'Other'},{cutoutVersion:'b'.repeat(32)},{cutoutEditable:true}])assert.equal(curatedMugChange(current,current.map((d,i)=>i===0?{...d,...change}:d)),true);
 });
+
+// Initial HTML must reflect the server snapshot, before the picker is opened.
+test('households with an existing mug order get the view-gift button on first render',()=>{
+ const journal={name:'Household',gift:{enabled:true,hasOrder:true,designs:Array.from({length:4},(_,i)=>({id:'mug-'+i,src:'/api/mugs/mug-'+i}))}};
+ assert.match(giftMarkup(journal),/data-open-gift>view your household’s gift<\/button>/);
+ assert.doesNotMatch(giftMarkup(journal),/pick your mugshot/);
+ journal.gift.hasOrder=false;
+ assert.match(giftMarkup(journal),/data-open-gift>pick your mugshot<\/button>/);
+});

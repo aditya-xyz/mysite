@@ -676,3 +676,9 @@ and weights 100–900 retained. Regular body text, bold headings and more open
 heading spacing match the approved Metro-inspired preview. The same face is used
 in the generated keepsake; Caveat remains the handwritten signoff. Font license,
 source checksum and reproducible conversion instructions are in `web/fonts/`.
+
+The authenticated journal includes a household-scoped `gift.hasOrder` flag, so
+the gift button says “view your household’s gift” on its first render when an
+active mug order already exists. Opening it still refreshes order status,
+including allowance resets made since the page loaded. Receipt/address details
+remain behind the dedicated authenticated gift status request.
