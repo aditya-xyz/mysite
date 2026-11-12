@@ -138,8 +138,12 @@ export function mountKeepsake(journal,section){
       file=new File([blob],`a-little-keepsake-${journal.year||'our-year'}.jpg`,{type:'image/jpeg'});busy=false;updateExport();
     }catch(error){if(stamp!==revision||error.name==='AbortError')return;busy=false;updateExport();setStatus(error.message);const retry=document.createElement('button');retry.className='ks-text';retry.textContent='Try again';retry.onclick=paintCard;modal.querySelector('.ks-status').append(' ',retry);}
   }
-  function download(){if(!file)return;const url=URL.createObjectURL(file);urls.add(url);const a=document.createElement('a');a.href=url;a.download=file.name;document.body.append(a);a.click();a.remove();setStatus('Your keepsake is ready. Your browser chooses where it saves.');setTimeout(()=>{URL.revokeObjectURL(url);urls.delete(url);},60000);}
-  async function shareCard(){if(!file)return;try{if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:'A little keepsake'});else{shareFallback=true;updateExport();setStatus('File sharing isn’t supported in this browser. You can save the image as a file instead.');}}catch(error){if(error.name!=='AbortError'){shareFallback=true;updateExport();setStatus('Sharing couldn’t open. You can save the image as a file instead.');}}}
+  function exportFile(){
+    const texture=frame==='santa'?'candy-cane':frame,timestamp=new Date().toISOString().replace(/[:.]/g,'-');
+    return new File([file],`pixelbook-${journal.year||'our-year'}-${texture}-${timestamp}.jpg`,{type:'image/jpeg'});
+  }
+  function download(){if(!file)return;const exported=exportFile(),url=URL.createObjectURL(exported);urls.add(url);const a=document.createElement('a');a.href=url;a.download=exported.name;document.body.append(a);a.click();a.remove();setStatus('Your keepsake is ready. Your browser chooses where it saves.');setTimeout(()=>{URL.revokeObjectURL(url);urls.delete(url);},60000);}
+  async function shareCard(){if(!file)return;const exported=exportFile();try{if(navigator.canShare?.({files:[exported]}))await navigator.share({files:[exported],title:'A little keepsake'});else{shareFallback=true;updateExport();setStatus('File sharing isn’t supported in this browser. You can save the image as a file instead.');}}catch(error){if(error.name!=='AbortError'){shareFallback=true;updateExport();setStatus('Sharing couldn’t open. You can save the image as a file instead.');}}}
   launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();shareFallback=false;step='pick';render();modal.showModal();modal.querySelector('#ks-title').focus({preventScroll:true});printFlow.refresh();};
   return {destroy(){if(modal.open)modal.close();else cleanup();modal.remove();entry.remove();}};
 }

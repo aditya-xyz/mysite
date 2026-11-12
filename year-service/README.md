@@ -382,7 +382,9 @@ quotas are untouched. Canvas assembly and JPEG encoding happen in the browser;
 there is no AI or external upload for digital exports. On mobile, Share opens
 native file sharing when supported. Unsupported or failed sharing offers an
 explicit Save file instead action; canceling the share sheet does not download.
-Desktop offers Save image in the same position. The complimentary-print action
+Save/Share filenames include the scrapbook year, paper name and a fresh UTC
+timestamp (including milliseconds) for each export. Desktop offers Save image
+in the same position. The complimentary-print action
 sits to its left with a gift icon and Christmas gift styling. Moss uses a soft
 green paper tone (#e3e8d5), with Classic remaining white. Candy cane has red and
 cream striped trim included in the exported artwork; print recipes retain it as `santa`.
