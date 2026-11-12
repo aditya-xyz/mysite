@@ -82,7 +82,7 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
     return {...(m.cutoutEditable===true?{cutoutEditable:true}:{}),...(m.cutoutVersion?{cutoutVersion:m.cutoutVersion}:{}),id:m.id,caption:text(m.caption,'mug caption',500,false),alt:text(m.alt,'mug photo description',500)};
   });
   const current=JSON.parse((await edition(env,year)).draft_json) as Draft;
-  if(curatedMugChange(current.mugDesigns||[],mugDesigns))return fail('The curated mug photos and artwork are fixed. Only captions can be changed.');
+  if(curatedMugChange(current.mugDesigns||[],mugDesigns))return fail('The curated mug photos and artwork are fixed. Only captions and display order can be changed.');
   return {printNote,...printSettings,mugDesigns,title:text(d.title,"title",150),authors:text(d.authors,"authors",100),intro:text(d.intro,"invitation introduction",1000),
     note:text(d.note,"opening note",10000),sharedTitle:text(d.sharedTitle,"shared chapter title",150),stories,photos};
 }

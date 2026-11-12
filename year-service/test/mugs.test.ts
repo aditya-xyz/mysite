@@ -5,6 +5,7 @@ import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {generateKeyPair,exportJWK,SignJWT} from 'jose';
 import {digest} from '../src/security.ts';
 import type {Draft} from '../src/edition.ts';
+import {curatedMugIds} from '../src/mug-catalog.ts';
 
 test('configured mugs follow draft publication, minimum count, access and deletion protections',async t=>{
  const issuer='https://mugs-test.cloudflareaccess.com';
@@ -168,6 +169,26 @@ test('configured mugs follow draft publication, minimum count, access and deleti
   await t.test('publishing fewer than four withdraws the section and all mug-preview access',async()=>{
    draft.mugDesigns=[design(0),design(1),design(2)];await save();await publish();
    const journal:any=await (await guest('journal')).json();assert.equal(journal.gift.enabled,false);assert.deepEqual(journal.gift.designs,[]);assert.equal((await guest('mugs/mug-0')).status,404);
+  });
+  await t.test('curated mugs can save a new display order while artwork remains protected',async()=>{
+   const curated=curatedMugIds.map((id,index)=>({id,caption:'Curated '+index,alt:'Approved artwork '+index,cutoutVersion}));
+   for(const {id} of curated){
+    await bucket.put(id+'.jpg',jpeg);
+    await bucket.put(`2026/${id}/mugs/${cutoutVersion}.png`,rgbaPNG,{httpMetadata:{contentType:'image/png'}});
+    await db.prepare('INSERT INTO media_objects(id,year,preview_key,filename,mime,bytes) VALUES(?,2026,?,?,?,?)').bind(id,id+'.jpg',id+'.jpg','image/jpeg',jpeg.length).run();
+   }
+   const curatedDraft={...draft,mugDesigns:curated};
+   await db.prepare('UPDATE editions SET draft_json=? WHERE year=2026').bind(JSON.stringify(curatedDraft)).run();
+   const next={...curatedDraft,mugDesigns:[...curated].reverse()};
+   const publishedBefore=(await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<any>()).published_json;
+   await save(next);
+   const saved:any=await (await admin('state')).json();assert.deepEqual(saved.draft.mugDesigns.map((d:any)=>d.id),next.mugDesigns.map(d=>d.id));
+   assert.equal((await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<any>()).published_json,publishedBefore);
+   for(const mugDesigns of [next.mugDesigns.slice(1),next.mugDesigns.map((d,i)=>i===0?{...d,cutoutVersion:'b'.repeat(32)}:d),next.mugDesigns.map((d,i)=>i===0?{...d,alt:'Changed artwork'}:d)]){
+    assert.equal((await admin('draft',{version,draft:{...next,mugDesigns}})).status,400);
+   }
+   await publish();
+   const journal:any=await (await guest('journal')).json();assert.deepEqual(journal.gift.designs.map((d:any)=>d.id),next.mugDesigns.map(d=>d.id));
   });
  }finally{await mf.dispose();}
 });

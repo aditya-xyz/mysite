@@ -33,6 +33,7 @@ test('curated artwork stays fixed while captions can change',()=>{
  const current=curatedMugIds.map(id=>({id,caption:'Original',alt:'A photo',cutoutVersion:'a'.repeat(32)}));
  assert.equal(curatedMugChange(current,current.map(d=>({...d,caption:'New caption'}))),false);
  assert.equal(curatedMugChange(current,current.slice(1)),true);
- assert.equal(curatedMugChange(current,[...current].reverse()),true);
+ assert.equal(curatedMugChange(current,[...current].reverse()),false);
+ assert.equal(curatedMugChange(current,[current[0],...current.slice(0,-1)]),true);
  for(const change of [{id:'other'},{alt:'Other'},{cutoutVersion:'b'.repeat(32)},{cutoutEditable:true}])assert.equal(curatedMugChange(current,current.map((d,i)=>i===0?{...d,...change}:d)),true);
 });

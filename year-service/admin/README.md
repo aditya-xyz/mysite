@@ -820,10 +820,10 @@ Socials and mug permissions continue to apply on saving the invitation.
 
 ## Current fixed mug collection (supersedes browser cutout editing)
 
-Mugs is a caption-only studio for the six approved photos. Uploads, selection,
-regeneration, touch-up, descriptions and reordering have been removed. Mug-order
+Mugs manages captions and display order for the six approved photos. Uploads,
+selection, regeneration, touch-up and descriptions remain locked. Mug-order
 permissions remain in Invitations. The approved catalog is guarded server-side
-against non-caption changes and artwork uploads from old clients. Prepared PNGs
+against changes to the selected photos or artwork, including uploads from old clients. Prepared PNGs
 are private, versioned R2 objects; old artwork and frozen order proofs remain.
 The current build no longer requires or deploys a segmentation model/runtime.
 Earlier browser-model setup instructions are historical. The repeated simulated
@@ -865,3 +865,19 @@ Both Workers require server-side Google keys. Print permission can be enabled
 before an address exists; the guest completes verification before ordering. Order
 confirmation checks contact/invitation versions and freezes the verified shipping
 address with the design. Existing proofs are unchanged.
+
+## Drag-and-drop ordering
+
+Photos has a Reorder button in the bulk-actions row; Mugs has one in the
+collection header. The mode shows a separate Done/Cancel toolbar and drag handles,
+locks ordinary editors, and offers Done reordering or Cancel (restores the order
+from when the mode opened). Photos shows the whole collection, including hidden
+photos, while arranging; prior filters return when the mode closes. Mouse, pen
+and touch use the same handles. Keyboard users pick up with Space/Enter, move
+with arrow keys or Home/End, drop with Space/Enter, and cancel a move with Escape.
+Dragging outside the grid, pointer cancellation or window blur cancels the move.
+
+Moves change only the current draft. Save draft persists the order; publication
+is still separate. Curated mugs permit order and caption changes while retaining
+the exact approved IDs, accessibility descriptions and versioned artwork. The
+photo inspector no longer has move-up/down buttons. No migrations are required.
