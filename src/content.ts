@@ -65,9 +65,9 @@ export const projects = [
     id: "scrapbook",
     src: scrapbookCover,
     category: "Personal projects",
-    title: "I Built a Scrapbook. Then It Needed a Backend.",
+    title: "I Built a Scrapbook. My Dog Turned It Into Pixelbook.",
     description:
-      "A little gift for friends became a private photo experience, complete with invitations, an admin dashboard, and a few unexpected engineering lessons.",
+      "A gift for friends became Pixelbook: a private scrapbook edited by our dog, with playful photos, keepsakes, mugshots, and a Studio behind the scenes.",
     mediumUrl:
       "https://medium.com/@adityapatil.xyz/i-built-a-scrapbook-then-it-needed-a-backend-b3bef6c0f482?sharedUserId=adityapatil.xyz",
     githubUrl: "https://github.com/aditya-xyz/mysite",
