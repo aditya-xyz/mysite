@@ -13,7 +13,15 @@ export function useEntrance<T extends HTMLElement>() {
       setEntered(true);
       observer?.disconnect();
     };
-    if (preference.matches || !("IntersectionObserver" in window)) reveal();
+    // Settling is permanent: focus loss must never restart a CSS entrance.
+    const settle = () => {
+      node.dataset.entranceSettled = "true";
+      reveal();
+    };
+    const animationEnded = (event: AnimationEvent) => {
+      if (event.target === node) settle();
+    };
+    if (preference.matches || !("IntersectionObserver" in window)) settle();
     else {
       observer = new IntersectionObserver(
         (entries) => {
@@ -24,14 +32,16 @@ export function useEntrance<T extends HTMLElement>() {
       observer.observe(node);
     }
     const preferenceChanged = () => {
-      if (preference.matches) reveal();
+      if (preference.matches) settle();
     };
     // Tabbing to a link or disclosure must immediately reveal its container.
-    node.addEventListener("focusin", reveal);
+    node.addEventListener("focusin", settle);
+    node.addEventListener("animationend", animationEnded);
     preference.addEventListener("change", preferenceChanged);
     return () => {
       observer?.disconnect();
-      node.removeEventListener("focusin", reveal);
+      node.removeEventListener("focusin", settle);
+      node.removeEventListener("animationend", animationEnded);
       preference.removeEventListener("change", preferenceChanged);
     };
   }, []);

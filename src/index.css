@@ -792,7 +792,7 @@ h1 em {
   .entrance-left[data-entered="true"] {
     animation-name: arrive-left;
   }
-  .entrance:focus-within {
+  .entrance[data-entrance-settled="true"] {
     opacity: 1;
     animation: none;
   }
