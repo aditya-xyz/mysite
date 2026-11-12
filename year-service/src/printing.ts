@@ -65,7 +65,7 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  let recipe:{photoIds:string[];crops:unknown;frame:string;requestKey:string;confirmationKey:string;addressVersion:number};
  try{recipe=JSON.parse(raw);}catch{throw new PrintProblem(400,'Check the print request.');}
  if(!recipe||!Array.isArray(recipe.photoIds)||recipe.photoIds.length!==3||new Set(recipe.photoIds).size!==3||recipe.photoIds.some(id=>!c.photos.some(p=>p.id===id)))throw new PrintProblem(403,'Choose three distinct authorized personal photos.');
- if(!['moss','classic'].includes(recipe.frame)||!recipe.crops||typeof recipe.crops!=='object')throw new PrintProblem(400,'Check the frame and crops.');
+ if(!['moss','classic','santa'].includes(recipe.frame)||!recipe.crops||typeof recipe.crops!=='object')throw new PrintProblem(400,'Check the frame and crops.');
  const crops=recipe.crops as Record<string,{x:number;y:number;zoom:number}>;
  if(recipe.photoIds.some(id=>{const p=crops[id];return !p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||!Number.isFinite(p.zoom)||p.x<0||p.x>1||p.y<0||p.y>1||p.zoom<1||p.zoom>2.5;}))throw new PrintProblem(400,'Check the photo crops.');
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(recipe.requestKey)||recipe.confirmationKey!==c.confirmationKey||recipe.addressVersion!==c.person?.version)throw new PrintProblem(409,'The address or scrapbook changed. Reopen the order confirmation.');

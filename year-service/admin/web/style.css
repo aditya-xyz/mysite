@@ -240,3 +240,9 @@ dialog h2[tabindex="-1"]:focus{outline:none}
 
 .mug-summary{flex-wrap:wrap}.mug-summary>div:first-child{flex:1;min-width:min(100%,260px)}.mug-collection-actions{flex-wrap:wrap;justify-content:flex-end}
 @media(max-width:650px){.mug-collection-actions{justify-content:flex-start}}
+
+/* Both complimentary-gift counters use the same row and reset affordance. */
+.invitation-options .allowance-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px 20px;margin-top:16px;width:100%}
+.invitation-options .allowance-row .hint{margin:0;line-height:1.6}
+.invitation-options .allowance-reset{justify-self:end;min-height:44px;min-width:154px;padding:10px 14px;font-size:12px;white-space:nowrap}
+@media(max-width:600px){.invitation-options .allowance-row{gap:10px}.invitation-options .allowance-reset{min-width:0;padding:10px 12px;font-size:11px}}

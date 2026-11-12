@@ -881,3 +881,6 @@ Moves change only the current draft. Save draft persists the order; publication
 is still separate. Curated mugs permit order and caption changes while retaining
 the exact approved IDs, accessibility descriptions and versioned artwork. The
 photo inspector no longer has move-up/down buttons. No migrations are required.
+
+Invitation print and mug allowance rows use the same count-left, reset-right
+layout and matching reset button dimensions. Existing confirmations still apply.

@@ -24,7 +24,7 @@ export function mountPrintAdmin({view,state,contacts,api,requestApi,mark,saveDra
  panel.querySelector('#allow-print-orders').onchange=async e=>{const button=e.target;button.disabled=true;try{const r=await api('print-settings',{allowPrintOrders:button.checked});state.allowPrintOrders=r.allowPrintOrders;toast(r.allowPrintOrders?'Test ordering enabled. No real mail will be sent.':'New print orders disabled. Existing orders preserved.');}catch(error){button.checked=state.allowPrintOrders;toast(error.message);}finally{button.disabled=state.printMode!=='local_mock';}};
  function rows(){prunePrintPermissions(state,contacts);app.querySelectorAll('[data-print-invitation]').forEach(row=>{
   if(row.querySelector('.print-permission'))return;const box=document.createElement('div');box.className='print-permission';
-  box.innerHTML='<div class="print-allowance"><span class="hint" data-print-count>Prints ordered: 0 · Allowance available</span><button class="quiet" data-reset-print hidden>Reset print allowance</button></div>';
+  box.innerHTML='<div class="print-allowance allowance-row"><span class="hint" data-print-count>Prints ordered: 0 · Allowance available</span><button class="secondary allowance-reset" data-reset-print hidden>Reset print allowance</button></div>';
   row.querySelector('.invitation-options').append(box);
  });}
  rows();document.querySelector('#sharing-search')?.addEventListener('input',()=>{rows();loadOrders();});

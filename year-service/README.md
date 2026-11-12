@@ -363,15 +363,19 @@ quotas, cancellation, download behavior, keyboard and swipe controls are unchang
 
 Guests with at least three authorized personal photos can choose Make a keepsake
 above their personalized gallery. The full-screen phone flow selects exactly
-three distinct personal photos, offers Moss/Classic frames and main/bottom-photo
-ordering, and exports one 1200×1500 JPEG (4:5 including the paper border/footer).
+three distinct personal photos, offers Moss, Classic and Candy cane paper swatches
+below the preview, and exports one 1200×1500 JPEG (4:5 including the paper border/footer).
 Santa Pixel uses the existing approved cutout and is part of the saved image.
 Shared photos are excluded from this picker.
 
-Tap an image in the card to reframe it. Drag pans, a two-finger pinch zooms on
-touchscreens, and a grab cursor/drag icon with wheel zoom serves desktop. Crops
-stay inside source bounds and follow the pinch/cursor focal point. Reset and
-arrow/plus/minus keyboard controls are available; there are no sliders.
+Drag vertically within a card photo to reframe it, or drop it onto another photo
+to swap their positions. Crops follow their photos; dropping outside the photo
+slots cancels the move. Keyboard users pick up with Space, choose a slot with
+arrows, and confirm with Space/Enter or cancel with Escape.
+Photo taps stay on the card; there is no separate crop screen. Up/down arrow
+keys adjust vertical framing without picking up a photo. Crops stay inside
+source bounds. Gesture announcements are available to screen readers without
+adding visible swap messages.
 
 Only authorized viewer previews (grid fallback) are fetched. Originals and their
 quotas are untouched. Canvas assembly and JPEG encoding happen in the browser;
@@ -380,7 +384,8 @@ native file sharing when supported. Unsupported or failed sharing offers an
 explicit Save file instead action; canceling the share sheet does not download.
 Desktop offers Save image in the same position. The complimentary-print action
 sits to its left with a gift icon and Christmas gift styling. Moss uses a soft
-green paper tone (#e3e8d5), with Classic remaining white.
+green paper tone (#e3e8d5), with Classic remaining white. Candy cane has red and
+cream striped trim included in the exported artwork; print recipes retain it as `santa`.
 Selection/crops live only in memory, and closing aborts pending requests and
 releases decoded images. No backend migrations, auth changes, or publication
 operations are involved.

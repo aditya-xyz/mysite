@@ -55,6 +55,15 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    assert.equal((await admin('editions/2026/print-orders',undefined,false)).status,401);
    assert.equal((await guest('print/orders',await order(),{origin:'https://unrelated.test'})).status,403);
   });
+  await t.test('Candy cane is accepted and preserved in the saved print recipe; unknown frames are rejected',async()=>{
+   await reset();
+   const invalid=await order(),bad=JSON.parse(invalid.get('recipe') as string);bad.frame='unknown';invalid.set('recipe',JSON.stringify(bad));
+   assert.equal((await guest('print/orders',invalid)).status,400);
+   const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.frame='santa';form.set('recipe',JSON.stringify(recipe));
+   const response=await guest('print/orders',form);assert.equal(response.status,200,await response.clone().text());
+   const result:any=await response.json(),saved=await db.prepare('SELECT recipe_json FROM print_orders WHERE id=?').bind(result.order.id).first<any>();
+   assert.equal(JSON.parse(saved.recipe_json).frame,'santa');
+  });
   await t.test('invitation print toggles apply without saving or publishing content and stale confirmations are rejected',async()=>{
    await reset();
    await db.prepare("UPDATE editions SET published_json=json_remove(published_json,'$.printInvitations','$.printAddressKeys') WHERE year=2026").run();

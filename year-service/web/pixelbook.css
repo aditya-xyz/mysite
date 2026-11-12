@@ -196,3 +196,6 @@ header .theme-toggle{min-width:44px;min-height:44px}
 /* Gift entrances start hidden, rather than jumping out of their resting position. */
 .pb-gift-awaiting{opacity:0}
 @media(prefers-reduced-motion:reduce){.pb-gift-awaiting{opacity:1}}
+
+/* The address summary starts a new section beneath the mug review divider. */
+.pb-order-review+.delivery-panel{padding-top:22px}
