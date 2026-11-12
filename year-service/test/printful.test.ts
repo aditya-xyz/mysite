@@ -11,12 +11,13 @@ test('Printful catalog and estimates fail closed and never create orders',async 
   const path=new URL(url).pathname,body=init.body?JSON.parse(String(init.body)):null;calls.push({path,body});
   assert.equal(new Headers(init.headers).get('Authorization'),'Bearer test-read-only');
   if(failed)return new Response('Provider failure containing private details',{status:401});
+  if(path==='/products')return Response.json({result:[19,403,837,300,407,663].map(id=>({id,type:'MUG',title:'Mug '+id})).concat([{id:99,type:'SHIRT',title:'Not a mug'}])});
   if(path.startsWith('/mockup-generator/printfiles/'))return Response.json({result:{printfiles:[{printfile_id:43,width:2700,height:1050}],variant_printfiles:[1320,11051,17200,21352].map(id=>({variant_id:id,placements:{default:43}}))}});
   if(path.startsWith('/products/')){
    assert.equal(init.method,'GET');
    const id=Number(path.split('/').pop());
    const row=(id:number,size:string,color:string,in_stock=true,regions={US:'United States'})=>({id,size,color,in_stock,price:'6.07',availability_regions:regions});
-   const variants=id===19?[row(1320,'11 oz','White',!unavailable),row(4830,'15 oz','White',false),row(16586,'20 oz','White'),row(99,'11 oz','White',true,{EU:'Europe'} as any)]:id===403?[row(11051,'11 oz','Black'),row(17200,'15 oz','Red'),row(100,'11 oz','Pink')]:[row(21352,'12 oz','White')];
+   const variants=id===19?[row(1320,'11 oz','White',!unavailable),row(4830,'15 oz','White',false),row(16586,'20 oz','White'),row(99,'11 oz','White',true,{EU:'Europe'} as any)]:id===403?[row(11051,'11 oz','Black'),row(17200,'15 oz','Red'),row(100,'11 oz','Pink')]:id===300?[{...row(9323,'11 oz','Black'),price:'8.11'}]:id===407?[{...row(11189,'12 oz','White'),price:'12.67'}]:id===663?[{...row(16440,'25 oz','White'),price:'22.54'}]:[row(21352,'12 oz','White')];
    return Response.json({result:{variants}});
   }
   assert.equal(path,'/orders/estimate-costs');assert.equal(init.method,'POST');
@@ -27,9 +28,11 @@ test('Printful catalog and estimates fail closed and never create orders',async 
  const env={PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'test-read-only'} as PrintEnv;
  try{
   await t.test('filters sizes, colors, stock and US fulfillment while preserving valid tuples',async()=>{
-   const catalog=await printfulCatalog(env);assert.equal(catalog.maxCents,2500);assert.equal(catalog.styles.length,3);
-   assert.deepEqual(catalog.styles[0].sizes,['11oz']);assert.deepEqual(catalog.styles[0].variants.map(v=>v.id),[1320]);
-   assert.equal(catalog.styles[1].variants.length,2);assert.deepEqual(catalog.styles[1].colors,['black','red']);
+   const catalog=await printfulCatalog(env);assert.equal(catalog.maxCents,2500);assert.equal(catalog.styles.length,5);
+   assert.deepEqual(catalog.styles[0].sizes,['11oz','20oz']);assert.deepEqual(catalog.styles[0].variants.map(v=>v.id),[1320,16586]);
+   const inside=catalog.styles.find(s=>s.id==='color-inside')!;assert.equal(inside.variants.length,3);assert.deepEqual(inside.colors,['black','red','pink']);
+   assert.ok(catalog.styles.some(s=>s.id==='enamel'));assert.ok(!catalog.styles.some(s=>s.productId===663));
+   for(const style of catalog.styles)for(const v of style.variants)assert.ok(v.baseCents+v.shippingReserveCents+catalog.taxReserveCents<=2500);
   });
   await t.test('includes shipping and tax, rounds floating point prices and checks the delivered cap',async()=>{
    let q=await estimateMug(env,configuration,address);assert.equal(q.totalCents,1424);assert.equal(q.shippingCents,709);assert.equal(q.taxCents,108);assert.equal(q.withinBudget,true);
@@ -39,7 +42,7 @@ test('Printful catalog and estimates fail closed and never create orders',async 
   await t.test('rechecks availability and never estimates invalid or out-of-stock combinations',async()=>{
    const before=calls.filter(c=>c.body).length;unavailable=true;
    await assert.rejects(()=>estimateMug(env,configuration,address),/unavailable/);unavailable=false;
-   await assert.rejects(()=>estimateMug(env,{...configuration,style:'color-inside',color:'red'},address),/unavailable/);
+   await assert.rejects(()=>estimateMug(env,{...configuration,style:'color-inside',color:'red'},address),/Choose an available/);
    await assert.rejects(()=>estimateMug(env,{...configuration,font:'injected'},address),/Choose an available/);
    assert.equal(calls.filter(c=>c.body).length,before);
   });
@@ -48,6 +51,6 @@ test('Printful catalog and estimates fail closed and never create orders',async 
    broken=true;await assert.rejects(()=>estimateMug(env,configuration,address),/incomplete price/);broken=false;
    const before=calls.length;await assert.rejects(()=>printfulCatalog({...env,PRINTFUL_API_TOKEN:''}),/unavailable/);assert.equal(calls.length,before);
   });
-  assert.ok(calls.every(c=>/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(c.path)||c.path==='/orders/estimate-costs'));
+  assert.ok(calls.every(c=>c.path==='/products'||/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(c.path)||c.path==='/orders/estimate-costs'));
  }finally{mocked.mock.restore();}
 });

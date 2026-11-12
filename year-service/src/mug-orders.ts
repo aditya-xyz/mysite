@@ -1,13 +1,13 @@
 // @ts-expect-error Shared browser/server simulation catalog.
-import {validMugOptions,pixelMugOptions} from '../web/mug-options.js';
+import {validMugOptions,pixelMugOptions,legacyMugOptions} from '../web/mug-options.js';
 import {confirmDelivery,deliveryState} from './delivery-address.ts';
-import {estimateMug,printfulEnabled} from './printful.ts';
+import {estimateMug,printfulEnabled,printfulCatalog} from './printful.ts';
 import {PrintProblem,mailingAddress,simulatedOrders,type PrintEnv} from './printing.ts';
 import {publishedMugs,type Published} from './edition.ts';
 import {now,token} from './security.ts';
 import type {InvitationAudience} from './invitations.ts';
 interface Order {id:string;design_id:string;caption:string;alt:string;artwork_key:string;status:string;recipient_name:string;address_json:string;created_at:number;configuration_json?:string;mockup_key?:string;mockup_id?:string}
-export function mugReceipt(o:Order){return {id:o.id,designId:o.design_id,status:o.status,createdAt:o.created_at,configuration:JSON.parse(o.configuration_json||JSON.stringify(pixelMugOptions())),address:{...JSON.parse(o.address_json),name:o.recipient_name},design:{id:o.design_id,name:'your mugshot',caption:o.caption,alt:o.alt,src:`/api/gift/orders/${o.id}/artwork`,...(o.mockup_key?{mockupSrc:`/api/gift/orders/${o.id}/mockup`}:{})}};}
+export function mugReceipt(o:Order){return {id:o.id,designId:o.design_id,status:o.status,createdAt:o.created_at,configuration:JSON.parse(o.configuration_json||JSON.stringify(legacyMugOptions())),address:{...JSON.parse(o.address_json),name:o.recipient_name},design:{id:o.design_id,name:'your mugshot',caption:o.caption,alt:o.alt,src:`/api/gift/orders/${o.id}/artwork`,...(o.mockup_key?{mockupSrc:`/api/gift/orders/${o.id}/mockup`}:{})}};}
 export async function mugAllowed(env:PrintEnv,invite:InvitationAudience){
  const row=await env.DB.prepare('SELECT i.allow_mug,e.allow_mug_orders FROM invites i JOIN editions e ON e.year=i.edition_year WHERE i.id=?1 AND i.edition_year=?2').bind(invite.id,invite.edition_year).first<{allow_mug:number;allow_mug_orders:number}>();return row?.allow_mug===1&&row.allow_mug_orders===1;
 }
@@ -33,7 +33,7 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
  const design=edition&&publishedMugs(edition).find(d=>d.id===data.designId);
  if(!row?.is_active||!design?.cutoutVersion)throw new PrintProblem(409,'Choose a current published mugshot.');
  if(typeof data.requestKey!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(data.requestKey))throw new PrintProblem(400,'Check the order request.');
- const configuration=data.configuration===undefined?pixelMugOptions():validMugOptions(data.configuration);
+ const configuration=data.configuration===undefined?pixelMugOptions():validMugOptions(data.configuration,printfulEnabled(env)?(await printfulCatalog(env)).styles:undefined);
  if(!configuration)throw new PrintProblem(400,'Choose an available mug style, size, color and font.');
  const delivery=await confirmDelivery(request,env,invite,data.addressVersion);
  const address=delivery.address,recipientName=delivery.person.name;

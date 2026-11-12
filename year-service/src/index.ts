@@ -3,7 +3,7 @@ import type {AddressEnv} from '../admin/src/address-verification.ts';
 import {themeAssetManifest,themeAssetResponse} from './theme-assets.ts';
 import {mugStatus,createMugOrder,mugOrderArtwork,mugAllowed,mugQuote} from './mug-orders.ts';
 import {printfulCatalog,printfulEnabled} from './printful.ts';
-import {startMugMockup,mugMockupSource,mugMockupResult,cleanMugMockups} from './mug-mockups.ts';
+import {startMugMockup,mugMockupSource,mugMockupResult,cleanMugMockups,lookupMugMockup} from './mug-mockups.ts';
 import {clearExpiredAddressVerifications} from './address-state.ts';
 import {printStatus,createPrintOrder,PrintProblem,simulatedOrders} from './printing.ts';
 import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionCookie } from "./security.ts";
@@ -184,6 +184,10 @@ async function route(request: Request, env: Env) {
     const invite=await authenticated(request,env);await limited(env,'mug-mockup:'+invite.id,60,3600);
     return json(await startMugMockup(request,env,invite));
   }
+  if(path==='/api/gift/mockup/lookup'&&request.method==='POST'){
+    const invite=await authenticated(request,env);await limited(env,'mug-cache:'+invite.id,120,600);
+    return json(await lookupMugMockup(env,invite,await body(request)));
+  }
   const mockup=/^\/api\/gift\/mockup\/([a-f0-9]{64})(\/image)?$/.exec(path);
   if(mockup&&request.method==='GET')return mugMockupResult(request,env,await authenticated(request,env),mockup[1],!!mockup[2]);
   if(path==='/api/gift/catalog'&&request.method==='GET'){
@@ -275,7 +279,7 @@ export default {
   async fetch(request: Request, env: Env) {
     let response: Response;
     try { response = await route(request, env); }
-    catch (error) { response = error instanceof PrintProblem ? json({error:error.message},error.status) : error instanceof Failure ? json({ error: error.message,...(error.code?{code:error.code}:{}),...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
+    catch (error) { response = error instanceof PrintProblem ? json({error:error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{})},error.status,error.retryAfter?{'Retry-After':String(error.retryAfter)}:undefined) : error instanceof Failure ? json({ error: error.message,...(error.code?{code:error.code}:{}),...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store, private");
     headers.set("Referrer-Policy", "no-referrer");

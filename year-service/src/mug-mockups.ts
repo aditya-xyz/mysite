@@ -5,11 +5,23 @@ import {PrintProblem,type PrintEnv} from './printing.ts';
 import {now,token,digest} from './security.ts';
 import type {InvitationAudience} from './invitations.ts';
 // @ts-expect-error Shared configuration allowlist.
-import {validMugOptions} from '../web/mug-options.js';
+import {mugConfiguration,validMugOptions} from '../web/mug-options.js';
 interface Mockup {id:string;invitation_id:string;year:number;recipe_key:string;source_key:string;image_key:string|null;task_key:string|null;status:string;source_expires_at:number;next_poll_at:number}
 const MAX_BYTES=2*1024*1024;
-const state=(row:Mockup)=>({id:row.id,status:row.status,...(row.status==='ready'?{src:`/api/gift/mockup/${row.id}/image`}:{}),retryAfter:Math.max(10,row.next_poll_at-now())});
+const state=(row:Mockup)=>({id:row.id,status:row.status,...(row.status==='ready'?{src:`/api/gift/mockup/${row.id}/image`}:{}),retryAfter:Math.max(0,row.next_poll_at-now())});
 async function allowed(env:PrintEnv,invite:InvitationAudience){if(!printfulEnabled(env)||!await mugAllowed(env,invite))throw new PrintProblem(403,'Mug previews are unavailable for this invitation.');}
+export async function lookupMugMockup(env:PrintEnv,invite:InvitationAudience,data:Record<string,unknown>){
+ await allowed(env,invite);
+ const configuration=validMugOptions(data.configuration,(await printfulCatalog(env)).styles);
+ if(!configuration||typeof data.designId!=='string')throw new PrintProblem(400,'Choose an available mug.');
+ const publication=await env.DB.prepare('SELECT published_json FROM editions WHERE year=?1 AND is_active=1').bind(invite.edition_year).first<{published_json:string}>();
+ const design=publication&&publishedMugs(JSON.parse(publication.published_json) as Published).find(d=>d.id===data.designId);
+ if(!design?.cutoutVersion)throw new PrintProblem(409,'Choose a current published mugshot.');
+ // Resume only this household's prior render. Exact-byte cross-household cache
+ // sharing still requires the upload hash, preserving its existing protections.
+ const row=await env.DB.prepare("SELECT * FROM mug_mockups WHERE invitation_id=?1 AND year=?2 AND design_id=?3 AND cutout_version=?4 AND caption=?5 AND configuration_json=?6 AND (status='ready' OR (status IN ('pending','preparing') AND source_expires_at>?7)) ORDER BY CASE status WHEN 'ready' THEN 0 ELSE 1 END,created_at DESC LIMIT 1").bind(invite.id,invite.edition_year,design.id,design.cutoutVersion,design.caption,JSON.stringify(configuration),now()).first<Mockup>();
+ return row?state(row):{status:'missing'};
+}
 async function bytes(request:Request|Response){
  if(Number(request.headers.get('Content-Length'))>MAX_BYTES+8192)throw new PrintProblem(413,'Mug preview artwork is too large.');
  const reader=request.body?.getReader();if(!reader)throw new PrintProblem(400,'Include the mug artwork.');
@@ -21,7 +33,7 @@ export async function startMugMockup(request:Request,env:PrintEnv,invite:Invitat
  if(!request.headers.get('Content-Type')?.startsWith('multipart/form-data;'))throw new PrintProblem(415,'Include the selected mugshot artwork.');
  const bounded=await bytes(request);let form:FormData;
  try{form=await new Request(request.url,{method:'POST',headers:{'Content-Type':request.headers.get('Content-Type')!},body:bounded}).formData();}catch{throw new PrintProblem(400,'Check the mug artwork upload.');}
- const file=form.get('artwork'),designId=form.get('designId');let configuration;try{configuration=validMugOptions(JSON.parse(String(form.get('configuration'))));}catch{}
+ const file=form.get('artwork'),designId=form.get('designId');let configuration;try{configuration=mugConfiguration(JSON.parse(String(form.get('configuration'))));}catch{}
  if(!configuration||typeof designId!=='string'||!(file instanceof File)||file.type!=='image/png'||file.size>MAX_BYTES)throw new PrintProblem(400,'Include the selected mugshot and PNG artwork.');
  const publication=await env.DB.prepare('SELECT published_json FROM editions WHERE year=?1 AND is_active=1').bind(invite.edition_year).first<{published_json:string}>();
  const design=publication&&publishedMugs(JSON.parse(publication.published_json) as Published).find(d=>d.id===designId);
@@ -44,12 +56,12 @@ export async function startMugMockup(request:Request,env:PrintEnv,invite:Invitat
  // New stores allow two tasks/minute. A persistent 31-second lease prevents
  // bursts across guests and isolates, including overlapping browser requests.
  const lease=await env.DB.prepare(`INSERT INTO rate_limits(key,count,expires_at) VALUES('printful-mockup-lease',1,?1) ON CONFLICT(key) DO UPDATE SET expires_at=excluded.expires_at WHERE expires_at<=?2 RETURNING key`).bind(now()+31,now()).first();
- if(!lease)throw new PrintProblem(429,'Printful is preparing another preview. Your preview will retry shortly.');
+ if(!lease){const current=await env.DB.prepare("SELECT expires_at FROM rate_limits WHERE key='printful-mockup-lease'").first<{expires_at:number}>();throw new PrintProblem(429,'Your mug preview is queued. It will retry shortly.',Math.max(1,(current?.expires_at||now()+31)-now()));}
  const id=token(),sourceKey=`${invite.edition_year}/mug-mockups/${id}/print.png`;
  await env.MEDIA.put(sourceKey,png,{httpMetadata:{contentType:'image/png'}});
  try{
   await env.DB.prepare('INSERT INTO mug_mockups(id,invitation_id,year,recipe_key,source_key,source_expires_at,next_poll_at,design_id,configuration_json,caption,cutout_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)').bind(id,invite.id,invite.edition_year,recipe,sourceKey,now()+1800,now()+10,design.id,JSON.stringify(configuration),design.caption,design.cutoutVersion).run();
-  const result=await printfulApi(env,`/mockup-generator/create-task/${style!.productId}`,{variant_ids:[variant.id],format:'png',width:1000,option_groups:[style!.id==='classic'?'Default':'Flat'],files:[{placement:'default',image_url:new URL(`/api/gift/mockup-source/${id}`,request.url).href,position:{area_width:variant.printWidth,area_height:variant.printHeight,width:variant.printWidth,height:variant.printHeight,top:0,left:0}}]}) as {task_key?:string};
+  const result=await printfulApi(env,`/mockup-generator/create-task/${style!.productId}`,{variant_ids:[variant.id],format:'png',width:1000,...(style!.mockupGroup?{option_groups:[style!.mockupGroup]}:{}),files:[{placement:'default',image_url:new URL(`/api/gift/mockup-source/${id}`,request.url).href,position:{area_width:variant.printWidth,area_height:variant.printHeight,width:variant.printWidth,height:variant.printHeight,top:0,left:0}}]}) as {task_key?:string};
   if(!result.task_key)throw new Error('No task');
   await env.DB.prepare("UPDATE mug_mockups SET status='pending',task_key=?1 WHERE id=?2").bind(result.task_key,id).run();
   return {id,status:'pending',retryAfter:10};
@@ -71,6 +83,7 @@ export async function mugMockupResult(request:Request,env:PrintEnv,invite:Invita
  }
  if(row.status==='pending'&&row.task_key&&now()>=row.next_poll_at){
   const lock=await env.DB.prepare('UPDATE mug_mockups SET next_poll_at=?1 WHERE id=?2 AND next_poll_at<=?3 RETURNING id').bind(now()+10,id,now()).first();if(!lock)return Response.json(state(row));
+  row.next_poll_at=now()+10;
   const result=await printfulApi(env,`/mockup-generator/task?task_key=${encodeURIComponent(row.task_key)}`) as {status:string;mockups?:{mockup_url:string;extra?:{option:string;url:string}[]}[]};
   if(result.status==='completed'){
    const mockup=result.mockups?.[0];const url=mockup?.extra?.find(e=>/front/i.test(e.option))?.url||mockup?.mockup_url;

@@ -725,9 +725,19 @@ Worker secrets. `node scripts/provision.mjs printful-secret` installs only that
 secret without printing it. The current token expires January 15, 2027. Renew or
 disable this integration before then; token expiry does not unpublish an edition.
 
-The three curated products are White Glossy Mug (19, 11/15 oz), Color Inside
-(403, 11/15 oz, black/red/blue), and Latte (837, 12 oz white). Catalog stock,
-US availability and exact size/color combinations come from Printful. Font
+The catalog discovers every Printful MUG product and every in-stock US size/color
+combination. Price is the only owner filter: enamel remains eligible with
+“Not dishwasher safe · hand wash only” shown in details/customization. The current
+recommended default is Color Inside, Dark Blue, 15 oz (variant22373), with Clean
+caption font. Classic11oz remains the historical fallback for legacy receipts.
+Each variant must fit $25 minus its conservative shipping reserve and a $4 tax
+reserve. Shipping reserves use the highest STANDARD rate measured across mainland
+US/Alaska/Hawaii, plus the $0.40 holiday surcharge and a $0.50 buffer, rounded up
+to whole dollars; unknown combinations use an $11 reserve until reviewed. These
+are planning assumptions, not a promise of the maximum tax or shipping charge.
+The exact delivered quote is still checked fresh before every simulated claim.
+The current filtered catalog has five styles /23 variants; travel mugs fail price
+filtering. All Printful colors/sizes that pass the budget are included. Font
 choices are our rendered caption artwork, not catalog variants. An unavailable
 preferred variant falls back to the first available curated mug.
 
@@ -752,8 +762,16 @@ a finished image through separate household authorizations. Printful's temporary
 output URLs are never returned to guests. Polling waits at least ten seconds,
 and a global persistent 31-second task lease respects new-store generation limits.
 Expired unfinished source files are swept daily. Generated images are previews,
-not a guarantee of final printing. The illustrative preview remains while a task
-is pending or unavailable; it is labeled separately from a Printful mockup.
+not a guarantee of final printing. Live checkout shows a loading indicator until the actual provider image has
+loaded and decoded, then paints it without an illustrated placeholder. Private
+catalog caching across isolates reduces cold starts. The authenticated mockup
+lookup resumes this household's existing ready/pending render before composing
+or uploading pixels; exact-byte cross-household cache protections are preserved.
+Completed images use private in-memory blob URLs across control redraws and are
+revoked on teardown. Queue retries follow the actual remaining lease rather than
+always adding a minute. Brand-new renders still follow Printful's ten-second
+minimum polling interval. Apply0021 for the cache lookup index. Generic offline
+admin illustrations and historical proofs remain supported.
 
 `ORDER_MODE=simulation` remains enforced independently of live catalog, estimate
 and mockup calls. There is no order creation/confirmation endpoint in the adapter,

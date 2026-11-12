@@ -18,7 +18,7 @@ export async function renderMugPrint(design,configuration,variant){
    for(const word of caption.split(/\s+/)){const next=line?line+' '+word:word;if(line&&context.measureText(next).width>maxWidth){lines.push(line);line=word;}else line=next;}if(line)lines.push(line);
    if(lines.length*fontSize*1.2<=h*.18&&lines.every(l=>context.measureText(l).width<=maxWidth))break;
   }
-  context.fillStyle='#20392f';context.textAlign='center';context.textBaseline='top';lines.forEach((line,i)=>context.fillText(line,canvas.width/2,padding+imageHeight+h*.025+i*fontSize*1.2,maxWidth));
+  context.fillStyle=configuration.style==='black-glossy'?'#ffffff':'#20392f';context.textAlign='center';context.textBaseline='top';lines.forEach((line,i)=>context.fillText(line,canvas.width/2,padding+imageHeight+h*.025+i*fontSize*1.2,maxWidth));
  }
  return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Could not prepare the mug artwork.')),'image/png'));
 }

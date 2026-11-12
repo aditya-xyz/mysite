@@ -2,7 +2,7 @@ import {openMugCustomizer} from './mug-customizer.js';
 import {createMugMockups} from './mug-mockups.js';
 import {pixelMugOptions,preferredMugOptions,mugStyles,mugOptionsLabel} from './mug-options.js';
 import {createDeliveryAddress} from './delivery-address.js';
-import {mugPreview} from './mug-preview.js';
+import {mugPreview,mugLoadingPreview} from './mug-preview.js';
 import {esc,assetPath,hasMugChoices} from './pixelbook.js';
 
 const householdGiftLine='seriously, one per household. couch surfing only pays so much.';
@@ -37,10 +37,11 @@ export function mountPixelGift(journal,root){
     return `<p class="pb-dialog-intro">pick your favorite photo of me. i’ve made this very difficult.</p><div class="pb-designs" role="group" aria-label="Choose a mug design">${designs.map(d=>`<button type="button" class="pb-design" data-design="${esc(d.id)}" aria-pressed="${selected?.id===d.id}"><span class="pb-design-image"><img src="${esc(assetPath(d.src))}" alt="${esc(d.alt)}" loading="lazy"><span class="pb-design-check" aria-hidden="true">✓</span></span><span class="pb-design-name">${esc(d.name)}</span><span class="pb-design-caption">${esc(d.caption)}</span></button>`).join('')}</div><p class="pb-dialog-budget">${householdGiftLine}</p>`;
   }
   function addressMarkup(){return delivery.markup()+(livePricing&&delivery.ready?`<p class="delivery-note" role="status">${quoteBusy?'Checking mug availability and delivered price…':quoteError?esc(quoteError):quote?`Estimated delivered price: ${price(quote.totalCents)} · you pay $0${quote.withinBudget?'':' · over the gift budget; go back and customize your mug.'}`:''}</p>${quoteError?'<button type="button" class="text-button" data-retry-quote>Check price again</button>':''}`:'');}
+  const previewMarkup=(design,value)=>livePricing&&!design?.mockupSrc?(step==='done'&&!mockups.id(design,value)?'<figure class="pb-mug-preview pb-live-preview"><div class="pb-mockup-wait">Your chosen mug design is saved.</div></figure>':mugLoadingPreview()):mugPreview(design,value);
   function reviewMarkup(){
-    return `<div class="pb-order-review">${mugPreview(selected,configuration)}<div><p class="pb-eyebrow">your chosen mugshot</p><h3>don’t i have excellent taste?</h3><p>${esc(selected.caption)}</p><dl><div><dt>Gift</dt><dd>1 photo mug</dd></div><div><dt>You pay</dt><dd>$0 · dad’s got it</dd></div></dl><p>${esc(mugOptionsLabel(configuration))}</p></div></div>`;
+    return `<div class="pb-order-review">${previewMarkup(selected,configuration)}<div><p class="pb-eyebrow">your chosen mugshot</p><h3>don’t i have excellent taste?</h3><p>${esc(selected.caption)}</p><dl><div><dt>Gift</dt><dd>1 photo mug</dd></div><div><dt>You pay</dt><dd>$0 · dad’s got it</dd></div></dl><p>${esc(mugOptionsLabel(configuration,styles))}${configuration.style===pixelMugOptions().style&&configuration.size===pixelMugOptions().size&&configuration.color===pixelMugOptions().color?' · Pixel recommended':''}</p>${styles.find(s=>s.id===configuration.style)?.careNote?`<p class="delivery-note">${esc(styles.find(s=>s.id===configuration.style).careNote)}</p>`:''}</div></div>`;
   }
-  function doneMarkup(){return `<div class="pb-gift-done"><span class="pb-done-mark" aria-hidden="true">✓</span><p class="pb-eyebrow">${local?'preview claim saved':receipt?.status==='simulated'?'test order saved':'gift request received'}</p><h3>Pixel perfect.</h3><p>excellent choice. one of my favorite photos of me.</p>${mugPreview(receipt?.design||selected,receipt?.configuration||configuration)}<p>${esc(mugOptionsLabel(receipt?.configuration||configuration))}</p>${['simulated','submitted'].includes(receipt?.status)?'<p class="pb-dialog-budget">text dad if you need a second one. just don’t mention i told you this.</p>':''}${local?'<p>That’s the whole flow. No mug has been ordered or charged.</p>':receipt?.status==='simulated'?'':'<p>Your household’s gift request is saved. Check back here for updates.</p>'}</div>`;}
+  function doneMarkup(){return `<div class="pb-gift-done"><span class="pb-done-mark" aria-hidden="true">✓</span><p class="pb-eyebrow">${local?'preview claim saved':receipt?.status==='simulated'?'test order saved':'gift request received'}</p><h3>Pixel perfect.</h3><p>excellent choice. one of my favorite photos of me.</p>${previewMarkup(receipt?.design||selected,receipt?.configuration||configuration)}<p>${esc(mugOptionsLabel(receipt?.configuration||configuration))}</p>${['simulated','submitted'].includes(receipt?.status)?'<p class="pb-dialog-budget">text dad if you need a second one. just don’t mention i told you this.</p>':''}${local?'<p>That’s the whole flow. No mug has been ordered or charged.</p>':receipt?.status==='simulated'?'':'<p>Your household’s gift request is saved. Check back here for updates.</p>'}</div>`;}
   function render(){
     const title=step==='pick'?'pick your mugshot.':step==='address'?'where’s home?':step==='review'?'look good?':'that’s a wrap.';
     modal.innerHTML=`<div class="pb-dialog-top"><div><p class="pb-eyebrow">a gift from Pixel</p><h2 id="pb-order-title" tabindex="-1">${title}</h2></div><button type="button" class="pb-close" data-close-gift aria-label="Close gift picker">${closeIcon}</button></div>${local||simulated?'<p class="pb-preview-banner">Orders are simulated · no physical orders or charges</p>':!ordering?'<p class="pb-preview-banner">Gift ordering opens soon. You can browse the mugshots for now.</p>':''}${step==='done'?'':steps()}<div class="pb-dialog-body">${step==='pick'?pickMarkup():step==='address'?addressMarkup():step==='review'?reviewMarkup():doneMarkup()}<p class="pb-gift-status error" role="alert"></p></div><div class="pb-dialog-bottom">${step==='done'?'<button class="button" data-close-gift>back to my scrapbook</button>':`<button class="text-button" data-gift-back>${step==='pick'?'keep browsing':'← back'}</button>${step==='review'?`<button type="button" class="button pb-secondary-button" data-customize-mug>Customize</button>`:''}<button class="button" data-gift-next ${(step==='pick'&&(!selected||!ordering)||step==='address'&&!canConfirm())?'disabled':''}>${step==='pick'?ordering?'this is the one →':'ordering opens soon':step==='review'?'proceed →':local||simulated?'confirm test mug order':'confirm & order'}</button>`}</div>`;
@@ -49,9 +50,10 @@ export function mountPixelGift(journal,root){
       selected=designs.find(d=>d.id===b.dataset.design);
       modal.querySelectorAll('[data-design]').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.design===selected.id)));
       modal.querySelector('[data-gift-next]').disabled=!ordering;
+      if(livePricing)mockups.preload(selected,configuration);
     });
     modal.querySelector('[data-customize-mug]')?.addEventListener('click',()=>{
-      customizer=openMugCustomizer(selected,configuration,value=>{configuration=value;quote=null;quoteKey='';customizer=null;render();modal.querySelector('[data-customize-mug]').focus();},styles,(element,design,value)=>mockups.update(element,design,value));
+      customizer=openMugCustomizer(selected,configuration,value=>{configuration=value;quote=null;quoteKey='';customizer=null;render();modal.querySelector('[data-customize-mug]').focus();},styles,(element,design,value)=>mockups.update(element,design,value),previewMarkup);
     });
     modal.querySelector('[data-gift-back]')?.addEventListener('click',()=>{if(step==='pick')modal.close();else{step=step==='address'?'review':'pick';render();}});
     modal.querySelector('[data-edit-address]')?.addEventListener('click',()=>{step='address';render();});
@@ -59,7 +61,7 @@ export function mountPixelGift(journal,root){
     modal.querySelector('[data-retry-quote]')?.addEventListener('click',()=>{quoteKey='';refreshQuote();});
     if(step==='address')delivery.bind(modal);
     if(step==='review')mockups.update(modal.querySelector('.pb-mug-preview'),selected,configuration);
-    if(step==='done')mockups.update(modal.querySelector('.pb-mug-preview'),receipt?.design||selected,receipt?.configuration||configuration);
+    if(step==='done'&&mockups.id(receipt?.design||selected,receipt?.configuration||configuration))mockups.update(modal.querySelector('.pb-mug-preview'),receipt?.design||selected,receipt?.configuration||configuration);
     if(modal.open){modal.scrollTop=0;modal.querySelector('h2').focus({preventScroll:true});}
   }
   async function request(path,data){
@@ -92,8 +94,9 @@ export function mountPixelGift(journal,root){
       livePricing=result.livePricing===true;quote=null;quoteKey='';quoteError='';quoteBusy=false;quoteGeneration++;
       if(livePricing&&!receipt){const catalog=await request('catalog');styles=catalog.styles;mockups.configure(catalog);configuration=preferredMugOptions(styles);}
       if(!modal.isConnected)return;
-      if(receipt){configuration=receipt.configuration||pixelMugOptions();selected=receipt.design||designs.find(d=>d.id===receipt.designId);step='done';launch.textContent='view your household’s gift';}else{step='pick';selected=previewDesign;requestKey=crypto.randomUUID();launch.textContent='pick your mugshot';}
+      if(receipt){configuration=receipt.configuration||configuration;selected=receipt.design||designs.find(d=>d.id===receipt.designId);step='done';launch.textContent='view your household’s gift';}else{step='pick';selected=previewDesign;requestKey=crypto.randomUUID();launch.textContent='pick your mugshot';}
       render();modal.showModal();modal.querySelector('h2').focus();
+      if(livePricing&&!receipt)mockups.preload(selected,configuration);
     }catch(error){if(error.name!=='AbortError'){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}
     finally{launch.disabled=false;}
   };

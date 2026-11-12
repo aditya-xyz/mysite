@@ -5,7 +5,7 @@ import {visiblePhotos,type Published,type Draft} from './edition.ts';
 import {imageDimensions} from './image-dimensions.ts';
 export interface PrintEnv {DB:D1Database;MEDIA:R2Bucket;PRINT_PROVIDER?:string;ORDER_MODE?:string;PRINTFUL_ENABLED?:string;PRINTFUL_API_TOKEN?:string;PRINTFUL_STORE_ID?:string}
 export interface MailingAddress {line1:string;line2:string;city:string;state:string;postalCode:string;country:'US'}
-export class PrintProblem extends Error {status:number;constructor(status:number,message:string){super(message);this.status=status;}}
+export class PrintProblem extends Error {status:number;retryAfter?:number;constructor(status:number,message:string,retryAfter?:number){super(message);this.status=status;this.retryAfter=retryAfter;}}
 export const localPrintProvider=(request:Request,env:PrintEnv)=>env.PRINT_PROVIDER==='local_mock'&&new URL(request.url).protocol==='http:'&&['localhost','127.0.0.1','guest.preview','admin.preview','guest.test','admin.test'].includes(new URL(request.url).hostname);
 export const simulatedOrders=(request:Request,env:PrintEnv)=>env.ORDER_MODE==='simulation'||localPrintProvider(request,env);
 export function mailingAddress(value:unknown):MailingAddress {

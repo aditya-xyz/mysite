@@ -1,19 +1,20 @@
-import {mugStyles,mugFonts,preferredMugOptions} from './mug-options.js';
+import {mugStyles,mugFonts,preferredMugOptions,pixelMugOptions} from './mug-options.js';
 import {mugPreview} from './mug-preview.js';
 import {esc} from './pixelbook.js';
 
 // A focused, nested task dialog. Only Done and Restore finish the task.
-export function openMugCustomizer(design,current,finish,styles=mugStyles,preview=()=>{}){
+export function openMugCustomizer(design,current,finish,styles=mugStyles,preview=()=>{},previewMarkup=mugPreview){
  const dialog=document.createElement('dialog');dialog.className='pb-gift-dialog pb-mug-customizer';dialog.setAttribute('aria-label','Customize your mug');
  let configuration={...current},openKey=null;
  const chevron='<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg>';
  function fields(){const style=styles.find(s=>s.id===configuration.style);return [{key:'style',label:'Mug style',values:styles},{key:'size',label:'Size',values:style.sizes},{key:'color',label:'Color',values:style.colors.filter(c=>!style.variants||style.variants.some(v=>v.size===configuration.size&&v.color===c))},{key:'font',label:'Caption font',values:mugFonts}];}
  function focusControl(key){dialog.querySelector(`[data-mug-control="${key}"]`)?.focus();}
  function render(focusKey,optionIndex){
-  dialog.innerHTML=`<div class="pb-customizer-body">${mugPreview(design,configuration)}<div class="pb-mug-options">${fields().map(({key,label,values})=>{
+  dialog.innerHTML=`<div class="pb-customizer-body">${previewMarkup(design,configuration)}<div class="pb-mug-options">${fields().map(({key,label,values})=>{
    const selected=values.find(v=>(v.id||v)===configuration[key]);
-   return `<div class="pb-custom-select"><span id="mug-label-${key}">${label}</span><button type="button" class="pb-select-trigger" role="combobox" aria-labelledby="mug-label-${key} mug-value-${key}" aria-haspopup="listbox" aria-expanded="${openKey===key}" aria-controls="mug-list-${key}" data-mug-control="${key}"><span id="mug-value-${key}">${esc(selected.label||selected)}</span>${chevron}</button><div id="mug-list-${key}" class="pb-select-list" role="listbox" aria-labelledby="mug-label-${key}" ${openKey===key?'':'hidden'}>${values.map((v,i)=>`<button type="button" role="option" tabindex="-1" aria-selected="${(v.id||v)===configuration[key]}" data-option-key="${key}" data-option-index="${i}" data-option-value="${esc(v.id||v)}"><span>${esc(v.label||v)}</span><span aria-hidden="true">${(v.id||v)===configuration[key]?'✓':''}</span></button>`).join('')}</div></div>`;
-  }).join('')}</div></div><div class="pb-dialog-bottom pb-customizer-actions"><button type="button" class="button pb-secondary-button" data-restore-style>Restore Pixel’s Style</button><button type="button" class="button" data-customizer-done>Done</button></div>`;
+   const optionLabel=v=>(v.label||v)+(key==='style'&&v.id===pixelMugOptions().style?' · Pixel recommended':'');
+   return `<div class="pb-custom-select"><span id="mug-label-${key}">${label}</span><button type="button" class="pb-select-trigger" role="combobox" aria-labelledby="mug-label-${key} mug-value-${key}" aria-haspopup="listbox" aria-expanded="${openKey===key}" aria-controls="mug-list-${key}" data-mug-control="${key}"><span id="mug-value-${key}">${esc(selected.label||selected)}</span>${chevron}</button><div id="mug-list-${key}" class="pb-select-list" role="listbox" aria-labelledby="mug-label-${key}" ${openKey===key?'':'hidden'}>${values.map((v,i)=>`<button type="button" role="option" tabindex="-1" aria-selected="${(v.id||v)===configuration[key]}" data-option-key="${key}" data-option-index="${i}" data-option-value="${esc(v.id||v)}"><span>${esc(optionLabel(v))}</span><span aria-hidden="true">${(v.id||v)===configuration[key]?'✓':''}</span></button>`).join('')}</div></div>`;
+  }).join('')}${styles.find(s=>s.id===configuration.style)?.careNote?`<p class="pb-mug-care">${esc(styles.find(s=>s.id===configuration.style).careNote)}</p>`:''}</div></div><div class="pb-dialog-bottom pb-customizer-actions"><button type="button" class="button pb-secondary-button" data-restore-style>Restore Pixel’s Style</button><button type="button" class="button" data-customizer-done>Done</button></div>`;
   dialog.querySelectorAll('[data-mug-control]').forEach(button=>{
    const key=button.dataset.mugControl;
    button.onclick=()=>{openKey=openKey===key?null:key;render(key);};

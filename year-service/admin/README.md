@@ -897,3 +897,11 @@ simulated claim (mug, shipping, tax, fees/discounts, timestamp and total). Apply
 admin reads saved metadata from D1. Real catalog/estimates/mockups do not enable
 fulfillment: `ORDER_MODE=simulation` remains in both configurations. Read the
 current Printful section in the service README for token expiry and privacy.
+
+
+The live mug catalog now discovers all Printful MUG styles/size/color combinations
+and filters them only by the conservative delivered budget. Color Inside /Dark
+Blue /15oz is Pixel recommended. Enamel is eligible with an explicit hand-wash,
+not-dishwasher-safe note. New defaults never rewrite stored order configurations.
+Guest cache lookups and decoded image reuse remove the illustration swap;0021
+adds the lookup index. Fulfillment remains simulated.

@@ -18,6 +18,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
   if(req.url.startsWith('https://api.printful.com/')){
    const path=new URL(req.url).pathname;providerCalls.push(path);assert.equal(req.headers.get('Authorization'),'Bearer fake-read-only');
    if(providerFailed)return new Response('private provider error',{status:503});
+   if(path==='/products')return Response.json({result:[{id:19,type:'MUG',title:'White Glossy Mug'}]});
    if(path.startsWith('/mockup-generator/printfiles/'))return Response.json({result:{printfiles:[{printfile_id:43,width:2700,height:1050}],variant_printfiles:[{variant_id:1320,placements:{default:43}}]}});
    if(path.startsWith('/mockup-generator/create-task/')){const data=await req.json() as any;assert.equal(data.files[0].placement,'default');assert.deepEqual(data.files[0].position,{area_width:2700,area_height:1050,width:2700,height:1050,top:0,left:0});assert.match(data.files[0].image_url,/^https:\/\/live.test\/api\/gift\/mockup-source\/[a-f0-9]{64}$/);return Response.json({result:{task_key:'mockup-task',status:'pending'}});}
    if(path==='/mockup-generator/task')return Response.json({result:{status:'completed',mockups:[{mockup_url:'https://files.cdn.printful.com/mockup.png'}]}});
@@ -148,7 +149,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const cleared=await (await admin('mug-orders')).json() as any;assert.equal(cleared.orders.length,0);assert.equal(cleared.counts[0].count,0);assert.equal((await (await sim('gift/status')).json() as any).claim,null);
    assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,false);
    assert.equal((await sim(first.design.src.replace('/api/',''))).status,404);assert.equal(await bucket.head(`2026/mug-orders/${first.id}/artwork.png`),null);
-   const second=(await (await sim('gift/claim',{...payload,requestKey:crypto.randomUUID()})).json() as any).claim;assert.notEqual(second.id,first.id);assert.deepEqual(second.configuration,{style:'classic',size:'11oz',color:'white',font:'clean'});
+   const second=(await (await sim('gift/claim',{...payload,requestKey:crypto.randomUUID()})).json() as any).claim;assert.notEqual(second.id,first.id);assert.deepEqual(second.configuration,{style:'color-inside',size:'15oz',color:'dark blue',font:'clean'});
    assert.equal((await admin(resetPath,{orderId:first.id,confirm:true})).status,409);assert.equal((await (await sim('gift/status')).json() as any).claim.id,second.id);
    assert.equal((await admin(resetPath,{orderId:second.id,confirm:true})).status,200);
   });
@@ -169,7 +170,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const row=await db.prepare('SELECT quote_json,status FROM mug_orders').first<any>();assert.equal(row.status,'simulated');assert.equal(JSON.parse(row.quote_json).totalCents,1424);
    const history=await (await admin('mug-orders')).json() as any;assert.equal(JSON.parse(history.orders[0].quote_json).shippingCents,709);
    const callsBefore=providerCalls.length;assert.equal((await live('claim',payload)).status,200);assert.equal(providerCalls.length,callsBefore,'Idempotent replay needs no new supplier call');
-   assert.ok(providerCalls.every(path=>/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(path)||path==='/orders/estimate-costs'));
+   assert.ok(providerCalls.every(path=>path==='/products'||/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(path)||path==='/orders/estimate-costs'));
    await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});
   });
   await t.test('mockups expose only expiring print capabilities and cache authenticated provider images without ordering',async()=>{
@@ -190,6 +191,10 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const result=await (await live('mockup/'+job.id)).json() as any;assert.equal(result.status,'ready');assert.match(result.src,/^\/api\/gift\/mockup\//);
    assert.equal((await live('mockup/'+job.id+'/image')).headers.get('Content-Type'),'image/png');
    assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup-source/'+job.id)).status,404,'The temporary source is removed on completion');
+   const lookupPayload={designId:'mug-0',configuration};
+   const beforeLookup=providerCalls.length;
+   const cachedLookup=await live('mockup/lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(lookupPayload)});assert.equal(cachedLookup.status,200);assert.equal((await cachedLookup.json() as any).status,'ready');assert.equal(providerCalls.length,beforeLookup,'Cache lookup skips rendering, upload and provider calls');
+   const missingLookup=await live('mockup/lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...lookupPayload,configuration:{...configuration,font:'serif'}})});assert.equal((await missingLookup.json() as any).status,'missing');
    const beforeCache=providerCalls.length;const reused=await (await live('mockup',{method:'POST',body:form()})).json() as any;assert.equal(reused.status,'ready');assert.equal(providerCalls.length,beforeCache);
    assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);
    assert.ok(!providerCalls.includes('/orders'));
