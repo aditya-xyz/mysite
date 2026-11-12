@@ -884,3 +884,8 @@ photo inspector no longer has move-up/down buttons. No migrations are required.
 
 Invitation print and mug allowance rows use the same count-left, reset-right
 layout and matching reset button dimensions. Existing confirmations still apply.
+
+Mug order history includes the saved style, size, color and caption font; proof
+previews use the same configuration as the guest receipt. Migration 0018 must be
+applied before deploying. Options are provisional simulation choices until the
+Printful account/catalog and delivered prices are connected and verified.

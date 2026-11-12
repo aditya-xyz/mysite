@@ -682,3 +682,35 @@ the gift button says “view your household’s gift” on its first render when
 active mug order already exists. Opening it still refreshes order status,
 including allowance resets made since the page loaded. Receipt/address details
 remain behind the dedicated authenticated gift status request.
+
+## Printful mug customization (simulation)
+
+The flow is photo picker → details/customization → address/confirm → receipt.
+The first published mugshot is initially selected with classic white 11oz/Clean.
+Details show the chosen photo and caption without an address. Customize mug reveals
+provisional classic/color-inside/latte styles, dependent sizes/colors, and
+Clean/Bookish/Handwritten fonts; it never changes the photo. Restore Pixel’s style
+resets only the physical/font choices. Back to the picker can change the photo
+while retaining customization. Address confirmation submits the simulated order. Shared simulation catalog:
+web/mug-options.js. These choices are not live Printful variants or price quotes;
+connect the account and verify availability, templates, delivered cost and font
+rendering before enabling physical fulfillment. Preview is illustrative.
+
+Migration 0018 stores the validated configuration alongside each simulated order;
+legacy receipts default to classic white 11oz/Clean. Guest review/receipt and Studio
+history retain it. Artwork remains the saved cutout plus caption/configuration,
+not a rendered Printful print-ready proof. Existing household allowance, publication,
+address and simulation gates remain in force. No provider calls or charges occur.
+Apply migration 0018 before deploying this change. Nothing connects a Printful
+account or enables actual fulfillment automatically.
+
+Printful documents uncharged draft orders and estimates, then a separate charged
+fulfillment confirmation. No payment/refund sandbox was found in its public API
+docs. Sample orders are real discounted purchases, subject to account eligibility.
+
+Customization opens a nested task dialog over Details, containing only the mug,
+short illustrative disclaimer and four custom dropdowns. Done retains choices;
+Restore Pixel’s Style resets to the preferred style and closes, preserving the
+chosen photo. No close icon/backdrop/Escape dismissal. Dropdowns use shared styled
+buttons/listboxes with chevrons, selected indicators, arrow/Home/End navigation,
+Enter/Space selection and Escape-to-close-list. Focus returns to Customize.

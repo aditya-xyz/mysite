@@ -115,10 +115,14 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.equal((await (await sim('journal')).json() as any).gift.enabled,false);
    assert.equal((await admin('mug-settings',{allowMugOrders:true})).status,200);
    assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,false);
-   const results=await Promise.all(Array.from({length:6},async()=>{const response=await sim('gift/claim',payload);assert.equal(response.status,200,await response.clone().text());return (await response.json() as any).claim;}));
-   assert.equal(new Set(results.map(o=>o.id)).size,1);const first=results[0];assert.equal(first.status,'simulated');assert.equal(first.address.name,'Verified Recipient');assert.equal(first.address.line1,'123 Verified Lane');assert.equal(first.design.caption,'caption 0');
+   for(const configuration of [{style:'unknown',size:'11oz',color:'white',font:'clean'},{style:'classic',size:'12oz',color:'white',font:'clean'},{style:'classic',size:'11oz',color:'red',font:'clean'},{style:'classic',size:'11oz',color:'white',font:'injected'},null]){
+    assert.equal((await sim('gift/claim',{...payload,configuration})).status,400);
+   }
+   const configuration={style:'color-inside',size:'15oz',color:'blue',font:'handwritten'};
+   const results=await Promise.all(Array.from({length:6},async()=>{const response=await sim('gift/claim',{...payload,configuration});assert.equal(response.status,200,await response.clone().text());return (await response.json() as any).claim;}));
+   assert.equal(new Set(results.map(o=>o.id)).size,1);const first=results[0];assert.equal(first.status,'simulated');assert.deepEqual(first.configuration,configuration);assert.deepEqual((await (await sim('gift/status')).json() as any).claim.configuration,configuration);assert.equal(first.address.name,'Verified Recipient');assert.equal(first.address.line1,'123 Verified Lane');assert.equal(first.design.caption,'caption 0');
    assert.equal((await sim(first.design.src.replace('/api/',''))).headers.get('Content-Type'),'image/png');
-   const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders.length,1);assert.equal(history.counts[0].count,1);
+   const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders.length,1);assert.deepEqual(JSON.parse(history.orders[0].configuration_json),configuration);assert.equal(history.counts[0].count,1);
    assert.equal((await db.prepare("SELECT mug_order_count,print_order_count FROM invites WHERE id='mug-invite'").first<any>()).mug_order_count,1);
    assert.equal((await sim('journal')).status,200);assert.equal((await (await sim('journal')).json() as any).gift.mode,'simulation');assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,true);
    assert.equal((await admin('mug-settings',{allowMugOrders:false})).status,200);
@@ -129,7 +133,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const cleared=await (await admin('mug-orders')).json() as any;assert.equal(cleared.orders.length,0);assert.equal(cleared.counts[0].count,0);assert.equal((await (await sim('gift/status')).json() as any).claim,null);
    assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,false);
    assert.equal((await sim(first.design.src.replace('/api/',''))).status,404);assert.equal(await bucket.head(`2026/mug-orders/${first.id}/artwork.png`),null);
-   const second=(await (await sim('gift/claim',{...payload,requestKey:crypto.randomUUID()})).json() as any).claim;assert.notEqual(second.id,first.id);
+   const second=(await (await sim('gift/claim',{...payload,requestKey:crypto.randomUUID()})).json() as any).claim;assert.notEqual(second.id,first.id);assert.deepEqual(second.configuration,{style:'classic',size:'11oz',color:'white',font:'clean'});
    assert.equal((await admin(resetPath,{orderId:first.id,confirm:true})).status,409);assert.equal((await (await sim('gift/status')).json() as any).claim.id,second.id);
    assert.equal((await admin(resetPath,{orderId:second.id,confirm:true})).status,200);
   });

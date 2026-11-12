@@ -1,3 +1,4 @@
+import {mugOptionsLabel} from '../../web/mug-options.js';
 import {mugPreview} from '../../web/mug-preview.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const mugSettingsMarkup=state=>`<label class="socials-toggle"><input type="checkbox" data-allow-mug-orders ${state.allowMugOrders?'checked':''} ${state.printMode==='local_mock'?'':'disabled'}><span><strong>Allow mug orders · ${state.year}</strong><span>Off by default. Also enable Allow complimentary mug on each eligible invitation. Applies immediately; existing orders are preserved.</span></span></label>`;
@@ -14,8 +15,8 @@ export function mountMugOrders({view,state,api,showModal,toast}){
  async function load(){
   try{latest=await api('mug-orders');if(!panel.isConnected)return;
    panel.querySelector('[data-mug-total]').textContent=String(latest.orders.length);
-   panel.querySelector('[data-mug-orders]').innerHTML=latest.orders.map(o=>`<article class="print-order"><div><strong>${esc(o.recipient_name)}</strong><p class="hint">${esc(o.status)} · ${new Date(o.created_at*1000).toLocaleDateString()}</p><p>${esc(o.caption)}</p></div><button class="quiet" data-mug-proof="${esc(o.id)}">View saved mug design</button></article>`).join('')||'<p class="hint">No mug orders.</p>';
-   panel.querySelectorAll('[data-mug-proof]').forEach(b=>b.onclick=()=>{const o=latest.orders.find(o=>o.id===b.dataset.mugProof);showModal(`<p class="kicker">Mug order · ${esc(o.status)}</p><h2>${esc(o.recipient_name)}</h2>${mugPreview({src:`/api/editions/${state.year}/mug-orders/${o.id}/artwork`,caption:o.caption,alt:o.alt})}<p class="hint">Saved artwork and caption from this order. Resetting the allowance deletes this order and its proof.</p>`);});
+   panel.querySelector('[data-mug-orders]').innerHTML=latest.orders.map(o=>`<article class="print-order"><div><strong>${esc(o.recipient_name)}</strong><p class="hint">${esc(o.status)} · ${new Date(o.created_at*1000).toLocaleDateString()}</p><p>${esc(o.caption)}</p><p class="hint">${esc(mugOptionsLabel(JSON.parse(o.configuration_json||'null')))}</p></div><button class="quiet" data-mug-proof="${esc(o.id)}">View saved mug design</button></article>`).join('')||'<p class="hint">No mug orders.</p>';
+   panel.querySelectorAll('[data-mug-proof]').forEach(b=>b.onclick=()=>{const o=latest.orders.find(o=>o.id===b.dataset.mugProof);showModal(`<p class="kicker">Mug order · ${esc(o.status)}</p><h2>${esc(o.recipient_name)}</h2>${mugPreview({src:`/api/editions/${state.year}/mug-orders/${o.id}/artwork`,caption:o.caption,alt:o.alt},JSON.parse(o.configuration_json||'null'))}<p class="hint">Saved artwork and caption from this order. Resetting the allowance deletes this order and its proof.</p>`);});
    for(const row of app.querySelectorAll('[data-print-invitation]')){
     let box=row.querySelector('[data-mug-allowance]');if(!box){box=document.createElement('div');box.className='mug-allowance allowance-row';box.dataset.mugAllowance='';row.querySelector('.invitation-options').append(box);}
     const count=latest.counts.find(c=>c.invitation_id===row.dataset.printInvitation);
