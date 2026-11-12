@@ -1,7 +1,9 @@
 import {deliveryAddressRoute} from './delivery-address.ts';
 import type {AddressEnv} from '../admin/src/address-verification.ts';
 import {themeAssetManifest,themeAssetResponse} from './theme-assets.ts';
-import {mugStatus,createMugOrder,mugOrderArtwork,mugAllowed} from './mug-orders.ts';
+import {mugStatus,createMugOrder,mugOrderArtwork,mugAllowed,mugQuote} from './mug-orders.ts';
+import {printfulCatalog,printfulEnabled} from './printful.ts';
+import {startMugMockup,mugMockupSource,mugMockupResult,cleanMugMockups} from './mug-mockups.ts';
 import {clearExpiredAddressVerifications} from './address-state.ts';
 import {printStatus,createPrintOrder,PrintProblem,simulatedOrders} from './printing.ts';
 import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionCookie } from "./security.ts";
@@ -17,6 +19,9 @@ interface Env extends AddressEnv {
   SMS_ENABLED: string;
   PRINT_PROVIDER?:string;
   ORDER_MODE?:string;
+  PRINTFUL_ENABLED?:string;
+  PRINTFUL_API_TOKEN?:string;
+  PRINTFUL_STORE_ID?:string;
   JOURNAL_ORIGIN?:string;
   SOCIAL_JOURNAL_ORIGIN?:string;
   TWILIO_ACCOUNT_SID: string;
@@ -173,9 +178,25 @@ async function route(request: Request, env: Env) {
     if(response)return response;
   }
   if(path==='/api/gift/status'&&request.method==='GET')return json(await mugStatus(request,env,await authenticated(request,env)));
-  if(path==='/api/gift/claim'&&request.method==='POST')return json(await createMugOrder(request,env,await authenticated(request,env),await body(request)));
-  const mugProof=/^\/api\/gift\/orders\/(mug-[a-z0-9]+)\/artwork$/.exec(path);
-  if(mugProof&&request.method==='GET')return mugOrderArtwork(env,await authenticated(request,env),mugProof[1]);
+  const mockupSource=/^\/api\/gift\/mockup-source\/([a-f0-9]{64})$/.exec(path);
+  if(mockupSource&&['GET','HEAD'].includes(request.method))return mugMockupSource(env,mockupSource[1]);
+  if(path==='/api/gift/mockup'&&request.method==='POST'){
+    const invite=await authenticated(request,env);await limited(env,'mug-mockup:'+invite.id,60,3600);
+    return json(await startMugMockup(request,env,invite));
+  }
+  const mockup=/^\/api\/gift\/mockup\/([a-f0-9]{64})(\/image)?$/.exec(path);
+  if(mockup&&request.method==='GET')return mugMockupResult(request,env,await authenticated(request,env),mockup[1],!!mockup[2]);
+  if(path==='/api/gift/catalog'&&request.method==='GET'){
+    const invite=await authenticated(request,env);if(!await mugAllowed(env,invite))throw new PrintProblem(403,'Complimentary mugs are not enabled for this invitation.');
+    await limited(env,'mug-catalog:'+invite.id,30,600);return json(await printfulCatalog(env));
+  }
+  if((path==='/api/gift/quote'||path==='/api/gift/claim')&&request.method==='POST'){
+    const invite=await authenticated(request,env);
+    if(printfulEnabled(env)){await limited(env,'mug-estimate:'+invite.id,20,600);await limited(env,'mug-estimate:global',12,60);}
+    return json(path.endsWith('/quote')?await mugQuote(request,env,invite,await body(request)):await createMugOrder(request,env,invite,await body(request)));
+  }
+  const mugProof=/^\/api\/gift\/orders\/(mug-[a-z0-9]+)\/(artwork|mockup)$/.exec(path);
+  if(mugProof&&request.method==='GET')return mugOrderArtwork(env,await authenticated(request,env),mugProof[1],mugProof[2]==='mockup');
   if(path==='/api/print/status'&&request.method==='GET')return json(await printStatus(request,env,await authenticated(request,env)));
   if(path==='/api/print/orders'&&request.method==='POST')return json(await createPrintOrder(request,env,await authenticated(request,env)));
   const theme=/^\/api\/theme\/(welcome|gift|closing)$/.exec(path);
@@ -268,6 +289,7 @@ export default {
   },
   async scheduled(_event: ScheduledEvent, env: Env) {
     await clearExpiredAddressVerifications(env.DB);
+    await cleanMugMockups(env);
     await env.DB.batch([
       env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?1").bind(now()),
       env.DB.prepare("DELETE FROM rate_limits WHERE expires_at<=?1").bind(now())

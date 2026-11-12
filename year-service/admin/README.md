@@ -889,3 +889,11 @@ Mug order history includes the saved style, size, color and caption font; proof
 previews use the same configuration as the guest receipt. Migration 0018 must be
 applied before deploying. Options are provisional simulation choices until the
 Printful account/catalog and delivered prices are connected and verified.
+
+
+Mug history now shows the delivered Printful estimate saved with each new
+simulated claim (mug, shipping, tax, fees/discounts, timestamp and total). Apply
+0019/0020 before deploying. Only the guest Worker needs the Printful secret;
+admin reads saved metadata from D1. Real catalog/estimates/mockups do not enable
+fulfillment: `ORDER_MODE=simulation` remains in both configurations. Read the
+current Printful section in the service README for token expiry and privacy.

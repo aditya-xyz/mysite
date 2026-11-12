@@ -12,3 +12,8 @@ INITIAL_RECIPIENT_PHONE_E164=""
 
 # Sending stays off until the provider integration and recipient are checked.
 SMS_ENABLED="false"
+
+# Store-scoped private token, starting with orders/read only. Estimates create no order.
+PRINTFUL_ENABLED="false"
+PRINTFUL_API_TOKEN=""
+PRINTFUL_STORE_ID=""

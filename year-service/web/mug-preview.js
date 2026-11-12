@@ -5,5 +5,6 @@ import {esc,assetPath} from './pixelbook.js';
 export function mugPreview(design,configuration){
  const o=validMugOptions(configuration)||pixelMugOptions();
  if(!design||!assetPath(design.src))return '<p>Your chosen mug design is saved.</p>';
+ if(assetPath(design.mockupSrc))return `<figure class="pb-mug-preview"><img class="pb-printful-mockup" src="${esc(assetPath(design.mockupSrc))}" alt="${esc(design.alt||'Your Printful mug preview')}"><figcaption>Printful mockup · final placement may vary</figcaption></figure>`;
  return `<figure class="pb-mug-preview" data-mug-style="${esc(o.style)}" data-mug-size="${esc(o.size)}" data-mug-color="${esc(o.color)}" data-mug-font="${esc(o.font)}"><div class="pb-mug-stage"><div class="pb-mug-handle" aria-hidden="true"></div><div class="pb-mug-ceramic"><div class="pb-mug-print"><img src="${esc(assetPath(design.src))}" alt="${esc(design.alt||'Pixel on your chosen mug')}"><p class="${String(design.caption||'').length>120?'pb-mug-long-caption':''}">${esc(design.caption||'')}</p></div></div></div><figcaption>Illustrative preview · final placement may vary</figcaption></figure>`;
 }

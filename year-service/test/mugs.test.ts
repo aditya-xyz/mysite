@@ -12,8 +12,23 @@ test('configured mugs follow draft publication, minimum count, access and deleti
  const {publicKey,privateKey}=await generateKeyPair('RS256',{extractable:true});
  const jwk={...await exportJWK(publicKey),kid:'mugs',alg:'RS256',use:'sig'};
  const jwt=await new SignJWT({email:'owner@example.com'}).setProtectedHeader({alg:'RS256',kid:'mugs'}).setSubject('owner').setIssuedAt().setIssuer(issuer).setAudience('mugs').setExpirationTime('10m').sign(privateKey);
- const shared={modules:true,compatibilityDate:'2026-08-06',d1Databases:{DB:'mug-db'},r2Buckets:{MEDIA:'mug-media'},outboundService:async(req:{url:string})=>{assert.equal(req.url,issuer+'/cdn-cgi/access/certs');return Response.json({keys:[jwk]});}};
- const mf=new Miniflare(convertV4MiniflareOptions({workers:[{...shared,name:'admin',routes:['admin.test/*'],scriptPath:'.wrangler/admin-test-bundle/index.js',bindings:{ADMIN_EMAIL:'owner@example.com',ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'mugs',JOURNAL_ORIGIN:'https://guest.test',ORDER_MODE:'simulation'}},{...shared,name:'guest',routes:['guest.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false'}},{...shared,name:'sim',routes:['sim.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false',ORDER_MODE:'simulation'}}]}));
+ let estimatedTotal=14.24,providerFailed=false;const providerCalls:string[]=[];
+ const shared={modules:true,compatibilityDate:'2026-08-06',d1Databases:{DB:'mug-db'},r2Buckets:{MEDIA:'mug-media'},outboundService:async(req:Request)=>{
+  if(req.url.startsWith('https://files.cdn.printful.com/'))return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=','base64'),{headers:{'Content-Type':'image/png'}});
+  if(req.url.startsWith('https://api.printful.com/')){
+   const path=new URL(req.url).pathname;providerCalls.push(path);assert.equal(req.headers.get('Authorization'),'Bearer fake-read-only');
+   if(providerFailed)return new Response('private provider error',{status:503});
+   if(path.startsWith('/mockup-generator/printfiles/'))return Response.json({result:{printfiles:[{printfile_id:43,width:2700,height:1050}],variant_printfiles:[{variant_id:1320,placements:{default:43}}]}});
+   if(path.startsWith('/mockup-generator/create-task/')){const data=await req.json() as any;assert.equal(data.files[0].placement,'default');assert.match(data.files[0].image_url,/^https:\/\/live.test\/api\/gift\/mockup-source\/[a-f0-9]{64}$/);return Response.json({result:{task_key:'mockup-task',status:'pending'}});}
+   if(path==='/mockup-generator/task')return Response.json({result:{status:'completed',mockups:[{mockup_url:'https://files.cdn.printful.com/mockup.png'}]}});
+   if(path.startsWith('/products/'))return Response.json({result:{variants:[{id:1320,size:'11 oz',color:'White',price:'6.07',in_stock:true,availability_regions:{US:'United States'}}]}});
+   assert.equal(path,'/orders/estimate-costs');const payload=await req.json() as any;
+   assert.equal(payload.recipient.address1,'123 Verified Lane');assert.equal(payload.recipient.zip,'97201');assert.equal(payload.recipient.name,undefined);assert.equal(payload.items[0].files,undefined);
+   return Response.json({result:{costs:{currency:'USD',subtotal:6.07,shipping:estimatedTotal-7.15,tax:1.08,vat:0,discount:0,total:estimatedTotal}}});
+  }
+  assert.equal(req.url,issuer+'/cdn-cgi/access/certs');return Response.json({keys:[jwk]});
+ }};
+ const mf=new Miniflare(convertV4MiniflareOptions({workers:[{...shared,name:'live',routes:['live.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false',ORDER_MODE:'simulation',PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'fake-read-only'}},{...shared,name:'admin',routes:['admin.test/*'],scriptPath:'.wrangler/admin-test-bundle/index.js',bindings:{ADMIN_EMAIL:'owner@example.com',ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'mugs',JOURNAL_ORIGIN:'https://guest.test',ORDER_MODE:'simulation'}},{...shared,name:'guest',routes:['guest.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false'}},{...shared,name:'sim',routes:['sim.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false',ORDER_MODE:'simulation'}}]}));
  const admin=(path:string,data?:unknown,jwtValue=jwt)=>mf.dispatchFetch('https://admin.test/api/editions/2026/'+path,{method:data===undefined?'GET':'POST',headers:{Origin:'https://admin.test','Cf-Access-Jwt-Assertion':jwtValue,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});
  const raw='c'.repeat(64);
  const guest=(path:string,authenticated=true)=>mf.dispatchFetch('https://guest.test/api/'+path,{headers:authenticated?{Cookie:'__Host-year_session='+raw}:{}});
@@ -136,6 +151,54 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const second=(await (await sim('gift/claim',{...payload,requestKey:crypto.randomUUID()})).json() as any).claim;assert.notEqual(second.id,first.id);assert.deepEqual(second.configuration,{style:'classic',size:'11oz',color:'white',font:'clean'});
    assert.equal((await admin(resetPath,{orderId:first.id,confirm:true})).status,409);assert.equal((await (await sim('gift/status')).json() as any).claim.id,second.id);
    assert.equal((await admin(resetPath,{orderId:second.id,confirm:true})).status,200);
+  });
+  await t.test('live pricing uses the saved address, enforces the delivered cap server-side and only saves simulated orders',async()=>{
+   const live=(path:string,data?:unknown,auth=true)=>mf.dispatchFetch('https://live.test/api/gift/'+path,{method:data===undefined?'GET':'POST',headers:{Origin:'https://live.test',...(auth?{Cookie:'__Host-year_session='+raw}:{}),'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});
+   const payload={addressVersion:1,designId:'mug-0',requestKey:crypto.randomUUID(),configuration:{style:'classic',size:'11oz',color:'white',font:'clean'}};
+   assert.equal((await live('catalog',undefined,false)).status,401);assert.equal((await live('quote',payload,false)).status,401);
+   assert.equal((await live('quote',{...payload,addressVersion:99})).status,409);assert.equal(providerCalls.length,0);
+   assert.equal((await (await live('status')).json() as any).livePricing,true);assert.equal(providerCalls.length,0);
+   const catalogResponse=await live('catalog');const catalog=await catalogResponse.json() as any;assert.equal(catalogResponse.status,200,JSON.stringify({catalog,providerCalls}));assert.equal(catalog.provider,'printful');assert.equal(catalog.styles[0].variants[0].id,1320);
+   assert.equal((await (await live('quote',payload)).json() as any).totalCents,1424);
+   estimatedTotal=25.01;assert.equal((await (await live('quote',payload)).json() as any).withinBudget,false);
+   const blocked=await live('claim',{...payload,totalCents:1,quote:{withinBudget:true}});assert.equal(blocked.status,409);assert.match(await blocked.text(),/budget/);
+   assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);
+   providerFailed=true;assert.equal((await live('claim',payload)).status,503);providerFailed=false;
+   estimatedTotal=14.24;const response=await live('claim',payload);assert.equal(response.status,200,await response.clone().text());
+   const result=await response.json() as any;assert.equal(result.claim.status,'simulated');
+   const row=await db.prepare('SELECT quote_json,status FROM mug_orders').first<any>();assert.equal(row.status,'simulated');assert.equal(JSON.parse(row.quote_json).totalCents,1424);
+   const history=await (await admin('mug-orders')).json() as any;assert.equal(JSON.parse(history.orders[0].quote_json).shippingCents,709);
+   const callsBefore=providerCalls.length;assert.equal((await live('claim',payload)).status,200);assert.equal(providerCalls.length,callsBefore,'Idempotent replay needs no new supplier call');
+   assert.ok(providerCalls.every(path=>/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(path)||path==='/orders/estimate-costs'));
+   await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});
+  });
+  await t.test('mockups expose only expiring print capabilities and cache authenticated provider images without ordering',async()=>{
+   const live=async(path:string,init:any={})=>{
+    const encoded=init.body instanceof FormData?new Request('https://live.test',{method:'POST',body:init.body}):null;
+    const body=encoded?await encoded.arrayBuffer():init.body;
+    return mf.dispatchFetch('https://live.test/api/gift/'+path,{...init,...(body?{body}:{}),headers:{Origin:'https://live.test',Cookie:'__Host-year_session='+raw,...(encoded?{'Content-Type':encoded.headers.get('Content-Type')!}:{}),...init.headers}});
+   };
+   const configuration={style:'classic',size:'11oz',color:'white',font:'clean'};
+   const png=new Uint8Array(33);png.set([137,80,78,71,13,10,26,10]);const view=new DataView(png.buffer);view.setUint32(16,1800);view.setUint32(20,700);png[24]=8;png[25]=6;
+   const form=()=>{const f=new FormData();f.append('designId','mug-0');f.append('configuration',JSON.stringify(configuration));f.append('artwork',new File([png],'print.png',{type:'image/png'}));return f;};
+   const jobResponse=await live('mockup',{method:'POST',body:form()});assert.equal(jobResponse.status,200,await jobResponse.clone().text());const job=await jobResponse.json() as any;assert.equal(job.status,'pending');
+   assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup/'+job.id)).status,401);
+   assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup-source/'+job.id)).status,200);
+   assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup-source/'+'f'.repeat(64))).status,404);
+   const initialCalls=providerCalls.length;assert.equal((await live('mockup/'+job.id)).status,200);assert.equal(providerCalls.length,initialCalls,'Polls before ten seconds do not call Printful');
+   await db.prepare('UPDATE mug_mockups SET next_poll_at=0 WHERE id=?1').bind(job.id).run();
+   const result=await (await live('mockup/'+job.id)).json() as any;assert.equal(result.status,'ready');assert.match(result.src,/^\/api\/gift\/mockup\//);
+   assert.equal((await live('mockup/'+job.id+'/image')).headers.get('Content-Type'),'image/png');
+   assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup-source/'+job.id)).status,404,'The temporary source is removed on completion');
+   const beforeCache=providerCalls.length;const reused=await (await live('mockup',{method:'POST',body:form()})).json() as any;assert.equal(reused.status,'ready');assert.equal(providerCalls.length,beforeCache);
+   assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);
+   assert.ok(!providerCalls.includes('/orders'));
+   const saved=await (await mf.dispatchFetch('https://live.test/api/gift/claim',{method:'POST',headers:{Origin:'https://live.test',Cookie:'__Host-year_session='+raw,'Content-Type':'application/json'},body:JSON.stringify({designId:'mug-0',configuration,addressVersion:1,requestKey:crypto.randomUUID(),mockupId:job.id})})).json() as any;
+   assert.match(saved.claim.design.mockupSrc,/^\/api\/gift\/orders\/mug-/);
+   assert.equal((await mf.dispatchFetch('https://live.test'+saved.claim.design.mockupSrc)).status,401);
+   assert.equal((await mf.dispatchFetch('https://live.test'+saved.claim.design.mockupSrc,{headers:{Cookie:'__Host-year_session='+raw}})).headers.get('Content-Type'),'image/png');
+   const history=await (await admin('mug-orders')).json() as any;assert.ok(history.orders[0].mockup_key);
+   await admin('invitations/mug-invite/reset-mug-allowance',{orderId:saved.claim.id,confirm:true});
   });
   await t.test('captions and order are versioned independently of gallery assignments',async()=>{
    draft.mugDesigns=[design(3),{...design(0),caption:'edited caption'},design(1),design(2)];await save();

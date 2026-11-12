@@ -714,3 +714,49 @@ Restore Pixel’s Style resets to the preferred style and closes, preserving the
 chosen photo. No close icon/backdrop/Escape dismissal. Dropdowns use shared styled
 buttons/listboxes with chevrons, selected indicators, arrow/Home/End navigation,
 Enter/Space selection and Escape-to-close-list. Focus returns to Customize.
+
+
+## Printful catalog, estimates and mockups
+
+The guest Worker reads the curated Printful catalog using a store-scoped private
+`orders/read` token. Enable `PRINTFUL_ENABLED` and set `PRINTFUL_STORE_ID` in
+Worker vars; keep `PRINTFUL_API_TOKEN` only in the ignored `.dev.vars` and encrypted
+Worker secrets. `node scripts/provision.mjs printful-secret` installs only that
+secret without printing it. The current token expires January 15, 2027. Renew or
+disable this integration before then; token expiry does not unpublish an edition.
+
+The three curated products are White Glossy Mug (19, 11/15 oz), Color Inside
+(403, 11/15 oz, black/red/blue), and Latte (837, 12 oz white). Catalog stock,
+US availability and exact size/color combinations come from Printful. Font
+choices are our rendered caption artwork, not catalog variants. An unavailable
+preferred variant falls back to the first available curated mug.
+
+Authenticated catalog and quote endpoints never create orders. Quotes use only
+the invitation contact's verified US street/city/state/ZIP, with stale address
+versions rejected. No name, phone, email or artwork is sent for an estimate.
+`POST /orders/estimate-costs` includes shipping, tax and additional charges;
+the server obtains a fresh quote on each simulated claim and enforces a **$25
+USD delivered maximum**. Provider failures block checkout. Saved owner history
+contains the quote breakdown/time/variant. These remain estimates, not a locked
+price for future fulfillment. Existing simulated claims retain their old proof.
+Apply migrations 0019 and 0020 before deploying both Workers.
+
+Printful mockups compose the selected published cutout and caption/font into a
+transparent PNG in the guest browser. No original photo or guest identity is sent.
+A cryptographically random, 30-minute source URL exposes only that rendered file;
+it closes immediately when the completed mockup is stored privately in R2. R2 and
+the photo library remain private. Finished mockup images require the invitation
+session and mug permissions. Cache keys include the rendered PNG hash, published
+artwork version, caption, font and exact mug variant; identical renders can reuse
+a finished image through separate household authorizations. Printful's temporary
+output URLs are never returned to guests. Polling waits at least ten seconds,
+and a global persistent 31-second task lease respects new-store generation limits.
+Expired unfinished source files are swept daily. Generated images are previews,
+not a guarantee of final printing. The illustrative preview remains while a task
+is pending or unavailable; it is labeled separately from a Printful mockup.
+
+`ORDER_MODE=simulation` remains enforced independently of live catalog, estimate
+and mockup calls. There is no order creation/confirmation endpoint in the adapter,
+no shop connection, and no automatic payment or fulfillment. Connecting billing
+or approving live fulfillment is separate work. Do not add write-order scope for
+catalog, estimates or mockups: all three were verified with `orders/read` only.
