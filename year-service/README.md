@@ -660,3 +660,12 @@ preview at the time of the click. Existing gift receipts take precedence.
 The personal gallery is titled “dad’s friends ⇄ my friends.” Both galleries use
 01/02 when present together; recipients with only shared photos see an unnumbered
 “the group project.” No personal gallery or keepsake is shown for those recipients.
+
+
+### Guest typography
+
+The scrapbook uses a self-hosted Asap variable WOFF2, with its width fixed at 95
+and weights 100–900 retained. Regular body text, bold headings and more open
+heading spacing match the approved Metro-inspired preview. The same face is used
+in the generated keepsake; Caveat remains the handwritten signoff. Font license,
+source checksum and reproducible conversion instructions are in `web/fonts/`.

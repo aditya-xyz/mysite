@@ -101,14 +101,14 @@ export function mountKeepsake(journal,section){
       if(stamp!==revision||!modal.open)return;
       // Typography is optional: a missing or slow font must not block the photos/export.
       let fontTimer;
-      try{await Promise.race([Promise.allSettled([document.fonts.load('600 64px Manrope'),document.fonts.load('400 30px Manrope')]),new Promise(resolve=>{fontTimer=setTimeout(resolve,1500);})]);}
+      try{await Promise.race([Promise.allSettled([document.fonts.load('700 64px Asap'),document.fonts.load('400 30px Asap')]),new Promise(resolve=>{fontTimer=setTimeout(resolve,1500);})]);}
       finally{clearTimeout(fontTimer);}
       if(stamp!==revision||!modal.open)return;
       ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
       selected.forEach((p,i)=>drawPhoto(ctx,loaded[i],cardSlots[i],crops.get(p.id)));
       ctx.fillStyle=frame==='moss'?'#20392f':'#272727';ctx.textAlign='center';
-      fittedText(ctx,'a few of our favorite humans',530,1300,890,64,'600 $px Manrope, sans-serif');
-      fittedText(ctx,`${(journal.authors||'Aditya & Angela').toLowerCase()} · ${journal.year||''}`,530,1363,890,30,'$px Manrope, sans-serif');
+      fittedText(ctx,'a few of our favorite humans',530,1300,890,64,'700 $px Asap, sans-serif');
+      fittedText(ctx,`${(journal.authors||'Aditya & Angela').toLowerCase()} · ${journal.year||''}`,530,1363,890,30,'$px Asap, sans-serif');
       ctx.font='24px Georgia, serif';ctx.fillText('♥',530,1420);
       const pixel=loaded[3],height=176,width=height*pixel.width/pixel.height;
       ctx.drawImage(pixel,1090-width/2,1248,width,height);
