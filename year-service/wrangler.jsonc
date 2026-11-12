@@ -9,7 +9,11 @@
   "observability": { "enabled": false },
   "triggers": { "crons": ["23 9 * * *"] },
   "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },
-  "vars": { "SMS_ENABLED": "true", "JOURNAL_ORIGIN": "https://aditya-year-2026.aditya-year-service.workers.dev", "SOCIAL_JOURNAL_ORIGIN": "https://scrapbook.adityapatil.xyz" },
+  "vars": {
+    "ORDER_MODE": "simulation",
+    "ADDRESS_VERIFICATION_PROVIDER": "google", "GOOGLE_PLACES_ENABLED": "true",
+    "ADDRESS_VALIDATION_DAILY_LIMIT": "50", "ADDRESS_VALIDATION_MONTHLY_LIMIT": "1000",
+    "ADDRESS_AUTOCOMPLETE_DAILY_LIMIT": "200", "ADDRESS_AUTOCOMPLETE_MONTHLY_LIMIT": "2000", "SMS_ENABLED": "true", "JOURNAL_ORIGIN": "https://aditya-year-2026.aditya-year-service.workers.dev", "SOCIAL_JOURNAL_ORIGIN": "https://scrapbook.adityapatil.xyz" },
   "d1_databases": [{
     "binding": "DB",
     "database_name": "aditya-year-2026",

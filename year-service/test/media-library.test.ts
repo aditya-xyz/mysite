@@ -38,6 +38,9 @@ test('private media reuse and guarded permanent library deletion',async t=>{
     await db.batch((await readFile('migrations/0011_print_allowance_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0012_google_address_verification.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0013_unpublish.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0015_simulated_mug_orders.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0016_mug_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0017_immediate_print_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     const setDraft=(photos:unknown[])=>db.prepare("UPDATE editions SET draft_json=json_set(draft_json,'$.photos',json(?1)) WHERE year=2026").bind(JSON.stringify(photos)).run();
     const manifest=(id:string)=>({title:'Synthetic',authors:'Test',intro:'Test',note:'Test',sharedTitle:'Test',stories:[],photos:[{...photo(id),preview_key:`2026/${id}/preview.jpg`,viewer_key:`2026/${id}/viewer.jpg`,original_key:`2026/${id}/original`,filename:'synthetic.jpg',mime:'image/jpeg'}]});
     await t.test('lookup, fingerprints and deletion require authentication and same-origin writes',async()=>{
@@ -100,6 +103,11 @@ test('private media reuse and guarded permanent library deletion',async t=>{
       await setDraft([]);
       await db.prepare('UPDATE editions SET published_json=? WHERE year=2026').bind(JSON.stringify(manifest(item.id))).run();
       const publicationBlocked=await req(`media/${item.id}/delete`,{confirm:true});assert.equal(publicationBlocked.status,409);assert.match((await publicationBlocked.json() as {error:string}).error,/published scrapbook for 2026/);
+      await db.prepare('UPDATE editions SET is_active=0 WHERE year=2026').run();
+      const offlineBlocked=await req(`media/${item.id}/delete`,{confirm:true});assert.equal(offlineBlocked.status,409);
+      assert.match((await offlineBlocked.json() as {error:string}).error,/retained even while offline/);
+      assert.ok(await bucket.head(prefix+'original'),'Unpublishing must preserve original bytes');
+      assert.equal((await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<{published_json:string}>())!.published_json,JSON.stringify(manifest(item.id)));
       const published=JSON.stringify(manifest(keeper.id));await db.prepare('UPDATE editions SET published_json=? WHERE year=2026').bind(published).run();
       await bucket.put(prefix+'previews/old/grid.jpg','historical grid');await bucket.put(prefix+'previews/old/viewer.jpg','historical viewer');
       await db.prepare('UPDATE media_objects SET deleting=1 WHERE id=?').bind(item.id).run();

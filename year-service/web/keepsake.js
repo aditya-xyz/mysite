@@ -1,3 +1,4 @@
+import {assembleKeepsake} from './scrapbook-motion.js';
 import {createPrintFlow} from './print-flow.js';
 import {CARD_WIDTH,CARD_HEIGHT,cardSlots,coverCrop,anchoredCrop,personalPhotos} from './keepsake-layout.js';
 const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -12,11 +13,11 @@ export function mountKeepsake(journal,section){
   const photos=personalPhotos(journal.photos);
   if(!section||photos.length<3)return {destroy(){}};
   const entry=document.createElement('div');entry.className='ks-entry';
-  entry.innerHTML='<div><p class="kicker">this one’s a keeper</p><h2>Take a little piece with you.</h2><p>Pick three of your photos and make a little keepsake. Pixel insists on joining.</p></div><button class="button" type="button">Make a keepsake <span aria-hidden="true">↗</span></button>';
+  entry.innerHTML='<div><p class="kicker">this one’s going on the fridge.</p></div><button class="button" type="button">Make a keepsake</button>';
   section.append(entry);
   const launch=entry.querySelector('button'),modal=document.createElement('dialog');
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
-  let chosen=[],crops=new Map(),frame='moss',step='pick',editing=0,file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
+  let assembleNext=false,chosen=[],crops=new Map(),frame='moss',step='pick',editing=0,file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
   const images=new Map(),urls=new Set();let cropImage=null,orderToast=null,toastTimer=null;
   const printFlow=createPrintFlow({getData:()=>({file,recipe:{photoIds:[...chosen],crops:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:()=>{if(modal.open&&step==='edit')updateExport();},onOrdered:(message,simulated)=>{if(modal.open){showOrderToast(message,simulated);modal.querySelector('[data-share],[data-save]')?.focus();}}});
   const currentPhotos=()=>chosen.map(id=>photos.find(p=>p.id===id));
@@ -72,7 +73,7 @@ export function mountKeepsake(journal,section){
       button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
       modal.querySelector('.ks-count').textContent=`${chosen.length} of 3 selected`;modal.querySelector('[data-continue]').disabled=chosen.length!==3;setStatus('');
     });
-    const next=modal.querySelector('[data-continue]');if(next)next.onclick=()=>{if(chosen.length===3){step='edit';render();}};
+    const next=modal.querySelector('[data-continue]');if(next)next.onclick=()=>{if(chosen.length===3){assembleNext=true;step='edit';render();}};
     modal.querySelectorAll('[data-frame]').forEach(b=>b.onclick=()=>{frame=b.dataset.frame;modal.querySelectorAll('[data-frame]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.frame===frame)));paintCard();});
     modal.querySelectorAll('[data-crop]').forEach(b=>b.onclick=()=>{editing=Number(b.dataset.crop);step='crop';render();});
     modal.querySelectorAll('[data-hero]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.hero);[chosen[0],chosen[i]]=[chosen[i],chosen[0]];render();});
@@ -88,9 +89,11 @@ export function mountKeepsake(journal,section){
   }
   function updateExport(){const bottom=modal.querySelector('.ks-bottom');if(bottom&&step==='edit'){bottom.innerHTML=actions();bottom.querySelector('[data-save]')?.addEventListener('click',download);bottom.querySelector('[data-share]')?.addEventListener('click',shareCard);printFlow.bind(bottom);}}
   async function paintCard(){
+    const assemble=assembleNext;assembleNext=false;
     const stamp=++revision;file=null;busy=true;updateExport();setStatus('');
     const canvas=modal.querySelector('.ks-preview');if(!canvas)return;
-    const ctx=canvas.getContext('2d');ctx.fillStyle=frame==='moss'?'#e3e8d5':'#fff';ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);
+    canvas.parentElement.querySelector('.ks-assembly')?.remove();
+    const ctx=canvas.getContext('2d');ctx.fillStyle=frame==='moss'?'#e3e8d5':'#fff';ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);canvas.dataset.paper=ctx.fillStyle;
     try{
       const selected=currentPhotos(),wanted=new Set([...selected.map(p=>p.viewerSrc||p.src),'/pixel-santa.png']);
       images.forEach((promise,src)=>{if(!wanted.has(src)){images.delete(src);promise.then(image=>image.close?.()).catch(()=>{});}});
@@ -109,6 +112,7 @@ export function mountKeepsake(journal,section){
       ctx.font='24px Georgia, serif';ctx.fillText('♥',530,1420);
       const pixel=loaded[3],height=176,width=height*pixel.width/pixel.height;
       ctx.drawImage(pixel,1090-width/2,1248,width,height);
+      if(assemble)assembleKeepsake(canvas,cardSlots);
       const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.94));
       if(stamp!==revision||!modal.open)return;
       if(!blob)throw new Error('Your card couldn’t be prepared. Please try again.');
@@ -141,6 +145,6 @@ export function mountKeepsake(journal,section){
   }
   function download(){if(!file)return;const url=URL.createObjectURL(file);urls.add(url);const a=document.createElement('a');a.href=url;a.download=file.name;document.body.append(a);a.click();a.remove();setStatus('Your keepsake is ready. Your browser chooses where it saves.');setTimeout(()=>{URL.revokeObjectURL(url);urls.delete(url);},60000);}
   async function shareCard(){if(!file)return;try{if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:'A little keepsake'});else{shareFallback=true;updateExport();setStatus('File sharing isn’t supported in this browser. You can save the image as a file instead.');}}catch(error){if(error.name!=='AbortError'){shareFallback=true;updateExport();setStatus('Sharing couldn’t open. You can save the image as a file instead.');}}}
-  launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();shareFallback=false;step='pick';render();modal.showModal();printFlow.refresh();};
+  launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();shareFallback=false;step='pick';render();modal.showModal();modal.querySelector('#ks-title').focus({preventScroll:true});printFlow.refresh();};
   return {destroy(){if(modal.open)modal.close();else cleanup();modal.remove();entry.remove();}};
 }

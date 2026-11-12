@@ -1,17 +1,22 @@
+import {deliveryAddressRoute} from './delivery-address.ts';
+import type {AddressEnv} from '../admin/src/address-verification.ts';
+import {themeAssetManifest,themeAssetResponse} from './theme-assets.ts';
+import {mugStatus,createMugOrder,mugOrderArtwork,mugAllowed} from './mug-orders.ts';
 import {clearExpiredAddressVerifications} from './address-state.ts';
-import {printStatus,createPrintOrder,PrintProblem} from './printing.ts';
+import {printStatus,createPrintOrder,PrintProblem,simulatedOrders} from './printing.ts';
 import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionCookie } from "./security.ts";
 import { reserveDownload,releaseDownload } from "./downloads.ts";
 import { previewDimensions } from "./image-dimensions.ts";
 import { invitationAudience, invitationName, type InvitationAudience } from "./invitations.ts";
-import { publishedEdition, clientEdition, visiblePhotos } from "./edition.ts";
+import { publishedEdition, clientEdition, visiblePhotos, publishedMugs } from "./edition.ts";
 
-interface Env {
+interface Env extends AddressEnv {
   DB: D1Database;
   MEDIA: R2Bucket;
   ASSETS: Fetcher;
   SMS_ENABLED: string;
   PRINT_PROVIDER?:string;
+  ORDER_MODE?:string;
   JOURNAL_ORIGIN?:string;
   SOCIAL_JOURNAL_ORIGIN?:string;
   TWILIO_ACCOUNT_SID: string;
@@ -161,14 +166,35 @@ async function route(request: Request, env: Env) {
     if (validToken(raw)) await env.DB.prepare("DELETE FROM sessions WHERE token_hash=?1").bind(await digest(raw)).run();
     return json({ loggedOut: true }, 200, { "Set-Cookie": sessionCookie(SESSION, "", 0) });
   }
+  if(path==='/api/delivery-address'||path.startsWith('/api/delivery-address/')){
+    const invite=await authenticated(request,env);
+    if(request.method==='POST')await limited(env,'delivery:'+invite.id+':'+path.split('/').pop(),path.endsWith('/verify')?5:30,600);
+    const response=await deliveryAddressRoute(request,env,invite,path,()=>body(request));
+    if(response)return response;
+  }
+  if(path==='/api/gift/status'&&request.method==='GET')return json(await mugStatus(request,env,await authenticated(request,env)));
+  if(path==='/api/gift/claim'&&request.method==='POST')return json(await createMugOrder(request,env,await authenticated(request,env),await body(request)));
+  const mugProof=/^\/api\/gift\/orders\/(mug-[a-z0-9]+)\/artwork$/.exec(path);
+  if(mugProof&&request.method==='GET')return mugOrderArtwork(env,await authenticated(request,env),mugProof[1]);
   if(path==='/api/print/status'&&request.method==='GET')return json(await printStatus(request,env,await authenticated(request,env)));
   if(path==='/api/print/orders'&&request.method==='POST')return json(await createPrintOrder(request,env,await authenticated(request,env)));
+  const theme=/^\/api\/theme\/(welcome|gift|closing)$/.exec(path);
+  if(theme&&request.method==='GET'){
+    const invite=await authenticated(request,env);
+    const response=await themeAssetResponse(env.MEDIA,invite.edition_year,theme[1]);
+    if(!response)throw new Failure(404,'Theme photo not found.');
+    return response;
+  }
   if (path === "/api/journal" && request.method === "GET") {
     const i = await authenticated(request, env);
     const edition = await publishedEdition(env.DB,i.edition_year);
     if (edition) {
       const data=clientEdition(edition,i.id,invitationName(i),i.edition_year,await invitationAudience(env.DB,i));
       data.shareSocials=!!i.share_socials;
+      Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,i.edition_year)});
+      const mugSetting=await env.DB.prepare('SELECT allow_mug_orders FROM editions WHERE year=?1').bind(i.edition_year).first<{allow_mug_orders:number}>();
+      if(!i.allow_mug||!mugSetting?.allow_mug_orders){data.gift.enabled=false;data.gift.designs=[];}
+      Object.assign(data.gift,{orderingEnabled:!!i.allow_mug&&!!mugSetting?.allow_mug_orders&&simulatedOrders(request,env),mode:simulatedOrders(request,env)?'simulation':'disabled'});
       // Old publications remain unchanged; resolve missing preview dimensions read-only.
       for(let offset=0;offset<data.photos.length;offset+=8)await Promise.all(data.photos.slice(offset,offset+8).map(async photo=>{
         if(!photo.width||!photo.height)Object.assign(photo,await previewDimensions(env.MEDIA,edition.photos.find(p=>p.id===photo.id)!.preview_key));
@@ -180,6 +206,14 @@ async function route(request: Request, env: Env) {
       WHERE invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?1)) ORDER BY invite_id IS NULL,sort_order,id`).bind(JSON.stringify(await invitationAudience(env.DB,i))).all<Photo>();
     return json({ year:i.edition_year,name: invitationName(i), verificationName:i.name,shareSocials:!!i.share_socials, photos: await Promise.all(photos.results.map(async p => ({ id: p.id, caption: p.caption, alt: p.alt,...await previewDimensions(env.MEDIA,p.preview_key),
       personal: p.invite_id !== null, src: `/api/media/${p.id}`,viewerSrc:`/api/media/${p.id}/viewer`, canSave: !!p.invite_id && !!p.original_key }))) });
+  }
+  const mug=/^\/api\/mugs\/([a-z0-9-]+)$/.exec(path);
+  if(mug&&request.method==='GET'){
+    const invite=await authenticated(request,env),edition=await publishedEdition(env.DB,invite.edition_year);
+    const design=edition&&await mugAllowed(env,invite)?publishedMugs(edition).find(d=>d.id===mug[1]):null;
+    if(!design||(url.searchParams.has('version')&&url.searchParams.get('version')!==design.cutoutVersion))throw new Failure(404,'Mug photo not found.');
+    const file=await env.MEDIA.get(design.preview_key);if(!file)throw new Failure(404,'Mug photo not found.');
+    return new Response(file.body,{headers:{'Content-Type':design.mime==='image/png'?'image/png':'image/jpeg'}});
   }
   const media = /^\/api\/media\/([a-z0-9-]+)(\/(original|viewer))?$/.exec(path);
   if (media && request.method === "GET") {

@@ -1,13 +1,17 @@
+import {installFocusModality} from './focus.js';
+installFocusModality();
+import {openingMarkup,sectionHeading,giftMarkup,footerMarkup} from './pixelbook.js';
+import {mountPixelGift} from './pixelbook-gift.js';
+import {mountScrapbookMotion} from './scrapbook-motion.js';
 import {mountKeepsake} from './keepsake.js';
 import {scrapbookConfig} from './config.js';
-import {winterLights,winterSnowflake} from './seasonal.js';
 import {photoOrder,adjacentIndex,swipeStep,wheelNavigation,paginationDots,dismissDrag} from './photo-navigation.js';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#photo');
 const save = document.querySelector('#save');
 const fullResolution=document.querySelector('#full-resolution');
 const previousPhoto=document.querySelector('#previous-photo'),nextPhoto=document.querySelector('#next-photo'),photoStage=dialog.querySelector('.photo-stage');
-let viewerPhotos=[],viewerIndex=-1,viewerReturnFocus,keepsake;
+let viewerPhotos=[],viewerIndex=-1,viewerReturnFocus,keepsake,pixelGift,scrapbookMotion;
 let preparedFile, selected, journal, saveMode = 'share', generation = 0, fullImageUrl, originalRequest, downloadPending=false, imageObserver, layoutObserver, closeTimer;
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path, data) {
@@ -18,13 +22,17 @@ async function api(path, data) {
 }
 function applyBrand(authors='Aditya & Angela',year) {
   const signature=document.querySelector('.signature');
-  signature.textContent=authors.toLowerCase();signature.href='https://adityapatil.xyz';signature.setAttribute('aria-label','Aditya’s public website');signature.hidden=false;
-  document.title=(year?year+' · ':'')+authors;document.querySelector('.edition-label').textContent=year||'';
+  signature.innerHTML=`<svg class="pb-header-paw" viewBox="0 0 32 32" width="18" height="18" fill="currentColor" aria-hidden="true"><ellipse cx="6" cy="12" rx="3.2" ry="4.3" transform="rotate(-24 6 12)"/><ellipse cx="12" cy="6.5" rx="3.1" ry="4.3" transform="rotate(-9 12 6.5)"/><ellipse cx="21" cy="6.5" rx="3.1" ry="4.3" transform="rotate(9 21 6.5)"/><ellipse cx="27" cy="12" rx="3.2" ry="4.3" transform="rotate(24 27 12)"/><path d="M8 21c2-2 3-7 8-7s6 5 8 7c5 7-2 9-5 7-2-1-4-1-6 0-4 2-10 0-5-7Z"/></svg>${year?`<span class="pb-header-volume">vol. ${escape(year)}</span>`:''}`;
+  const volume=signature.querySelector('.pb-header-volume');
+  document.querySelector('header > .pb-header-volume')?.remove();
+  if(volume)signature.after(volume);
+  signature.href='#';signature.setAttribute('aria-label','Pixelbook — back to the top');signature.hidden=false;
+  document.title='pixelbook'+(year?' · '+year:'');
 }
 function clearBrand(){
   const signature=document.querySelector('.signature');
-  signature.hidden=true;signature.replaceChildren();signature.removeAttribute('href');signature.removeAttribute('aria-label');
-  document.title='A private scrapbook';document.querySelector('.edition-label').textContent='';
+  document.querySelector('header > .pb-header-volume')?.remove();signature.hidden=true;signature.replaceChildren();signature.removeAttribute('href');signature.removeAttribute('aria-label');
+  document.title='A private scrapbook';
 }
 function footerProfile(name,profileUrl){
   if(!profileUrl)return document.createTextNode(name);
@@ -37,13 +45,12 @@ function footerProfile(name,profileUrl){
 }
 function renderFooter(shareSocials=false){
   const footer=document.querySelector('footer');
-  footer.innerHTML=`<div class="footer-ornament" aria-hidden="true"></div><div class="footer-ornament footer-ornament-bottom" aria-hidden="true"></div><p class="footer-closing">Here’s to the next chapter—<br><em>and having you in it.</em></p><span></span>`;
-  document.querySelectorAll('.footer-ornament').forEach(ornament=>ornament.innerHTML=winterSnowflake);
+  footer.innerHTML=footerMarkup(journal || {});
   const links=shareSocials?scrapbookConfig.instagram:{};
-  document.querySelector('footer > span').replaceChildren('By ',footerProfile('Aditya',links.aditya),' & ',footerProfile('Angela',links.angela),', with help from ',footerProfile('Pixel',links.pixel));
+  footer.querySelector('.pb-footer-credits').replaceChildren('vibecoded by ',footerProfile('Pixel',links.pixel),', technical support & design by ',footerProfile('dad',links.aditya));
   footer.hidden=false;
 }
-function sharedHeading(title){return !title||['A little of our year','A little of our year.'].includes(title.trim())?'Meanwhile, in our camera roll…':title;}
+function sharedHeading(title){return !title||['A little of our year','A little of our year.'].includes(title.trim())?'the group project.':title;}
 function showOffline(){
   clearBrand();const footer=document.querySelector('footer');footer.hidden=true;footer.replaceChildren();
   app.innerHTML='<section class="entry"><p class="kicker">A private edition</p><h1>This scrapbook has<br><em>been taken offline.</em></h1><p>It’s unavailable to guests right now. Please check back later.</p><button class="text-button" id="retry">Check again</button></section>';
@@ -61,7 +68,7 @@ async function start() {
     const invite = await api('invitation');
     applyBrand(invite.authors,invite.year);
     renderFooter();
-    app.innerHTML = `<section class="entry"><div class="invitation-delivery"><img src="/pixel-santa.png" width="92" height="100" alt="Pixel wearing a Santa hat"><div><p class="handwritten">special delivery</p><p class="kicker">A little piece of our year</p></div></div><h1 class="invitation-greeting">A little something for <em>${escape(invite.name)}</em>.</h1><p class="intro">${escape(invite.intro || "A few places, some familiar faces, and the everyday things worth keeping. We’d love to share them with you.")}</p><p>We’ll send a code to ${escape(invite.verificationName || invite.name)}’s phone ending in <strong>${escape(invite.phoneHint)}</strong>.</p><button class="button" id="send">Text me a code →</button><p class="error" role="alert" id="error"></p><p class="signoff">With love, ${escape(invite.authors || "Aditya & Angela")}</p></section>`;
+    app.innerHTML = `<section class="entry"><div class="invitation-delivery"><img src="/pixel-santa.png" width="92" height="100" alt="Pixel wearing a Santa hat"><div><p class="handwritten">special delivery. from me.</p><p class="kicker">the Pixelbook annual</p></div></div><h1 class="invitation-greeting">oh good,<br><em>${escape(invite.name)}</em>.</h1><p class="intro">i made you a scrapbook. there are photos, there are memories, and yes, there is a lot of me.</p><p>We’ll send a code to ${escape(invite.verificationName || invite.name)}’s phone ending in <strong>${escape(invite.phoneHint)}</strong>.</p><button class="button" id="send">Text me a code →</button><p class="error" role="alert" id="error"></p><p class="signoff">love, Pixel</p></section>`;
     document.querySelector('#send').onclick = async e => { e.target.disabled = true; try { await api('send', {}); showCode(invite); } catch (error) { if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;} document.querySelector('#error').textContent = error.message; e.target.disabled = false; } };
   } catch (error) { message(error); }
 }
@@ -83,14 +90,15 @@ function layoutPhotoGrid(grid){
   spans.forEach(([card,span])=>{if(card.style.gridRowEnd!==span)card.style.gridRowEnd=span;});
 }
 function showJournal() {
-  keepsake?.destroy();
+  keepsake?.destroy();pixelGift?.destroy();scrapbookMotion?.destroy();
   renderFooter(journal.shareSocials===true);
   imageObserver?.disconnect();layoutObserver?.disconnect();
   applyBrand(journal.authors,journal.year);
   const cards = personal => journal.photos.filter(p=>p.personal===personal).map(p=>`<button class="card" data-photo="${escape(p.id)}" aria-label="Open photo: ${escape(p.caption)}"><img data-src="${escape(p.src)}" alt="${escape(p.alt)}" loading="eager" decoding="async" ${p.width&&p.height?`width="${p.width}" height="${p.height}"`:'class="pending-dimensions"'}/><span>${escape(p.caption)}</span></button>`).join('');
   const hasPersonal=journal.photos.some(p=>p.personal), sharedTitle=sharedHeading(journal.sharedTitle);
   const stories=(journal.stories || []).map(s=>`<section class="letter"><h2>${escape(s.title)}</h2><p class="prose">${escape(s.body)}</p></section>`).join('');
-  app.innerHTML = `<div class="opening-spread"><section class="letter"><div class="opening-note-top"><p class="kicker">The opening note</p>${winterLights}</div><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${escape(journal.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div><p class="prose">${escape(journal.note || 'We wanted to make a little space for the photos with a story behind them, the ordinary days worth remembering, and the people who make it all feel like home.')}</p><p class="signoff">With love, ${escape(journal.authors || 'Aditya & Angela')}</p>${!journal.title?'<p class="hint">These are illustrative samples while we test your invitation. Real memories will come later.</p>':''}</section><aside class="pixel-note"><p class="handwritten">curated by Pixel, obviously.</p><img src="/pixel-santa.png" alt="Pixel in her Santa hat, chief memory inspector" width="369" height="400"><p>Chief memory inspector.<br>Full-time good girl.</p></aside></div>${hasPersonal?`<section class="personal-photos" aria-label="Photos selected for ${escape(journal.name)}"><h2 class="personal-heading">A little bit of us, with you.</h2><div class="grid">${cards(true)}</div></section>`:''}<section class="shared-photos" aria-labelledby="shared-title"><h2 id="shared-title">${escape(sharedTitle)}</h2><div class="grid">${cards(false)}</div></section>${stories}`;
+  app.innerHTML = `${openingMarkup(journal)}${hasPersonal?`<section class="personal-photos" aria-label="Photos selected for ${escape(journal.name)}">${sectionHeading('01','dad’s friends','a few photos picked especially for you.','','my friends')}<div class="grid">${cards(true)}</div></section>`:''}<section class="shared-photos" aria-labelledby="shared-title">${sectionHeading(hasPersonal?'02':'',sharedTitle,'the adventures. the people. the photographic evidence.','shared-title')}<div class="grid">${cards(false)}</div></section>${stories}${giftMarkup(journal)}`;
+  keepsake=mountKeepsake(journal,app.querySelector('.personal-photos'));
   const pending=new Set(),dirtyGrids=new Set();let active=0,layoutFrame;
   const scheduleLayout=grid=>{
     if(grid)dirtyGrids.add(grid);
@@ -105,10 +113,10 @@ function showJournal() {
       const finish=()=>{active--;image.onload=null;image.onerror=null;scheduleLayout(image.closest('.grid'));pumpImages();};
       image.onload=async()=>{
         try{await image.decode();}catch{}
-        if(image.isConnected){image.classList.remove('pending-dimensions');image.classList.add('is-ready');}
+        if(image.isConnected){image.classList.remove('pending-dimensions');image.classList.add('is-ready');scrapbookMotion?.photoReady(image.closest('.card'));}
         finish();
       };
-      image.onerror=()=>{image.classList.add('is-ready');finish();};
+      image.onerror=()=>{image.classList.add('is-ready');scrapbookMotion?.photoReady(image.closest('.card'));finish();};
       image.fetchPriority=distance(image)===0?'high':'low';
       image.src=image.dataset.src;delete image.dataset.src;
     }
@@ -129,10 +137,12 @@ function showJournal() {
     }));
     grids.forEach(grid=>layoutObserver.observe(grid));
   }
-  requestAnimationFrame(()=>grids.forEach(layoutPhotoGrid));
+  // Reserve the gallery's full height before observing the gift cards below it.
+  grids.forEach(layoutPhotoGrid);
+  scrapbookMotion=mountScrapbookMotion(app);
   document.fonts?.ready.then(()=>{if(grids[0]?.isConnected)grids.forEach(layoutPhotoGrid);});
   app.querySelectorAll('[data-photo]').forEach(button => button.onclick=()=>openPhoto(journal.photos.find(p=>p.id===button.dataset.photo)));
-  keepsake=mountKeepsake(journal,app.querySelector('.personal-photos'));
+  pixelGift=mountPixelGift(journal,app);
   window.scrollTo(0,0);
 }
 function openPhoto(photo) {

@@ -38,6 +38,9 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
     await db.batch((await readFile('migrations/0011_print_allowance_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0012_google_address_verification.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0013_unpublish.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0015_simulated_mug_orders.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0016_mug_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.batch((await readFile('migrations/0017_immediate_print_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     const expires=Math.floor(Date.now()/1000)+86400;
     await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',?1,'Angela','+15555550101',?2)").bind(await digest("a".repeat(64)),expires).run();
     let assertion=await signed();

@@ -1,5 +1,11 @@
+import {installFocusModality} from '../../web/focus.js';
+installFocusModality();
+import {themePhoto} from '../../web/pixelbook.js';
+import {mountMugOrders} from './mug-orders.js';
+import {mugsMarkup,bindMugEditor} from './mug-editor.js';
+import {selectedItems,setPhotosHidden,removeDraftPhotos,deleteSelectedMedia} from './photo-bulk.js';
 import {addressIsCurrent} from './address-editor.js';
-import {mountPrintAdmin,prunePrintPermissions} from './print-admin.js';
+import {mountPrintAdmin,prunePrintPermissions,invitationPrintEligibility} from './print-admin.js';
 import {photoUploadError,uploadPhoto,findUploadedPhoto,addPhotoToDraft,isFileDrag,bindPhotoDropzone} from './photo-upload.js';
 import {sendApiRequest} from './api-request.js';
 import QRCode from 'qrcode';
@@ -8,6 +14,7 @@ import {winterLights,winterSnowflake} from '../../web/seasonal.js';
 import {createPreviewLoader} from './preview-loader.js';
 import {peoplePickerMarkup,bindPeoplePicker} from './people-picker.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal'),modalContent=document.querySelector('#modal-content');
+let draftSelection=new Set(),librarySelection=new Set(),selectionYear=null;
 let selectedPhotoId='',photoFilter='all',photoPersonFilter='',photoEditorOpen=false;
 let state,view=routeFromHash().view,editions=[],contacts=[],draftCache=new Map(),navigationGeneration=0,pendingRequests=0,dirty=false,busy=false,previewRecipient='',previewData=null,personalModes=new Set(),inviteData,editGeneration=0;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -23,7 +30,7 @@ async function api(path,data){
   try{return await requestApi(`editions/${state.year}/${path}`,data);}
   finally{pendingRequests--;updateBadge();}
 }
-const editionViews=['story','photos','sharing','preview'];
+const editionViews=['story','photos','mugs','sharing','preview'];
 function taskHref(task,year=state?.year){if(task==='directory')return '#people';return editionViews.includes(task)?`#scrapbooks/${year}/${task}`:'#'+task;}
 function rememberDraft(){updateEditionSummary();if(state)draftCache.set(state.year,{state,dirty,personalModes:new Set(personalModes),editGeneration,previewData,previewRecipient});}
 function updateEditionSummary(){
@@ -38,6 +45,7 @@ const icons={
   home:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   write:'<path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m13 6 5 5"/>',
   photos:'<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+  mug:'<path d="M4 4h12v10a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V4Zm12 2h2a3 3 0 0 1 0 6h-2M3 22h15"/>',
   people:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/>',
   review:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2m-7 9 3 3 5-6"/>',
   server:'<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M12 6.5h5M12 17.5h5"/>',
@@ -54,6 +62,7 @@ const pages={
   articles:{title:'Articles',section:'Creative'},
   new:{title:'Create a scrapbook',section:'Scrapbooks'},
   story:{title:'Write stories',section:'Scrapbook',description:'Set the scene, write an opening note, and add the moments you want to share.'},
+  mugs:{title:'Mugs',section:'Scrapbook',description:'Fine-tune the captions for Pixel’s curated mugshots.'},
   photos:{title:'Photos',section:'Scrapbook',description:'Upload originals, arrange your photos, and decide who can see each one.'},
   directory:{title:'People',section:'Creative',description:'Add someone once. Choose what to share with them in each scrapbook.'},
   sharing:{title:'Invitations',section:'Scrapbook',description:'Create scrapbook invitations for people in your directory. Photo assignments alone don’t grant access.'},
@@ -61,10 +70,10 @@ const pages={
   server:{title:'Home server',section:'System'}
 };
 function routeFromHash(){
-  const route=location.hash.slice(1),match=/^scrapbooks\/(\d{4})\/(story|photos|people|sharing|preview)$/.exec(route);
+  const route=location.hash.slice(1),match=/^scrapbooks\/(\d{4})\/(story|photos|mugs|people|sharing|preview)$/.exec(route);
   if(match)return {view:match[2]==='people'?'sharing':match[2],year:Number(match[1])};
   if(route==='people')return {view:'directory'};
-  if(['story','photos','sharing','preview'].includes(route))return {view:route,year:2026};
+  if(['story','photos','mugs','sharing','preview'].includes(route))return {view:route,year:2026};
   return {view:['home','scrapbooks','articles','directory','new','server'].includes(route)?route:'home'};
 }
 function invitationFor(id){const matches=state?.people.filter(p=>(p.memberIds||[p.person_id]).includes(id))||[];return matches.find(p=>!p.revoked_at&&p.expires_at>Date.now()/1000)||matches[0];}
@@ -96,6 +105,8 @@ function updateBadge(){
   if(!state)return;
   const el=byId('draft-badge');if(el){el.textContent=draftStatus();el.classList.toggle('changed',dirty);}
   document.querySelectorAll('[data-busy]').forEach(b=>b.disabled=busy||pendingRequests>0);
+  app.querySelectorAll('[data-bulk-action]').forEach(button=>{const selection=button.dataset.bulkKind==='draft'?draftSelection:librarySelection;button.disabled=busy||pendingRequests>0||(button.hasAttribute('data-needs-selection')&&!selection.size);});
+  app.querySelectorAll('[data-bulk-draft],[data-bulk-library]').forEach(input=>input.disabled=busy||pendingRequests>0);
   const previewButton=byId('open-preview');if(previewButton)previewButton.textContent=dirty?'Save & preview':'Preview';
   const publish=byId('publish');if(publish)publish.disabled=busy||pendingRequests>0||dirty||draftIssues().length>0;
 }
@@ -109,7 +120,7 @@ function field(label,key,value,textarea=false,extra=''){
   return `<label class="field"><span>${esc(label)}</span>${textarea?`<textarea data-field="${key}" ${extra}>${esc(value)}</textarea>`:`<input data-field="${key}" value="${esc(value)}" ${extra}>`}</label>`;
 }
 function head(){
-  const p=pages[view],edition=editionViews.includes(view),editing=['story','photos'].includes(view),review=view==='preview';
+  const p=pages[view],edition=editionViews.includes(view),editing=['story','photos','mugs'].includes(view),review=view==='preview';
   const actions=edition?`<div class="page-actions"><span id="draft-badge" class="badge"></span><div class="actions"><button class="secondary" id="open-preview" data-busy>Preview</button>${editing||review?`<button class="secondary" id="save-draft" data-busy>Save draft</button>${review?`${!state.takenOfflineAt&&(state.publishedAt||state.isActive)?'<button class="secondary danger" id="unpublish" data-busy>Unpublish…</button>':''}<button class="button" id="publish" data-busy>Publish edition…</button>`:`<a class="button" href="${taskHref('preview')}" data-view="preview">Review & publish ${icon('arrow')}</a>`}`:''}</div></div>`:view==='directory'?'<button class="button" id="add-contact">+ Add a person</button>':'';
   return `${edition?scrapbookContext():''}<div class="page-head"><div><p class="kicker">${edition?'Scrapbook / '+state.year:p.section}</p><h1>${p.title}</h1><p class="lede">${p.description||''}</p></div>${actions}</div>${edition?flowSteps():''}`;
 }
@@ -141,7 +152,7 @@ function newScrapbook(){
   year=Math.min(year,2100);
   return `${head()}<div class="creation-grid"><form id="create-scrapbook" class="panel form-panel"><div class="section-heading"><h2>Start with the basics</h2><p class="hint">The year identifies this scrapbook. You can edit the authors and opening note later.</p></div><label class="field"><span>Year</span><input name="year" type="number" min="2000" max="2100" step="1" value="${year}" required></label><label class="field"><span>From</span><input name="authors" maxlength="100" value="Aditya & Angela" required></label><div class="actions"><button class="button" type="submit">Create draft & continue ${icon('arrow')}</button><a href="#scrapbooks" data-view="scrapbooks" class="quiet">Cancel</a></div><p class="error" id="creation-error" role="alert"></p></form><aside class="panel creation-guide"><p class="kicker">Build it step by step</p><h2>A year worth keeping.</h2><ol><li><strong>Write your stories</strong><span>Add an opening note and the moments that matter.</span></li><li><strong>Add your photos</strong><span>Arrange your memories and choose who sees each one.</span></li><li><strong>Choose what to share</strong><span>Create scrapbook invitations from your People directory.</span></li><li><strong>Review & publish</strong><span>See it through a friend’s eyes, then share when ready.</span></li></ol><p class="hint">Starts with no photos, stories, or invitations. Existing scrapbooks stay unchanged.</p></aside></div>`;
 }
-function flowSteps(){return `<nav class="flow-steps" aria-label="Scrapbook creation steps">${[['photos','Photos'],['story','Story'],['sharing','Invitations'],['preview','Review & publish']].map(([task,label],i)=>`<a href="${taskHref(task)}" data-view="${task}" ${view===task?'aria-current="step"':''}>${label}</a>`).join('')}</nav>`;}
+function flowSteps(){return `<nav class="flow-steps" aria-label="Scrapbook creation steps">${[['photos','Photos','photos'],['story','Story','write'],['mugs','Mugs','mug'],['sharing','Invitations','people'],['preview','Review & publish','review']].map(([task,label,symbol])=>`<a href="${taskHref(task)}" data-view="${task}" ${view===task?'aria-current="step"':''}>${icon(symbol)}${label}</a>`).join('')}</nav>`;}
 function continueFlow(next,save=true){return `<div class="flow-footer"><a class="quiet" href="#scrapbooks" data-view="scrapbooks">${icon('arrow')} All scrapbooks</a>${save?`<button class="button" data-continue="${next}" data-busy>Save & continue to ${next==='photos'?'photos':'sharing'} ${icon('arrow')}</button>`:`<a class="button" href="${taskHref(next)}" data-view="${next}">Continue to review ${icon('arrow')}</a>`}</div>`;}
 function story(){const d=state.draft;return `${head()}<div class="notice">You’re editing a private draft. Save your work, then go to Review & publish when it’s ready.</div><div class="editor-width"><section class="panel form-panel"><div class="section-heading"><h2>Edition details</h2><p class="hint">The introduction your friends see when they open the scrapbook.</p></div>${field('From','authors',d.authors,false,'maxlength="100"')}${field('Invitation introduction','intro',d.intro,true,'maxlength="1000"')}${field('Opening note','note',d.note,true,'class="long-note" maxlength="10000"')}${field('Shared photo heading','sharedTitle',sharedHeading(d.sharedTitle),false,'maxlength="150"')}</section><section class="panel form-panel"><div class="row-head"><div><h2>Stories</h2><p class="hint">A trip, a milestone, or an ordinary day worth remembering.</p></div><button class="secondary" id="add-story" ${d.stories.length>=20?'disabled':''}>+ Add a story</button></div>${d.stories.map((s,i)=>`<article class="story-card" data-story="${esc(s.id)}"><div class="row-head"><span class="kicker">Story ${i+1}</span><button class="quiet danger" data-remove-story="${esc(s.id)}">Remove from draft</button></div>${field('Title','story-title',s.title,false,'maxlength="150"')}${field('Story','story-body',s.body,true,'maxlength="10000"')}</article>`).join('')||'<div class="empty">No stories yet.<span>Your opening note and photos are enough to start. Add a story whenever you have one.</span></div>'}</section></div>${continueFlow('photos')}`;}
 function missingPhotoDescriptions(){return state.draft.photos.flatMap((photo,index)=>photo.hidden||photo.alt.trim()?[]:[{photo,index}]);}
@@ -159,8 +170,83 @@ function updatePhotoValidation(){
   });
 }
 function photoCard(p,i){const personal=personalModes.has(p.id),hasOriginal=!!state.media.find(m=>m.id===p.id)?.has_original;return `<article class="photo-editor ${p.hidden?'is-hidden':''}" data-photo="${esc(p.id)}"><img src="/api/editions/${state.year}/media/${esc(p.id)}/preview" alt="${esc(p.alt||'Photo awaiting description')}" loading="lazy"><div class="photo-fields"><div class="photo-visibility"><p class="kicker photo-number">Photo ${i+1}${p.hidden?' · Hidden':''}</p><button class="secondary" data-toggle-hidden aria-pressed="${!!p.hidden}" aria-label="${p.hidden?'Unhide':'Hide'} photo ${i+1}">${p.hidden?'Unhide photo':'Hide photo'}</button></div>${p.hidden?'<p class="hint hidden-photo-hint">Hidden from previews and the next publication. Your place, caption, description, and people are kept. You can assign people later.</p>':''}<div class="photo-tools"><div class="actions"><button class="icon-button" data-move="up" aria-label="Move photo ${i+1} earlier" ${i===0?'disabled':''}>↑</button><button class="icon-button" data-move="down" aria-label="Move photo ${i+1} later" ${i===state.draft.photos.length-1?'disabled':''}>↓</button></div><button class="quiet danger" data-remove-photo>Remove from draft</button></div>${!state.media.find(m=>m.id===p.id)?.has_viewer?`<button class="secondary" data-generate-previews="${esc(p.id)}">Generate lighter previews</button><p class="hint">Uses the original when available. Updates the next publication; the original stays unchanged.</p>`:''}${field('Caption','caption',p.caption,false,'maxlength="500"')}${field('Describe the photo for accessibility','alt',p.alt,false,`maxlength="500" aria-describedby="description-error-${esc(p.id)}" ${!p.hidden&&!p.alt.trim()?'aria-invalid="true"':''}`)}<p class="error photo-description-error" id="description-error-${esc(p.id)}" data-description-error ${p.hidden||p.alt.trim()?'hidden':''}>Add a description of what’s visible in this photo.</p><label class="field"><span>Who can see this photo?</span><span class="select-control"><select data-audience><option value="shared" ${!personal?'selected':''}>Everyone invited</option><option value="personal" ${personal?'selected':''}>Selected people</option></select></span></label><p class="hint">${personal?(hasOriginal?'Invitations including a selected person can view and save the original.':'Invitations including a selected person can view this sample. No original is available.'):'Everyone invited can view the preview. The original stays private.'}</p>${personal?peoplePickerMarkup(p.id,`People for photo ${i+1}`,{compact:true}):''}</div></article>`;}
-function photos(){const used=new Set(state.draft.photos.map(p=>p.id)),unused=state.media.filter(m=>!used.has(m.id));const visible=state.draft.photos.filter(p=>matchesPhotoFilter(p,photoFilter)),chosen=state.draft.photos.find(p=>p.id===selectedPhotoId)||visible[0];if(chosen)selectedPhotoId=chosen.id;return `${head()}<div class="photo-toolbar-row"><div class="photo-filter-bar" role="group" aria-label="Filter photos">${[['all','All'],['personal','Photos for selected'],['shared','Photos for all'],['hidden','Hidden'],['attention','Needs attention']].map(([key,label])=>`<button class="photo-filter" data-photo-filter="${key}" aria-pressed="${photoFilter===key}">${label} <span>${state.draft.photos.filter(p=>matchesPhotoFilter(p,key)).length}</span></button>`).join('')}</div><label class="photo-person-filter"><span>Filter by person</span><select id="photo-person-filter"><option value="">All people</option>${contacts.map(person=>`<option value="${esc(person.id)}" ${photoPersonFilter===person.id?'selected':''}>${esc(person.name)} · ${state.draft.photos.filter(p=>p.recipients.includes(person.id)).length}</option>`).join('')}</select></label></div>${photoPersonFilter?'<p class="hint">Direct assignments only. All includes hidden photos; shared photos are not assigned to individual people.</p>':''}${state.draft.photos.length?'<details class="photo-bulk-tools"><summary>Organize the whole scrapbook</summary><div class="photo-visibility-actions"><p class="hint">Making a small test scrapbook? Hide all photos, then unhide just the ones you want to include.</p><div class="actions"><button class="secondary" id="hide-all-photos" data-busy>Hide all photos</button><button class="quiet" id="unhide-all-photos" data-busy>Unhide all photos</button></div></div></details>':''}<div class="upload-zone" id="photo-dropzone" role="group" aria-label="Add original photos" aria-describedby="upload-hint upload-status"><div><p>Drop photos here, or choose files</p><span class="hint" id="upload-hint">JPEG, PNG, or WebP · under 100 MB each<br>Originals keep their metadata. Previews are smaller and omit EXIF.</span></div><input id="upload" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple aria-label="Upload original photos"></div><p id="upload-status" role="status" aria-live="polite" aria-atomic="true"></p>${retryFilesByYear.get(state.year)?.length?`<button class="secondary" id="retry-uploads">Retry remaining ${retryFilesByYear.get(state.year).length} photos</button>`:''}<div class="photo-workspace"><div class="photo-grid">${visible.map(p=>{const i=state.draft.photos.indexOf(p);return `<button type="button" class="photo-tile ${p.hidden?'is-hidden':''}" data-select-photo="${esc(p.id)}" aria-pressed="${chosen?.id===p.id}" aria-label="Edit photo ${i+1}: ${esc(p.caption||'Untitled photo')}"><img src="/api/editions/${state.year}/media/${esc(p.id)}/preview" alt="${esc(p.alt)}" loading="lazy" decoding="async"><span class="photo-tile-caption">${esc(p.caption||'Add a caption')}</span><span class="photo-tile-meta">Photo ${i+1} · ${p.hidden?'Hidden':personalModes.has(p.id)?`${p.recipients.length} selected people`:'Everyone invited'}${!p.hidden&&!p.alt.trim()?' · Description needed':''}</span></button>`;}).join('')||'<div class="empty">No photos in this view.</div>'}</div><aside class="photo-inspector" id="photo-inspector" aria-label="Selected photo editor">${chosen?`<div class="inspector-heading"><h2>Photo ${state.draft.photos.indexOf(chosen)+1}</h2><button class="quiet" id="done-photo-edit">Done editing ${icon('check')}</button></div>${photoCard(chosen,state.draft.photos.indexOf(chosen))}`:'<p class="hint">Choose a photo to give it a story.</p>'}</aside></div>${unused.length?`<section class="library"><h3>Already uploaded</h3><p class="hint">Reuse these photos or permanently delete unused originals and previews. Published photos stay protected.</p><div class="library-items">${unused.map(m=>`<article class="library-item"><button data-add-media="${esc(m.id)}" aria-label="Add ${esc(m.filename)} to draft" ${m.deletion_pending?'disabled':''}>${!m.deletion_pending?`<img src="/api/editions/${state.year}/media/${esc(m.id)}/preview" alt="">`:''}${esc(m.filename)}<br>${m.deletion_pending?'Deletion pending':'+ Add to draft'}</button><button class="quiet danger" data-delete-media="${esc(m.id)}" aria-label="Delete ${esc(m.filename)} permanently">${m.deletion_pending?'Retry deletion':'Delete permanently'}</button></article>`).join('')}</div></section>`:''}${continueFlow('sharing')}`;}
+function photos(){if(selectionYear!==state.year){draftSelection.clear();librarySelection.clear();selectionYear=state.year;}const used=new Set([...state.draft.photos,...(state.draft.mugDesigns||[])].map(p=>p.id)),unused=state.media.filter(m=>!used.has(m.id));const visible=state.draft.photos.filter(p=>matchesPhotoFilter(p,photoFilter)),chosen=state.draft.photos.find(p=>p.id===selectedPhotoId)||visible[0];draftSelection=new Set([...draftSelection].filter(id=>visible.some(p=>p.id===id)));librarySelection=new Set([...librarySelection].filter(id=>unused.some(m=>m.id===id)));if(chosen)selectedPhotoId=chosen.id;return `${head()}<div class="photo-toolbar-row"><div class="photo-filter-bar" role="group" aria-label="Filter photos">${[['all','All'],['personal','Photos for selected'],['shared','Photos for all'],['hidden','Hidden'],['attention','Needs attention']].map(([key,label])=>`<button class="photo-filter" data-photo-filter="${key}" aria-pressed="${photoFilter===key}">${label} <span>${state.draft.photos.filter(p=>matchesPhotoFilter(p,key)).length}</span></button>`).join('')}</div><label class="photo-person-filter"><span>Filter by person</span><select id="photo-person-filter"><option value="">All people</option>${contacts.map(person=>`<option value="${esc(person.id)}" ${photoPersonFilter===person.id?'selected':''}>${esc(person.name)} · ${state.draft.photos.filter(p=>p.recipients.includes(person.id)).length}</option>`).join('')}</select></label></div>${photoPersonFilter?'<p class="hint">Direct assignments only. All includes hidden photos; shared photos are not assigned to individual people.</p>':''}${state.draft.photos.length?'<details class="photo-bulk-tools"><summary>Organize the whole scrapbook</summary><div class="photo-visibility-actions"><p class="hint">Making a small test scrapbook? Hide all photos, then unhide just the ones you want to include.</p><div class="actions"><button class="secondary" id="hide-all-photos" data-busy>Hide all photos</button><button class="quiet" id="unhide-all-photos" data-busy>Unhide all photos</button></div></div></details>':''}<div class="upload-zone" id="photo-dropzone" role="group" aria-label="Add original photos" aria-describedby="upload-hint upload-status"><div><p>Drop photos here, or choose files</p><span class="hint" id="upload-hint">JPEG, PNG, or WebP · under 100 MB each<br>Originals keep their metadata. Previews are smaller and omit EXIF.</span></div><input id="upload" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple aria-label="Upload original photos"></div><p id="upload-status" role="status" aria-live="polite" aria-atomic="true"></p>${retryFilesByYear.get(state.year)?.length?`<button class="secondary" id="retry-uploads">Retry remaining ${retryFilesByYear.get(state.year).length} photos</button>`:''}${bulkToolbar('draft',visible)}<div class="photo-workspace"><div class="photo-grid">${visible.map(p=>{const i=state.draft.photos.indexOf(p);return `<div class="photo-selectable ${draftSelection.has(p.id)?'is-selected':''}"><label class="photo-select-check"><input type="checkbox" data-bulk-draft="${esc(p.id)}" aria-label="Select photo ${i+1} for bulk actions" ${draftSelection.has(p.id)?'checked':''}><span aria-hidden="true"></span></label><button type="button" class="photo-tile ${p.hidden?'is-hidden':''}" data-select-photo="${esc(p.id)}" aria-pressed="${chosen?.id===p.id}" aria-label="Edit photo ${i+1}: ${esc(p.caption||'Untitled photo')}"><img src="/api/editions/${state.year}/media/${esc(p.id)}/preview" alt="${esc(p.alt)}" loading="lazy" decoding="async"><span class="photo-tile-caption">${esc(p.caption||'Add a caption')}</span><span class="photo-tile-meta">Photo ${i+1} · ${p.hidden?'Hidden':personalModes.has(p.id)?`${p.recipients.length} selected people`:'Everyone invited'}${!p.hidden&&!p.alt.trim()?' · Description needed':''}</span></button></div>`;}).join('')||'<div class="empty">No photos in this view.</div>'}</div><aside class="photo-inspector" id="photo-inspector" aria-label="Selected photo editor">${chosen?`<div class="inspector-heading"><h2>Photo ${state.draft.photos.indexOf(chosen)+1}</h2><button class="quiet" id="done-photo-edit">Done editing ${icon('check')}</button></div>${photoCard(chosen,state.draft.photos.indexOf(chosen))}`:'<p class="hint">Choose a photo to give it a story.</p>'}</aside></div>${unused.length?`<section class="library"><h3>Already uploaded</h3><p class="hint">Reuse these photos or permanently delete unused originals and previews. Published photos stay protected.</p>${bulkToolbar('library',unused)}<div class="library-items">${unused.map(m=>`<article class="library-item ${librarySelection.has(m.id)?'is-selected':''}"><label class="library-select-check"><input type="checkbox" data-bulk-library="${esc(m.id)}" aria-label="Select ${esc(m.filename)} for deletion" ${librarySelection.has(m.id)?'checked':''}> Select</label><button data-add-media="${esc(m.id)}" aria-label="Add ${esc(m.filename)} to draft" ${m.deletion_pending?'disabled':''}>${!m.deletion_pending?`<img src="/api/editions/${state.year}/media/${esc(m.id)}/preview" alt="">`:''}${esc(m.filename)}<br>${m.deletion_pending?'Deletion pending':'+ Add to draft'}</button><button class="quiet danger" data-delete-media="${esc(m.id)}" aria-label="Delete ${esc(m.filename)} permanently">${m.deletion_pending?'Retry deletion':'Delete permanently'}</button></article>`).join('')}</div></section>`:''}${continueFlow('sharing')}`;}
+function mugs(){return `${head()}${mugsMarkup(state)}${retryFilesByYear.get(state.year)?.length?`<button class="secondary" id="retry-uploads">Retry remaining ${retryFilesByYear.get(state.year).length} mug photos</button>`:''}${continueFlow('sharing')}`;}
 function matchesPhotoFilter(p,filter){if(photoPersonFilter&&!p.recipients.includes(photoPersonFilter))return false;return filter==='all'||filter==='hidden'&&p.hidden||filter==='attention'&&!p.hidden&&!p.alt.trim()||filter==='personal'&&!p.hidden&&personalModes.has(p.id)||filter==='shared'&&!p.hidden&&!personalModes.has(p.id);}
+function bulkToolbar(kind,items){
+  const selection=kind==='draft'?draftSelection:librarySelection,count=selectedItems(items,selection).length;
+  const button=(action,label,needsSelection=false,danger=false)=>`<button type="button" class="${danger?'quiet danger':'secondary'}" data-bulk-kind="${kind}" data-bulk-action="${action}" ${needsSelection?'data-needs-selection':''} ${busy||pendingRequests||(needsSelection&&!count)?'disabled':''}>${label}</button>`;
+  return `<div class="bulk-toolbar" id="bulk-${kind}" role="group" aria-label="${kind==='draft'?'Scrapbook photo':'Uploaded photo'} selection"><span class="bulk-selection-count" role="status" aria-live="polite">${count} selected</span><div class="actions">${button('all','Select all in this view')}${button('clear','Clear selection',true)}${kind==='draft'?button('hide','Hide selected',true)+button('unhide','Unhide selected',true)+button('remove','Remove from draft',true):button('delete','Delete selected…',true,true)}</div></div>`;
+}
+function bulkItems(kind){const used=new Set([...state.draft.photos,...(state.draft.mugDesigns||[])].map(p=>p.id));return kind==='draft'?state.draft.photos.filter(p=>matchesPhotoFilter(p,photoFilter)):state.media.filter(m=>!used.has(m.id));}
+function refreshBulkToolbar(kind){
+  byId('bulk-'+kind)?.replaceWith(document.createRange().createContextualFragment(bulkToolbar(kind,bulkItems(kind))));
+  const selection=kind==='draft'?draftSelection:librarySelection;
+  app.querySelectorAll(kind==='draft'?'[data-bulk-draft]':'[data-bulk-library]').forEach(input=>{const checked=selection.has(kind==='draft'?input.dataset.bulkDraft:input.dataset.bulkLibrary);input.checked=checked;input.closest(kind==='draft'?'.photo-selectable':'.library-item').classList.toggle('is-selected',checked);});
+  bindBulkToolbar();
+}
+function bindBulkToolbar(){
+  app.querySelectorAll('[data-bulk-action]').forEach(button=>button.onclick=()=>{
+    if(busy||pendingRequests)return;
+    const kind=button.dataset.bulkKind,action=button.dataset.bulkAction,selection=kind==='draft'?draftSelection:librarySelection;
+    if(action==='all'){for(const item of bulkItems(kind))selection.add(item.id);refreshBulkToolbar(kind);return;}
+    if(action==='clear'){selection.clear();refreshBulkToolbar(kind);return;}
+    const items=selectedItems(bulkItems(kind),selection);if(!items.length)return;
+    if(kind==='library'){deleteMediaSelection(items);return;}
+    const ids=new Set(items.map(p=>p.id));let changed=items.length;
+    if(action==='remove'){
+      for(const photo of removeDraftPhotos(state.draft,ids))removedPhotos.set(`${state.year}/${photo.id}`,photo);
+      if(ids.has(selectedPhotoId)){selectedPhotoId='';photoEditorOpen=false;}
+    }else changed=setPhotosHidden(state.draft.photos,ids,action==='hide');
+    selection.clear();if(changed)mark();render();
+    toast(`${changed} photo${changed===1?'':'s'} ${action==='remove'?'removed from draft':action==='hide'?'hidden':'unhidden'}. Save your draft, then publish to update the scrapbook.`);
+  });
+}
+function bindBulkPhotos(){
+  bindBulkToolbar();
+  for(const [attribute,kind,selection] of [['bulkDraft','draft',draftSelection],['bulkLibrary','library',librarySelection]]){
+    app.querySelectorAll(kind==='draft'?'[data-bulk-draft]':'[data-bulk-library]').forEach(input=>input.onchange=()=>{
+      if(busy||pendingRequests){input.checked=selection.has(input.dataset[attribute]);return;}
+      if(input.checked)selection.add(input.dataset[attribute]);else selection.delete(input.dataset[attribute]);refreshBulkToolbar(kind);
+    });
+  }
+}
+function deleteMediaSelection(items){
+  if(busy||pendingRequests||!items.length)return;
+  // Snapshot exactly the confirmed batch, not the live selection behind the dialog.
+  let remaining=items.map(item=>({id:item.id,filename:item.filename}));
+  showModal(`<header class="bulk-delete-header"><p class="kicker">Photo library</p><h2>Delete ${remaining.length} photo${remaining.length===1?'':'s'} permanently?</h2></header><div class="bulk-delete-body"><div id="bulk-delete-intro"><p>This permanently deletes the selected originals and previews from private storage.</p><p>Photos in a saved draft, mug selection or the last published version stay protected—even while the scrapbook is offline.</p><details><summary>Selected photos (${remaining.length})</summary><ul class="bulk-delete-files">${remaining.map(item=>`<li>${esc(item.filename)}</li>`).join('')}</ul></details>${dirty?'<p class="notice">You have unsaved changes. Save any photo removals before deleting them here.</p>':''}</div><div id="bulk-delete-errors" role="alert"></div></div><footer class="bulk-delete-footer"><p id="bulk-delete-status" role="status" aria-live="polite"></p><div class="actions"><button class="secondary" id="cancel-bulk-delete">Cancel</button><button class="secondary" id="review-bulk-delete" hidden>Review & publish</button><button class="button danger" id="confirm-bulk-delete">Delete ${remaining.length} permanently</button></div></footer>`);
+  modal.classList.add('bulk-delete-dialog');
+  byId('review-bulk-delete').onclick=()=>{modal.close();navigate('preview');};
+  modal.addEventListener('close',()=>{if(view==='photos')render();},{once:true});
+  byId('cancel-bulk-delete').onclick=()=>modal.close();
+  byId('confirm-bulk-delete').onclick=async()=>{
+    if(busy||pendingRequests||!remaining.length)return;
+    busy=true;updateBadge();modal.dataset.bulkDeleting='true';
+    const submit=byId('confirm-bulk-delete'),cancel=byId('cancel-bulk-delete'),review=byId('review-bulk-delete'),close=document.querySelector('.modal-close');
+    submit.disabled=cancel.disabled=review.disabled=close.disabled=true;
+    try{
+      const result=await deleteSelectedMedia(remaining,id=>api(`media/${id}/delete`,{confirm:true}),progress=>{byId('bulk-delete-status').textContent=`Checked ${progress.completed} of ${progress.total} · ${progress.deleted} deleted · ${progress.failed} blocked or failed`;});
+      const deleted=new Set(result.deleted);state.media=state.media.filter(m=>!deleted.has(m.id));
+      for(const id of deleted){librarySelection.delete(id);removedPhotos.delete(`${state.year}/${id}`);}
+      remaining=result.failed.map(item=>({id:item.id,filename:item.filename}));
+      if(!remaining.length){modal.close();toast(`${deleted.size} photo${deleted.size===1?'':'s'} and their previews deleted permanently.`);}
+      else{
+        const groups=new Map();
+        for(const item of result.failed){if(!groups.has(item.message))groups.set(item.message,[]);groups.get(item.message).push(item.filename);}
+        byId('bulk-delete-intro').hidden=true;
+        byId('modal-title').textContent=`${remaining.length} photo${remaining.length===1?' was':'s were'} kept`;
+        byId('bulk-delete-errors').innerHTML=[...groups].map(([message,files])=>`<section class="bulk-delete-reason"><p>${esc(message)}</p><details><summary>${files.length} affected photo${files.length===1?'':'s'}</summary><ul class="bulk-delete-files">${files.map(filename=>`<li>${esc(filename)}</li>`).join('')}</ul></details></section>`).join('');
+        const publicationBlocked=result.failed.some(item=>/published/.test(item.message));
+        byId('review-bulk-delete').hidden=!publicationBlocked;
+        if(publicationBlocked)byId('bulk-delete-errors').insertAdjacentHTML('beforeend','<p class="notice">Removing photos from the draft does not update the last published version. Publish the updated draft to replace it, then retry deletion. Publishing will also reopen an offline scrapbook.</p>');
+        modalContent.querySelector('.bulk-delete-body').scrollTop=0;
+        submit.textContent=`Retry ${remaining.length} remaining`;cancel.textContent='Done';
+
+      }
+    }finally{busy=false;delete modal.dataset.bulkDeleting;submit.disabled=cancel.disabled=review.disabled=close.disabled=false;updateBadge();}
+  };
+}
 function mailingSummary(person){let a;try{a=JSON.parse(person.mailing_address);}catch{}return a?`<address>${[a.line1,a.line2,[a.city,a.state,a.postalCode].filter(Boolean).join(', ')].filter(Boolean).map(esc).join('<br>')}</address><span class="badge ${addressIsCurrent(person)?'active-badge':''}">${addressIsCurrent(person)?'Verified US address':person.address_verified?'Verification expired':'Not verified'}</span>`:'<span class="no-address">No address yet</span>';}
 function directoryRows(query=''){
   const matches=contacts.filter(p=>(p.name+' '+(p.phone||'')).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
@@ -176,23 +262,23 @@ function sharingRows(query=''){
     return `<details class="person invitation-row" name="invitations-${state.year}" data-print-invitation="${esc(invite.id)}"><summary class="invitation-summary"><span class="person-avatar">${icon('people')}</span><span class="invitation-heading"><strong>${esc(invite.addressedTo)}</strong><span>${members.length} ${members.length===1?'person':'people'} · Code to ${esc(invite.name)}</span></span><span class="badge ${status==='Invited'?'active-badge':''}">${status}</span><span class="invitation-expand"><span class="when-closed">More details</span><span class="when-open">Less details</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></span></summary><div class="invitation-options"><div class="invitation-meta"><p>Includes ${esc(members.join(' & '))}</p><p>Code to ${esc(invite.name)} · •••• ${esc(invite.phone.slice(-4))}</p><p>${invite.share_socials?'Instagram links shown':'Instagram links hidden'}</p></div><div class="actions"><button class="quiet" data-reset-downloads="${esc(invite.id)}">Reset download limits</button><button class="secondary" data-view-link="${esc(invite.id)}">${invite.has_link?'View link & QR':'Restore link & QR'}</button><button class="secondary" data-edit-invitation="${esc(invite.id)}">Edit invitation</button><button class="quiet" data-invite="${esc(invite.id)}">Create fresh link</button>${!invite.revoked_at?`<button class="quiet danger" data-revoke="${esc(invite.id)}">Revoke access</button>`:`<button class="quiet danger" data-delete-invitation="${esc(invite.id)}">Delete invitation</button>`}</div></div></details>`;
   }).join('')||'<div class="empty">No invitations found.<span>Create one for a person, couple, or household.</span></div>';
 }
-function sharing(){return `${head()}<div class="notice">One invitation, one QR code, one verification phone. Everyone included can view photos assigned to any person on that invitation. Creating or editing an invitation never sends a text.</div><section class="panel people-panel"><div class="row-head"><div><h2>Invitations <span class="badge">${state.people.length}</span></h2><a class="hint" href="#people" data-view="directory">Manage People directory</a></div><button class="button" id="new-invitation">+ Create invitation</button></div><label class="field"><span class="sr-only">Search invitations</span><input id="sharing-search" type="search" placeholder="Search invitations or people…" autocomplete="off"></label><div class="people-list" id="sharing-list">${sharingRows()}</div></section><p class="hint">Twilio trial verification contacts must still be verified in Twilio before receiving login codes. Invitation changes apply immediately; photo edits require publishing.</p>${continueFlow('preview',false)}`;}
+function sharing(){return `${head()}<div class="notice">One invitation, one QR code, one verification phone. Everyone included can view photos assigned to any person on that invitation. Creating or editing an invitation never sends a text.</div><section class="panel people-panel"><div class="row-head"><div><h2>Invitations <span class="badge">${state.people.length}</span></h2><a class="hint" href="#people" data-view="directory">Manage People directory</a></div><button class="button" id="new-invitation">+ Create invitation</button></div><label class="field"><span class="sr-only">Search invitations</span><input id="sharing-search" type="search" placeholder="Search invitations or people…" autocomplete="off"></label><div class="people-list" id="sharing-list">${sharingRows()}</div></section><p class="hint">Twilio trial verification contacts must still be verified in Twilio before receiving login codes. Invitation settings apply immediately; photo and postcard-note edits require publishing.</p>${continueFlow('preview',false)}`;}
 function preview(){
   const issues=draftIssues();
   return `${head()}<section class="panel review-summary"><div><h2>Publication check</h2><p class="hint">${state.takenOfflineAt?'This scrapbook is offline. Existing invitation links show an offline message. Publish again to reopen guest access.':dirty?'Save your changes to review the latest draft.':state.publishedVersion===state.version?'This saved draft is already published.':state.publishedAt?'Publishing replaces the edition your invited friends see.':'Publish this scrapbook when you’re ready for invited friends to open it.'}</p></div><span class="badge ${issues.length||dirty?'changed':'active-badge'}">${issues.length?'Details needed':dirty?'Save needed':'Ready to review'}</span><div class="review-checks">${issues.length?issues.map(i=>`<a href="${taskHref(i.view)}" data-view="${i.view}">${icon('arrow')}${esc(i.text)}</a>`).join(''):`<span>${icon('check')} ${state.draft.photos.filter(p=>!p.hidden).length} included photos with descriptions and audiences${state.draft.photos.some(p=>p.hidden)?` · ${state.draft.photos.filter(p=>p.hidden).length} hidden`:''}</span><span>${icon('check')} Edition details complete${state.draft.stories.length?' · '+state.draft.stories.length+' stories':''}</span>`}</div></section>`;
 }
 function server(){return `${head()}<div class="panel server-empty"><span class="server-illustration">${icon('server')}</span><span class="badge">Not connected</span><h2>Your home server, at a glance.</h2><p class="lede">A dedicated place for your services, storage, and backups.<br>There’s no server connected yet, so no health data is available.</p><div class="server-capabilities"><div>${icon('server')}<strong>Service health</strong><span>Availability and resource usage</span></div><div>${icon('photos')}<strong>Storage</strong><span>Disk capacity and usage</span></div><div>${icon('review')}<strong>Backups</strong><span>Last run and backup status</span></div></div><p class="hint">Monitoring can be connected here when your home server is ready.</p></div>`;}
-function previewFooter(shareSocials=false){
+function previewFooter(shareSocials=false,themeAssets={}){
   const credit=(name,url)=>{
     try{const target=new URL(url);if(target.protocol==='https:'&&['instagram.com','www.instagram.com'].includes(target.hostname))return `<a href="${esc(target.href)}" target="_blank" rel="noopener noreferrer" aria-label="${name} on Instagram">${name}</a>`;}catch{}
     return name;
   };
   const links=shareSocials?scrapbookConfig.instagram:{};
-  return `<footer class="preview-footer"><div class="footer-ornament" aria-hidden="true">${winterSnowflake}</div><div class="footer-ornament footer-ornament-bottom" aria-hidden="true">${winterSnowflake}</div><p class="footer-closing">Here’s to the next chapter—<br><em>and having you in it.</em></p><span>By ${credit('Aditya',links.aditya)} & ${credit('Angela',links.angela)}, with help from ${credit('Pixel',links.pixel)}</span></footer>`;
+  return `<footer class="preview-footer"><div class="footer-ornament" aria-hidden="true">${winterSnowflake}</div><div class="footer-ornament footer-ornament-bottom" aria-hidden="true">${winterSnowflake}</div>${themePhoto({themeAssets},'closing','Pixel sleeping against the couch','preview-theme-photo')}<p class="footer-closing">Here’s to the next chapter—<br><em>and having you in it.</em></p><span>vibecoded by ${credit('Pixel',links.pixel)}, technical support &amp; design by ${credit('dad',links.aditya)}</span></footer>`;
 }
 function previewMarkup(d){
   const chapter=personal=>d.photos.filter(p=>p.personal===personal).map(p=>`<figure><img src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async"><figcaption>${esc(p.caption)}${p.canSave?' · Original can be saved':''}</figcaption></figure>`).join('');
-  return `<article class="preview"><div class="preview-opening-note"><span class="preview-edition-stamp"><img class="header-pixel" src="/pixel-santa.png" alt="Pixel wearing a Santa hat" width="369" height="400" decoding="async"><span class="kicker">${state.year} · ${esc(d.authors)}</span></span>${winterLights}</div><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${esc(d.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div><p class="prose">${esc(d.note)}</p><p><em>With love, ${esc(d.authors)}</em></p>${d.photos.some(p=>p.personal)?`<section aria-label="Photos selected for ${esc(d.name)}"><div class="gallery">${chapter(true)}</div></section>`:''}<h2>${esc(sharedHeading(d.sharedTitle))}</h2><div class="gallery">${chapter(false)}</div>${d.stories.map(s=>`<section><h2>${esc(s.title)}</h2><p class="prose">${esc(s.body)}</p></section>`).join('')}${previewFooter(d.shareSocials)}</article>`;
+  return `<article class="preview"><div class="preview-opening-note"><span class="preview-edition-stamp"><img class="header-pixel" src="/pixel-santa.png" alt="Pixel wearing a Santa hat" width="369" height="400" decoding="async"><span class="kicker">${state.year} · ${esc(d.authors)}</span></span>${winterLights}</div><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${esc(d.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div>${themePhoto(d,'welcome','Pixel tilting her head on a sunny trail','preview-theme-photo')}<p class="prose">${esc(d.note)}</p><p><em>With love, ${esc(d.authors)}</em></p>${d.photos.some(p=>p.personal)?`<section aria-label="Photos selected for ${esc(d.name)}"><div class="gallery">${chapter(true)}</div></section>`:''}<h2>${esc(sharedHeading(d.sharedTitle))}</h2><div class="gallery">${chapter(false)}</div>${d.stories.map(s=>`<section><h2>${esc(s.title)}</h2><p class="prose">${esc(s.body)}</p></section>`).join('')}${d.gift?.enabled?`<section class="mug-preview"><h2>i got you something.</h2>${themePhoto(d,'gift','Pixel resting on a lounger','preview-theme-photo')}<div class="gallery">${d.gift.designs.map(m=>`<figure><img src="${esc(m.src)}" alt="${esc(m.alt)}"><figcaption>${esc(m.caption)}</figcaption></figure>`).join('')}</div></section>`:''}${previewFooter(d.shareSocials,d.themeAssets)}</article>`;
 }
 function previewOptions(){
   return `<option value="" ${!previewRecipient?'selected':''}>Shared photos only</option><optgroup label="Invitations">${state.people.map(i=>`<option value="invite:${esc(i.id)}" ${previewRecipient==='invite:'+i.id?'selected':''}>${esc(i.addressedTo)}</option>`).join('')}</optgroup><optgroup label="Individual people">${contacts.map(p=>`<option value="${esc(p.id)}" ${previewRecipient===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</optgroup>`;
@@ -225,9 +311,9 @@ function render(){
   });
   const section=editionViews.includes(view)?'Scrapbooks / '+state.year:pages[view].section;
   byId('breadcrumb').textContent=section+' / '+pages[view].title;
-  document.title=pages[view].title+(editionViews.includes(view)?' · '+state.year:'')+' · Aditya';
+  document.title=pages[view].title+(editionViews.includes(view)?' · '+state.year:'')+' · Pixelbook Studio';
   app.dataset.view=view;app.dataset.photoEditor=String(photoEditorOpen);
-  app.innerHTML=({home,scrapbooks,articles,directory,new:newScrapbook,story,photos,sharing,preview,server}[view]||home)();updateBadge();bind();mountPrintAdmin({view,state,contacts,api,requestApi,mark,saveDraft,showModal,updateContacts,render,toast});
+  app.innerHTML=({home,scrapbooks,articles,directory,new:newScrapbook,story,photos,mugs,sharing,preview,server}[view]||home)();updateBadge();bind();mountPrintAdmin({view,state,contacts,api,requestApi,mark,saveDraft,showModal,updateContacts,render,toast});
 }
 function closeNavigation(restoreFocus=false){document.body.classList.remove('nav-open');document.querySelector('.workspace').inert=false;byId('nav-toggle').setAttribute('aria-expanded','false');byId('nav-backdrop').hidden=true;if(restoreFocus)byId('nav-toggle').focus();}
 function showValidationDialog(){
@@ -254,6 +340,7 @@ async function navigate(next,push=true,year=state?.year){
     }
     if(generation!==navigationGeneration)return;
     if(next==='preview'&&draftIssues().length){busy=false;if(!push)history.replaceState(null,'',taskHref(view));showValidationDialog();return;}
+    if(next!==oldView||state?.year!==oldState?.year){draftSelection.clear();librarySelection.clear();}
     view=next;
     const hash=taskHref(next,year);if(push&&location.hash!==hash)history.pushState(null,'',hash);
     busy=false;render();window.scrollTo(0,0);app.focus({preventScroll:true});
@@ -261,10 +348,13 @@ async function navigate(next,push=true,year=state?.year){
   finally{busy=false;updateBadge();}
 }
 function bind(){
+  bindBulkPhotos();
+  mountMugOrders({view,state,api,showModal,toast});
+  if(view==='mugs'){bindMugEditor({root:app,state,mark});}
   app.querySelectorAll('[data-preview-edition]').forEach(b=>b.onclick=async()=>{await navigate('photos',true,Number(b.dataset.previewEdition));openPreview();});
-  app.querySelectorAll('[data-photo-filter]').forEach(b=>b.onclick=()=>{photoFilter=b.dataset.photoFilter;selectedPhotoId='';photoEditorOpen=false;render();});
+  app.querySelectorAll('[data-photo-filter]').forEach(b=>b.onclick=()=>{photoFilter=b.dataset.photoFilter;draftSelection.clear();selectedPhotoId='';photoEditorOpen=false;render();});
   app.querySelectorAll('[data-select-photo]').forEach(b=>b.onclick=()=>{selectedPhotoId=b.dataset.selectPhoto;photoEditorOpen=true;render();if(innerWidth<=800)byId('photo-inspector')?.scrollIntoView({block:'start',behavior:'instant'});});
-  byId('photo-person-filter')?.addEventListener('change',event=>{photoPersonFilter=event.target.value;photoFilter='all';selectedPhotoId='';photoEditorOpen=false;render();});
+  byId('photo-person-filter')?.addEventListener('change',event=>{photoPersonFilter=event.target.value;draftSelection.clear();photoFilter='all';selectedPhotoId='';photoEditorOpen=false;render();});
   byId('done-photo-edit')?.addEventListener('click',()=>{photoEditorOpen=false;render();app.querySelector(`[data-select-photo="${selectedPhotoId}"]`)?.focus({preventScroll:true});});
   byId('edition-picker')?.addEventListener('change',event=>{const previous=state.year;navigate(view,true,Number(event.target.value));event.target.value=String(previous);});
   byId('create-scrapbook')?.addEventListener('submit',async event=>{
@@ -324,18 +414,18 @@ async function saveDraft(){
   }
   const saveGeneration=editGeneration;busy=true;updateBadge();try{const result=await api('draft',{draft:state.draft,version:state.version});state.version=result.version;if(result.printInvitations)state.draft.printInvitations=result.printInvitations;if(result.printAddressKeys)state.draft.printAddressKeys=result.printAddressKeys;dirty=editGeneration!==saveGeneration;updateEditionSummary();toast('Draft saved. Your changes stay private until you publish.');}finally{busy=false;updateBadge();}
 }
-function showModal(html){modalContent.innerHTML=html;const title=modalContent.querySelector('h2');if(title){title.id='modal-title';modal.setAttribute('aria-labelledby','modal-title');}if(!modal.open)modal.showModal();}
+function showModal(html){modalContent.innerHTML=html;const title=modalContent.querySelector('h2');if(title){title.id='modal-title';title.tabIndex=-1;modal.setAttribute('aria-labelledby','modal-title');}if(!modal.open)modal.showModal();title?.focus({preventScroll:true});}
 let previewCloseTimer;
 function closeModal(){
-  if(!modal.open||modal.classList.contains('is-closing'))return;
+  if(!modal.open||modal.classList.contains('is-closing')||modal.dataset.bulkDeleting)return;
   if(!modal.classList.contains('preview-dialog')||matchMedia('(prefers-reduced-motion: reduce)').matches){modal.close();return;}
   previewLoader.cancel();modal.classList.add('is-closing');previewCloseTimer=setTimeout(()=>modal.close(),220);
 }
 document.querySelector('.modal-close').onclick=closeModal;
-modal.addEventListener('cancel',event=>{if(modal.classList.contains('preview-dialog')){event.preventDefault();closeModal();}});
+modal.addEventListener('cancel',event=>{if(modal.dataset.bulkDeleting){event.preventDefault();return;}if(modal.classList.contains('preview-dialog')){event.preventDefault();closeModal();}});
 modal.addEventListener('click',event=>{if(event.target===modal&&modal.classList.contains('preview-dialog')){const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeModal();}});
 modal.addEventListener('animationend',event=>{if(event.target===modal&&event.animationName==='preview-out')modal.close();});
-modal.addEventListener('close',()=>{clearTimeout(previewCloseTimer);previewLoader.cancel();modal.classList.remove('preview-dialog','is-closing');document.querySelector('.modal-close').setAttribute('aria-label','Close dialog');inviteData=null;modalContent.innerHTML='';const restore=modalReturnFocus;modalReturnFocus=null;restore?.();});
+modal.addEventListener('close',()=>{clearTimeout(previewCloseTimer);previewLoader.cancel();modal.classList.remove('preview-dialog','is-closing','bulk-delete-dialog');document.querySelector('.modal-close').setAttribute('aria-label','Close dialog');inviteData=null;modalContent.innerHTML='';const restore=modalReturnFocus;modalReturnFocus=null;restore?.();});
 function confirmUnpublish(){
   const year=state.year,publicationRevision=state.publicationRevision;
   showModal(`<p class="kicker">Unpublish ${year}</p><h2>Take this scrapbook offline?</h2><p>Guests with a valid invitation will see a message that this scrapbook has been taken offline, without needing a new verification code.</p><p>Your draft, photos, invitations, and last published version stay saved. Publish again to reopen access with the same invitation links. Unsaved edits stay in this window.</p><button class="button danger" id="confirm-unpublish">Unpublish scrapbook</button><p class="error" id="modal-error" role="alert"></p>`);
@@ -416,9 +506,10 @@ function editPerson(id){
   };
 }
 function editInvitation(id=''){
-  const invitation=state.people.find(i=>i.id===id),members=[...(invitation?.memberIds||[])];
+  const invitation=state.people.find(i=>i.id===id);
+  const members=[...(invitation?.memberIds||[])];
   let contactId=invitation?.person_id||'',customGreeting=!!invitation;
-  showModal(`<p class="kicker">Sharing · ${state.year}</p><h2>${invitation?'Edit invitation':'Create an invitation'}</h2><form id="invitation-form">${peoplePickerMarkup('invitation','Included people',{hint:'Everyone included shares access to photos assigned to any of them. Add missing people in the People workspace first.',allowAdd:false})}<label class="field"><span>Verification contact</span><span class="select-control"><select id="verification-contact" required></select></span></label><p class="hint">One person receives the login code. Select someone included above who has a phone number.</p><label class="field"><span>Addressed to</span><input id="addressed-to" name="addressedTo" value="${esc(invitation?.addressedTo||'')}" placeholder="Ben & Jerry" required maxlength="200"></label><label class="socials-toggle"><input id="share-socials" type="checkbox" ${invitation?.share_socials?'checked':''}><span><strong>Share our socials</strong><span>Show our Instagram links in the footer. Every invitation uses scrapbook.adityapatil.xyz.</span></span></label><div class="notice" id="invitation-summary"></div><p class="hint">${invitation?'Your existing invitation token stays the same. The socials setting only controls Instagram footer links; saved older links still work. Changing included people or the verification contact signs out this invitation’s sessions. Access changes immediately.':'Creates one shared invitation link and QR code. No text is sent.'}</p><button class="button">${invitation?'Save invitation':'Create invitation & QR'}</button><p class="error" id="modal-error" role="alert"></p></form>`);
+  showModal(`<p class="kicker">Sharing · ${state.year}</p><h2>${invitation?'Edit invitation':'Create an invitation'}</h2><form id="invitation-form">${peoplePickerMarkup('invitation','Included people',{hint:'Everyone included shares access to photos assigned to any of them. Add missing people in the People workspace first.',allowAdd:false})}<label class="field"><span>Verification contact</span><span class="select-control"><select id="verification-contact" required></select></span></label><p class="hint">One person receives the login code. Select someone included above who has a phone number.</p><label class="field"><span>Addressed to</span><input id="addressed-to" name="addressedTo" value="${esc(invitation?.addressedTo||'')}" placeholder="Ben & Jerry" required maxlength="200"></label><label class="socials-toggle"><input id="share-socials" type="checkbox" ${invitation?.share_socials?'checked':''}><span><strong>Share our socials</strong><span>Show our Instagram links in the footer. Every invitation uses scrapbook.adityapatil.xyz.</span></span></label><label class="socials-toggle"><input id="allow-mug" type="checkbox" ${invitation?.allow_mug?'checked':''}><span><strong>Allow complimentary mug</strong><span>US delivery only. Off by default; enable for eligible households. Applies immediately.</span></span></label><label class="socials-toggle"><input id="allow-print" type="checkbox" ${invitation?.allow_print?'checked':''}><span><strong>Allow complimentary print</strong><span id="print-permission-hint"></span><span>Applies immediately when you save the invitation.</span></span></label><div class="notice" id="invitation-summary"></div><p class="hint">${invitation?'Your existing invitation token stays the same. The socials setting only controls Instagram footer links; saved older links still work. Changing included people or the verification contact signs out this invitation’s sessions. Access changes immediately.':'Creates one shared invitation link and QR code. No text is sent.'}</p><button class="button">${invitation?'Save invitation':'Create invitation & QR'}</button><p class="error" id="modal-error" role="alert"></p></form>`);
   const greeting=byId('addressed-to'),contact=byId('verification-contact');
   function update(){
     const selected=members.map(id=>contacts.find(p=>p.id===id)).filter(Boolean),eligible=selected.filter(p=>p.phone);
@@ -426,6 +517,10 @@ function editInvitation(id=''){
     contact.innerHTML=eligible.length?eligible.map(p=>`<option value="${esc(p.id)}" ${contactId===p.id?'selected':''}>${esc(p.name)} · •••• ${esc(p.phone.slice(-4))}</option>`).join(''):'<option value="">Choose an included person with a phone</option>';
     if(!customGreeting)greeting.value=selected.map(p=>p.name).join(' & ');
     const verifier=eligible.find(p=>p.id===contactId);
+    const printEligibility=invitationPrintEligibility(state,contacts,{...invitation,id,person_id:contactId,memberIds:members,expires_at:invitation?.expires_at||Infinity});
+    const printInput=byId('allow-print');printInput.disabled=false;
+    byId('print-permission-hint').textContent=printEligibility.reason?`${printEligibility.reason}. Guests can add and verify a missing address when ordering.`:`${printEligibility.count} personal photos · Mailing to ${printEligibility.person.name}`;
+
     byId('invitation-summary').textContent=members.length?`For ${greeting.value||'your people'} · ${members.length} ${members.length===1?'person':'people'} included${verifier?' · Code to '+verifier.name:''}`:'Choose who this invitation is for.';
   }
   bindPeoplePicker(modalContent.querySelector('[data-picker]'),{people:()=>contacts,selected:()=>members,status:()=>'',toggle:id=>{const at=members.indexOf(id);if(at>=0)members.splice(at,1);else members.push(id);update();},add:()=>{}});
@@ -433,10 +528,10 @@ function editInvitation(id=''){
   byId('invitation-form').onsubmit=async event=>{
     event.preventDefault();const button=event.currentTarget.querySelector('button.button');button.disabled=true;
     try{
-      const data={memberIds:members,verificationContactId:contactId,addressedTo:greeting.value,shareSocials:byId('share-socials').checked,...(invitation?{version:invitation.version}:{})};
+      const data={memberIds:members,verificationContactId:contactId,addressedTo:greeting.value,shareSocials:byId('share-socials').checked,allowMug:byId('allow-mug').checked,allowPrint:byId('allow-print').checked&&!byId('allow-print').disabled,...(invitation?{version:invitation.version}:{})};
       const result=await api(invitation?`invitations/${id}/details`:'invitations',data);
       const name=greeting.value;await refreshPeople();
-      if(invitation){modal.close();toast('Invitation updated. The existing link and QR still work.');}else await showInvitation(name,result.url);
+      if(invitation){modal.close();toast('Invitation updated. Permissions apply immediately; the existing link still works.');}else await showInvitation(name,result.url);
     }catch(error){byId('modal-error').textContent=error.message;button.disabled=false;}
   };
 }
@@ -489,15 +584,9 @@ function attachMedia(media){
   return added;
 }
 function deleteMedia(id){
-  if(busy||pendingRequests)return;
-  const media=state.media.find(m=>m.id===id);if(!media)return;
-  showModal(`<p class="kicker">Photo library</p><h2>Delete this photo permanently?</h2><p>${esc(media.filename)}</p><p>This deletes the original and all its previews from private storage. It cannot be undone. Old sample photos are also removed from the sample gallery. Photos still used in a saved draft or published scrapbook cannot be deleted.</p><button class="button danger" id="confirm-delete-media">Delete permanently</button><p class="error" id="modal-error" role="alert"></p>`);
-  byId('confirm-delete-media').onclick=async event=>{
-    event.target.disabled=true;
-    try{await api(`media/${id}/delete`,{confirm:true});state.media=state.media.filter(m=>m.id!==id);removedPhotos.delete(`${state.year}/${id}`);modal.close();render();toast('Photo and previews deleted permanently.');}
-    catch(error){byId('modal-error').textContent=error.message;event.target.disabled=false;}
-  };
+  const media=state.media.find(m=>m.id===id);if(media)deleteMediaSelection([media]);
 }
+
 async function uploadFiles(files){
   if(busy||pendingRequests||modal.open){toast('Wait for the current change to finish before adding more photos.');return;}
   const status=byId('upload-status'),input=byId('upload'),zone=byId('photo-dropzone');
@@ -520,11 +609,11 @@ async function uploadFiles(files){
       if(attachMedia(media)){if(media.reused)reused++;else completed.push(media);}else skipped++;
     }catch(error){failure=error;retryFilesByYear.set(year,files.slice(i));break;}
   }
-  busy=false;render();byId('upload-status').textContent=failure?`${completed.length} uploaded, ${reused} reused, ${skipped} already in draft. ${failure.message} Use Retry remaining photos to continue.`:`${completed.length} uploaded, ${reused} reused, ${skipped} already in draft. Add descriptions and choose recipients, then save your draft.`;
+  busy=false;render();byId('upload-status').textContent=failure?`${completed.length} uploaded, ${reused} reused, ${skipped} ${view==='mugs'?'already selected':'already in draft'}. ${failure.message} Use Retry remaining photos to continue.`:`${completed.length} uploaded, ${reused} reused, ${skipped} ${view==='mugs'?'already selected':'already in draft'}. ${view==='mugs'?'Write captions, then save your mug selection.':'Add descriptions and choose recipients, then save your draft.'}`;
 }
 // Prevent a file dropped outside the upload area from replacing the editor tab.
 for(const type of ['dragover','drop'])document.addEventListener(type,event=>{
-  if(view!=='photos'||!isFileDrag(event))return;event.preventDefault();
+  if(!['photos','mugs'].includes(view)||!isFileDrag(event))return;event.preventDefault();
   if(type==='dragover')event.dataTransfer.dropEffect=event.target.closest?.('#photo-dropzone')&&!busy&&!pendingRequests&&!modal.open?'copy':'none';
 });
 document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));

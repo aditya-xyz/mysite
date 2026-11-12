@@ -416,9 +416,9 @@ reverified and approved. Disabling the scrapbook switch immediately blocks new
 orders while preserving existing ones and their allowance usage.
 
 The deployed print release has **no live Lob fulfillment adapter**. Google address
-verification and autocomplete run in the admin Worker; see its README. Only
-`PRINT_PROVIDER=local_mock` on explicitly allowed HTTP loopback/test hosts permits
-simulated address normalization and orders. HTTPS rejects that mock mode. No
+verification and autocomplete run in the admin Worker; see its README. `ORDER_MODE=simulation` enables persisted test orders on either HTTP or HTTPS,
+without any fulfillment/address API call during ordering. `PRINT_PROVIDER=local_mock`
+remains restricted to explicit HTTP test hosts; its address mock cannot run on HTTPS. No
 mailing provider secrets are configured, and live printing cannot be enabled. Production
 fulfillment still needs address-validation/provider integration, provider-safe
 idempotency/reconciliation, and a bleed-safe final print render. The current
@@ -440,17 +440,20 @@ fixture or treat its verification badge as real USPS verification.
 
 ### Print allowance resets
 
-Migration `0011_print_allowance_resets.sql` keeps fulfillment status separate from
-allowance use. An authenticated admin can reset the current confirmed order's
-allowance from invitation details. Its timestamp remains on the original order;
-artwork, note, address, fulfillment status, and lifetime counts are preserved.
-The invitation can then place one more order if all other gates are satisfied.
-In-progress or uncertain submissions cannot be reset. The reset targets a specific
-order, so retrying an old reset cannot release a newer order's allowance.
+The current simulation flow uses migration `0015_simulated_mug_orders.sql`.
+Each invitation has independent postcard and mug counters (0 or 1). Admin reset
+requires the exact current completed simulated order and explicit confirmation;
+it deletes that order and private proof, sets the counter to 0, and removes its
+history row. Processing/uncertain or real submitted orders cannot be cleared by
+this simulation-only action. A stale reset cannot clear a newer order.
+
+When real fulfillment is implemented, allowance resets must preserve old orders
+and frozen designs, allowing a household's history to contain multiple orders.
+That future behavior is intentionally different from today's disposable test data.
 
 Guests see no print action or exhausted-allowance message once it is used. Opening
 the keepsake again refreshes eligibility after an admin reset. Apply migration
-0011 before deploying this allowance-reset support.
+0015 before deploying the current simulation/reset support.
 
 A successful order closes its confirmation dialog automatically and shows a
 centered, accessible mailbox toast for eight seconds. It requires no extra Done
@@ -537,3 +540,123 @@ extended. Invalid, expired, and revoked invitations still receive generic invita
 errors. Journals, previews/originals, and print requests remain blocked server-side
 while offline. Admin draft previews remain available. Once republished, an expired
 verification session must be verified normally before viewing private content.
+
+## Pixelbook local preview
+
+The guest presentation now uses Pixelbook branding and Pixel's voice, a Santa
+cover, personal/shared gallery headings, and an optional household gift picker.
+The existing phone verification, private media access, photo viewer, downloads,
+and keepsake/postcard flow remain in place. Gift eligibility is independent of
+whether an invitation has personal photos.
+
+`web/pixelbook.js`, `web/pixelbook.css`, and `web/pixelbook-gift.js` contain the
+presentation. The authorized journal may supply same-origin `themeAssets` and
+an explicit `gift` capability with six design choices. Without that capability,
+the gift picker is not shown. No live gift endpoints or supplier submission have
+been connected. Preserve the exact household gift copy exported by pixelbook.js.
+
+The ignored local Pixelbook fixture serves optimized private photo previews and
+an ephemeral, shared household gift claim. It uses no real SMS, address validation,
+payments, production data, or fulfillment. Address entry, next-year storage consent,
+review, and repeat-claim behavior are demonstrable locally; production address
+persistence/verification, durable gift allowances, supplier catalog validation,
+print-ready mug proofs, and delivery tracking still need implementation. New photo
+derivatives remain outside the deployed asset directory. Production thematic media
+must be served through authenticated media routes before release. The current
+preview does not publish or modify any scrapbook draft.
+
+Mug configuration is now persisted through the admin Mugs tab and edition
+publication. Four selected, published photos are required to show the guest gift
+section; this is independent of personal gallery photos. Captions may remain blank
+while being drafted. Mug-only uploads do not enter the gallery, and saved/published
+mug media is protected from deletion. Production gift submission remains off; local
+preview claims are simulated. See admin/README.md for migration 0014 and rollout.
+
+Mug artwork now supports browser-local transparent extraction and private,
+versioned PNGs. See admin/README.md for model preparation. Guests see the saved
+cutout in the chooser and an illustrative mug with its caption before confirmation
+and on Pixel perfect. No image-processing API is called by either website.
+
+## Simulated mug orders
+
+Both Worker configurations currently opt into `ORDER_MODE=simulation`; this never
+selects a live fulfillment adapter. Normal app-to-Worker requests still persist
+test orders in D1/private R2. Mug orders need an active publication with at least
+four ready mugshots; postcards retain their personal-photo/address/permission
+checks and per-edition switch. No provider key is required.
+
+`/api/gift/status` and `/api/gift/claim` are authenticated and household-scoped.
+Mug artwork and captions are copied into a frozen order proof, accessible only
+to that household or authenticated admin. Duplicate/concurrent claims use one
+allowance. Admin Invitations offers mug history, its illustrative saved design,
+and Reset mug allowance alongside the postcard controls. Successful simulated
+mug orders show “text dad if you need a second one. just don’t mention i told you
+this.” and explicitly state that no physical order or charge occurred.
+
+Apply 0015 to D1 before deploying either Worker. This change was tested locally;
+no production migration, reset, publication, provider submission or deployment
+was performed. The local `.private/preview-pixelbook-orders.mjs` fixture serves
+admin 8848 and guest 8849 with fake household/address and blocked provider traffic.
+
+Typography reference for Pixelbook: https://m.dk/en/ (Copenhagen Metro), supplied
+by Aditya. The site uses its own `metroFont`; Pixelbook keeps self-hosted Manrope
+and takes inspiration from the strong headings, clear hierarchy and readable
+supporting copy. UI scale: 16px reading text, 14px supporting text/controls, 12px
+small labels, without mobile reductions below that scale. The illustrative mug's
+printed caption is artwork at preview scale, with normal-size caption nearby.
+The household joke appears in the mug chooser, not again in the review step.
+
+Complimentary mugs require explicit opt-in at both scrapbook and invitation
+levels. Apply migration 0016 before deploying these gates; existing records start
+off. See admin/README.md for controls. This is independent of postcard permission
+and existing mug order history/reset behavior.
+
+
+## Private Pixelbook theme photos
+
+The opening note, gift panel and footer use the private R2 keys
+`{year}/theme/welcome.jpg`, `gift.jpg` and `closing.jpg`. Only existing assets are
+included in the authenticated journal manifest. The guest routes
+`/api/theme/{welcome|gift|closing}` require a verified, active invitation and always
+scope storage to its edition; admin Preview uses authenticated edition-scoped
+routes. These are shared decorative previews, separate from gallery photos,
+original-download permissions and mug selections. Never place these photos in
+static Worker asset directories or Git. Restoring these theme assets does not
+publish a saved draft or change ordering settings.
+
+
+Print permission is now an immediate invitation setting, matching mugs. After
+migration 0017, publishing only applies content such as photos and the postcard
+note; it never re-enables or revokes household print permission from old JSON.
+
+### Shared guest delivery address
+
+Mugs and prints reuse the phone-verification contact’s current USPS-verified US
+address read-only. Missing or expired addresses use US Google Places suggestions,
+Address Validation with USPS CASS, a canonical-address review, and explicit
+“Use address & save” approval. The server derives the contact from the session;
+clients cannot select another person or replace the verified result. The approved
+address is saved to People for future visits/years; verification metadata lasts
+28 days. Guests contact dad to change an already verified address.
+
+Address handling is live and shares the admin’s provider budgets. Only fulfillment
+is simulated (`ORDER_MODE=simulation`); no supplier, mail, or charge is initiated.
+Both Workers require server-side Google keys. Print permission can be enabled
+before an address exists; the guest completes verification before ordering. Order
+confirmation checks contact/invitation versions and freezes the verified shipping
+address with the design. Existing proofs are unchanged.
+
+
+## Guest presentation and motion
+
+Photo prints settle as they enter view. The keepsake preview assembles from the
+finished export, and both gift cards reveal once on scroll after initial gallery
+sizing. A separate gift observer waits until cards are well inside the viewport,
+so the short mobile keepsake entrance is not spent at the screen edge. Reduced
+motion skips decorative animation; the mugshot stack still supports instant
+manual changes. Tap advances the stack, and opening the picker preselects that
+preview at the time of the click. Existing gift receipts take precedence.
+
+The personal gallery is titled “dad’s friends ⇄ my friends.” Both galleries use
+01/02 when present together; recipients with only shared photos see an unnumbered
+“the group project.” No personal gallery or keepsake is shown for those recipients.

@@ -35,3 +35,12 @@ dist-ssr
 
 # Built admin client (source is in year-service/admin/client)
 /year-service/admin/web/app.js
+
+# Local Codex skill and account-switch handoff (never publish)
+/.agents/skills/mysite-maintenance/
+/CODEX-HANDOFF.local.md
+
+# Generated browser background-removal runtime and downloaded model
+/year-service/admin/web/cutout-worker.js
+/year-service/admin/web/runtime/
+/year-service/admin/web/models/

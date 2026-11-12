@@ -50,3 +50,24 @@ html:has(#keepsake[open]){overflow:hidden}
 #keepsake .ks-pick[aria-pressed=true]::after{content:'';position:absolute;inset:0;border:3px solid var(--button);border-radius:inherit;pointer-events:none;z-index:2}
 #keepsake .ks-pick:focus-visible{outline:3px solid var(--accent);outline-offset:-6px}
 #keepsake .ks-top h2{font-weight:600}
+
+.ks-entry .kicker:only-child{margin:0}
+
+/* Desktop actions should fit their labels rather than stretch across the sheet. */
+@media(min-width:601px){
+  #keepsake:has(.ks-preview-wrap) .ks-bottom{justify-content:flex-end}
+  #keepsake .ks-gift,#keepsake .ks-digital{flex:0 0 auto;min-width:170px;padding-inline:22px}
+}
+
+.ks-assembly{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+.ks-assembly canvas{position:absolute;display:block}
+.ks-pick[aria-pressed=true] .ks-badge{animation:ks-stamp 240ms ease-out}
+@keyframes ks-stamp{from{transform:scale(1.18) rotate(-10deg);opacity:.4}to{transform:none;opacity:1}}
+@media(max-width:600px){#keepsake .ks-top{padding-top:max(12px,env(safe-area-inset-top))}.ks-preview-wrap{min-width:0;width:min(100%,345px);flex-shrink:0}.ks-options{width:100%}.ks-frame{min-height:44px}#keepsake .ks-body{scroll-padding-bottom:20px}#keepsake .ks-bottom{padding-bottom:max(14px,env(safe-area-inset-bottom))}}
+@media(prefers-reduced-motion:reduce){.ks-assembly{display:none}.ks-pick[aria-pressed=true] .ks-badge{animation:none}}
+
+/* Let the scroll thumb belong to the paper instead of the browser's dark track. */
+#keepsake .ks-body{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ink) 24%,var(--paper)) var(--paper)}
+#keepsake .ks-body::-webkit-scrollbar{width:8px}
+#keepsake .ks-body::-webkit-scrollbar-track{background:var(--paper)}
+#keepsake .ks-body::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--ink) 24%,var(--paper));border:2px solid var(--paper);border-radius:12px}

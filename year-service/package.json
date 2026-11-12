@@ -14,7 +14,8 @@
     "admin:deploy": "npm run admin:build && wrangler deploy --config admin/wrangler.jsonc",
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 migrations apply DB --local",
-    "db:remote": "wrangler d1 migrations apply DB --remote"
+    "db:remote": "wrangler d1 migrations apply DB --remote",
+    "admin:model": "node scripts/prepare-cutout-model.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
@@ -26,6 +27,7 @@
     "wrangler": "^4.0.0"
   },
   "dependencies": {
-    "jose": "^6.2.16"
+    "jose": "^6.2.16",
+    "onnxruntime-web": "1.23.2"
   }
 }

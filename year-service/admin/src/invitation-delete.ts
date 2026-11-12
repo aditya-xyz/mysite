@@ -6,11 +6,12 @@ export async function deleteInvitation(db:D1Database,id:string,year:number,versi
  if(invite.revoked_at===null)throw new PrintProblem(409,'Revoke access before deleting this invitation.');
  const eligible=`id=?1 AND edition_year=?2 AND version=?3 AND revoked_at IS NOT NULL
  AND NOT EXISTS(SELECT 1 FROM print_orders WHERE invitation_id=?1)
+ AND NOT EXISTS(SELECT 1 FROM mug_orders WHERE invitation_id=?1)
  AND NOT EXISTS(SELECT 1 FROM photos WHERE invite_id=?1)
  AND NOT EXISTS(SELECT 1 FROM editions e,json_each(e.draft_json,'$.photos') p,json_each(p.value,'$.recipients') r WHERE r.value=?1)
  AND NOT EXISTS(SELECT 1 FROM editions e,json_each(e.published_json,'$.photos') p,json_each(p.value,'$.recipients') r WHERE r.value=?1)`;
  const free=await db.prepare(`SELECT id FROM invites WHERE ${eligible}`).bind(id,year,version as number).first();
- if(!free)throw new PrintProblem(409,'This invitation has print-order history or legacy photo references and must be kept.');
+ if(!free)throw new PrintProblem(409,'This invitation has order history or legacy photo references and must be kept.');
  const result=await db.batch([
   db.prepare(`DELETE FROM sessions WHERE invite_id=?1 AND EXISTS(SELECT 1 FROM invites WHERE ${eligible})`).bind(id,year,version as number),
   db.prepare(`DELETE FROM original_downloads WHERE invite_id=?1 AND EXISTS(SELECT 1 FROM invites WHERE ${eligible})`).bind(id,year,version as number),

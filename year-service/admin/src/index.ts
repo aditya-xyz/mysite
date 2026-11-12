@@ -1,10 +1,15 @@
+import {addressVerificationCurrent,type AddressState} from '../../src/address-state.ts';
+import {curatedMugChange} from '../../src/mug-catalog.ts';
+import {themeAssetManifest,themeAssetResponse} from '../../src/theme-assets.ts';
+import {mugAdminRoute} from './mug-orders.ts';
+import {mugCutoutRoute,cutoutKey,cutoutVersion} from './mug-cutouts.ts';
 import {contactUsage} from './contact-usage.ts';
 import {deleteInvitation} from './invitation-delete.ts';
 import {deleteContact} from './contact-delete.ts';
 import {addressAutocompleteRoute} from './address-autocomplete.ts';
 import {addressAdminRoute,addressMode,type AddressEnv} from './address-verification.ts';
 import {printAdminRoute} from './printing.ts';
-import {cleanPrintInvitations,PrintProblem,type PrintEnv} from '../../src/printing.ts';
+import {cleanPrintInvitations,simulatedOrders,PrintProblem,type PrintEnv} from '../../src/printing.ts';
 import {sealLink,unsealLink,invitationUrl,type LinkConfig} from './invitation-links.ts';
 import { previewDimensions,imageDimensions } from "../../src/image-dimensions.ts";
 import { invitationAudience, invitationName, type InvitationAudience } from "../../src/invitations.ts";
@@ -13,7 +18,7 @@ import { adminIdentity, type AuthConfig } from "./auth.ts";
 import { photoUploadRoute, UploadProblem } from "./uploads.ts";
 import { mediaLibraryRoute } from './media-library.ts';
 import { token, digest, now, sameOrigin } from "../../src/security.ts";
-import { clientEdition, type Draft, type Published, type PublishedPhoto } from "../../src/edition.ts";
+import { clientEdition, MAX_MUG_DESIGNS, type Draft, type Published, type PublishedPhoto, type PublishedMugDesign } from "../../src/edition.ts";
 
 interface Env extends AuthConfig, LinkConfig, AddressEnv { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
 interface EditionRow { draft_json: string; draft_version: number; published_version: number | null; published_at: number | null; is_active:number; taken_offline_at:number|null; publication_revision:number }
@@ -68,7 +73,17 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
   const printNote=text(d.printNote??'','printed postcard note',350,false);
   if(printNote.split('\n').length>11)return fail('Use at most 10 line breaks in the postcard note.');
   const printSettings=await cleanPrintInvitations({...d,photos},env.DB,year);
-  return {printNote,...printSettings,title:text(d.title,"title",150),authors:text(d.authors,"authors",100),intro:text(d.intro,"invitation introduction",1000),
+  if(d.mugDesigns!==undefined&&(!Array.isArray(d.mugDesigns)||d.mugDesigns.length>MAX_MUG_DESIGNS))return fail(`Use at most ${MAX_MUG_DESIGNS} mug photos.`);
+  const mugIds=new Set<string>();
+  const mugDesigns=(d.mugDesigns||[]).map(m=>{
+    if(!m||!mediaIds.has(m.id)||mugIds.has(m.id))return fail('A mug photo is missing or appears more than once.');
+    mugIds.add(m.id);
+    if(m.cutoutVersion!==undefined&&!cutoutVersion(m.cutoutVersion))return fail('Check the mug cutout.');
+    return {...(m.cutoutEditable===true?{cutoutEditable:true}:{}),...(m.cutoutVersion?{cutoutVersion:m.cutoutVersion}:{}),id:m.id,caption:text(m.caption,'mug caption',500,false),alt:text(m.alt,'mug photo description',500)};
+  });
+  const current=JSON.parse((await edition(env,year)).draft_json) as Draft;
+  if(curatedMugChange(current.mugDesigns||[],mugDesigns))return fail('The curated mug photos and artwork are fixed. Only captions can be changed.');
+  return {printNote,...printSettings,mugDesigns,title:text(d.title,"title",150),authors:text(d.authors,"authors",100),intro:text(d.intro,"invitation introduction",1000),
     note:text(d.note,"opening note",10000),sharedTitle:text(d.sharedTitle,"shared chapter title",150),stories,photos};
 }
 async function snapshot(draft: Draft, env: Env, year: number): Promise<Published> {
@@ -79,7 +94,14 @@ async function snapshot(draft: Draft, env: Env, year: number): Promise<Published
     const m = objects.get(p.id); if (!m) return fail("An uploaded photo is missing. Save the draft again.");
     photos.push({...p,...await previewDimensions(env.MEDIA,m.preview_key),preview_key:m.preview_key,viewer_key:m.viewer_key,original_key:m.original_key,filename:m.filename,mime:m.mime});
   }
-  return {...draft,photos};
+  const mugDesigns:PublishedMugDesign[]=[];
+  for(const d of draft.mugDesigns||[]){
+    const media=objects.get(d.id);if(!media)return fail('A mug photo is missing. Save the draft again.');
+    if(!cutoutVersion(d.cutoutVersion))continue;
+    const key=cutoutKey(year,d.id,d.cutoutVersion);if(!await env.MEDIA.head(key))throw new Problem(409,'A mug cutout is missing. Regenerate it in Mugs.');
+    mugDesigns.push({...d,preview_key:key,mime:'image/png'});
+  }
+  return {...draft,photos,mugDesigns};
 }
 function detect(bytes: Uint8Array) {
   if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return "image/jpeg";
@@ -167,12 +189,20 @@ async function route(request: Request, env: Env, actor: string) {
     year=Number(scoped[1]);path="/api"+scoped[2];
   }
   if (path.startsWith("/api/")) await edition(env,year);
+  if(scoped){const mugs=await mugAdminRoute(request,env,path,year,()=>body(request));if(mugs)return mugs;}
   if(scoped){const printing=await printAdminRoute(request,env,path,year,()=>body(request));if(printing)return printing;}
+  const cutouts=await mugCutoutRoute(request,env,actor,year,path);if(cutouts)return cutouts;
+  const theme=/^\/api\/theme\/(welcome|gift|closing)$/.exec(path);
+  if(theme&&request.method==='GET'){
+    const response=await themeAssetResponse(env.MEDIA,year,theme[1]);
+    if(!response)throw new Problem(404,'Theme photo not found.');
+    return response;
+  }
   if (path === "/api/state" && request.method === "GET") {
     const row = await edition(env,year);
-    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,share_socials,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
+    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,share_socials,allow_mug,allow_print,print_address_key,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
-    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,printMode:env.PRINT_PROVIDER==='local_mock'&&url.protocol==='http:'?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
+    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,allowMugOrders:!!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders,printMode:simulatedOrders(request,env)?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
     const data = await body(request), draft = await validDraft(data.draft,env,year);
@@ -198,6 +228,7 @@ async function route(request: Request, env: Env, actor: string) {
     if (data.version !== row.draft_version) throw new Problem(409,"Save and review the latest draft before publishing.");
     if(data.publicationRevision!==undefined && data.publicationRevision!==row.publication_revision)throw new Problem(409,'Publication status changed. Refresh before publishing.');
     const draft = await validDraft(JSON.parse(row.draft_json),env,year), published = await snapshot(draft,env,year);
+    if((draft.mugDesigns||[]).some(d=>!d.cutoutVersion))throw new Problem(409,'Finish the mug cutouts before publishing, or remove the unfinished selections.');
     if (!published.photos.length) return fail("Add at least one photo before publishing.");
     const invitations=await env.DB.prepare("SELECT m.value AS person_id FROM invites i,json_each(i.member_ids) m WHERE i.edition_year=?1 AND i.revoked_at IS NULL AND i.expires_at>?2").bind(year,now()).all<{person_id:string}>();
     const active=new Set(invitations.results.map(i=>i.person_id));
@@ -219,7 +250,10 @@ async function route(request: Request, env: Env, actor: string) {
     if(invitationId && !invite)throw new Problem(404,"Invitation not found.");
     const data = invite ? clientEdition(published,invite.id,invitationName(invite),year,await invitationAudience(env.DB,invite)) : clientEdition(published,id,person?.name || "friend",year,person?.id);
     data.shareSocials=!!invite?.share_socials;
+    Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,year,`/api/editions/${year}/theme`)});
+    if(invite&&(!invite.allow_mug||!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders)){data.gift.enabled=false;data.gift.designs=[];}
     data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`,viewerSrc:`/api/editions/${year}/media/${p.id}/viewer`}));
+    data.gift.designs=data.gift.designs.map(d=>({...d,src:`/api/editions/${year}/media/${d.id}/cutout/${published.mugDesigns?.find(m=>m.id===d.id)?.cutoutVersion}`}));
     return json(data);
   }
   const linkRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/link$/.exec(path);
@@ -249,10 +283,19 @@ async function route(request: Request, env: Env, actor: string) {
   }
   const deleteInvitationRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/delete$/.exec(path);
   if(deleteInvitationRoute&&request.method==='POST'){const data=await body(request),result=await deleteInvitation(env.DB,deleteInvitationRoute[1],year,data.version);await audit(env,actor,'delete-invitation',deleteInvitationRoute[1]).run();return json(result);}
+  const mugPermission=/^\/api\/invitations\/([a-z0-9-]{1,100})\/mug-permission$/.exec(path);
+  if(mugPermission&&request.method==='POST'){
+    const data=await body(request);if(typeof data.allowMug!=='boolean'||!Number.isInteger(data.version))return fail('Choose the mug permission and current invitation version.');
+    const saved=await env.DB.prepare('UPDATE invites SET allow_mug=?1,version=version+1 WHERE id=?2 AND edition_year=?3 AND version=?4 RETURNING version,allow_mug').bind(Number(data.allowMug),mugPermission[1],year,data.version as number).first();
+    if(!saved)throw new Problem(409,'This invitation changed. Refresh before updating its mug permission.');
+    await audit(env,actor,'mug-permission',mugPermission[1]).run();return json(saved);
+  }
   const invitationRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/details$/.exec(path);
   if ((path === "/api/invitations" || invitationRoute) && request.method === "POST") {
     const data=await body(request),personId=text(data.verificationContactId??data.personId,"verification contact",100);
     if(data.shareSocials!==undefined && typeof data.shareSocials!=="boolean")return fail("Choose whether to share socials.");
+    if(data.allowMug!==undefined&&typeof data.allowMug!=="boolean")return fail("Choose whether to allow a complimentary mug.");
+    if(data.allowPrint!==undefined&&typeof data.allowPrint!=="boolean")return fail("Choose whether to allow a complimentary print.");
     const members=data.memberIds??[personId];
     if(!Array.isArray(members)||!members.length||members.length>20||members.some(id=>typeof id!=="string")||new Set(members).size!==members.length)
       return fail("Choose between 1 and 20 different people for the invitation.");
@@ -262,14 +305,20 @@ async function route(request: Request, env: Env, actor: string) {
     if(people.results.length!==members.length)throw new Problem(404,"Person not found. Add them in People first.");
     const contact=people.results.find(p=>p.id===personId)!;
     if(!contact.phone)return fail("Choose a verification contact with a phone number.");
+    let printKey:string|null=null;
+    if(data.allowPrint===true){
+      const mailing=await env.DB.prepare('SELECT * FROM people WHERE id=?1 AND version=?2').bind(contact.id,contact.version).first<AddressState&{mailing_address:string|null;address_verification_key:string|null}>();
+      if(!mailing)throw new Problem(409,'The contact changed. Refresh before saving the invitation.');
+      if(addressVerificationCurrent(mailing)&&mailing.mailing_address)printKey=mailing.address_verification_key;
+    }
     const addressedTo=data.addressedTo===undefined?null:text(data.addressedTo,"addressed to",200);
     if(invitationRoute){
       if(!Number.isInteger(data.version))return fail("Missing invitation version.");
       const id=invitationRoute[1];
-      const saved=await env.DB.prepare(`UPDATE invites SET person_id=?1,name=?2,phone=?3,addressed_to=?4,member_ids=?5,share_socials=coalesce(?10,share_socials),version=version+1,
+      const saved=await env.DB.prepare(`UPDATE invites SET person_id=?1,name=?2,phone=?3,addressed_to=?4,member_ids=?5,share_socials=coalesce(?10,share_socials),allow_mug=coalesce(?11,allow_mug),allow_print=CASE WHEN ?12 IS NOT NULL THEN ?12 WHEN person_id<>?1 THEN 0 ELSE allow_print END,print_address_key=CASE WHEN ?12=1 THEN ?13 WHEN ?12=0 OR person_id<>?1 THEN NULL ELSE print_address_key END,version=version+1,
         challenge_expires_at=CASE WHEN person_id<>?1 OR member_ids<>?5 THEN 0 ELSE challenge_expires_at END
         WHERE id=?6 AND edition_year=?7 AND version=?8 AND EXISTS(SELECT 1 FROM people WHERE id=?1 AND version=?9) RETURNING id`)
-        .bind(contact.id,contact.name,contact.phone,addressedTo,JSON.stringify(members),id,year,data.version as number,contact.version,data.shareSocials===undefined?null:Number(data.shareSocials)).first();
+        .bind(contact.id,contact.name,contact.phone,addressedTo,JSON.stringify(members),id,year,data.version as number,contact.version,data.shareSocials===undefined?null:Number(data.shareSocials),data.allowMug===undefined?null:Number(data.allowMug),data.allowPrint===undefined?null:Number(data.allowPrint),printKey).first();
       if(!saved)throw new Problem(409,"This invitation changed in another window. Refresh before editing again.");
       await audit(env,actor,"edit-invitation",id).run();
       return json({saved:true});
@@ -277,9 +326,9 @@ async function route(request: Request, env: Env, actor: string) {
     const count=await env.DB.prepare("SELECT count(*) n FROM invites WHERE edition_year=?1").bind(year).first<{n:number}>();
     if(count && count.n>=100)return fail("This scrapbook supports up to 100 invitations.");
     const id="person-"+token().slice(0,24),raw=token();
-    const created=await env.DB.prepare(`INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,edition_year,addressed_to,member_ids,share_socials,token_encrypted)
-      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?11,?12 FROM people WHERE id=?2 AND version=?10 AND phone IS NOT NULL ON CONFLICT(edition_year,person_id) WHERE person_id IS NOT NULL DO NOTHING RETURNING id`)
-      .bind(id,contact.id,await digest(raw),contact.name,contact.phone,now()+90*86400,year,addressedTo,JSON.stringify(members),contact.version,Number(!!data.shareSocials),await sealLink(raw,env.INVITATION_LINK_KEY,id,year)).first();
+    const created=await env.DB.prepare(`INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,edition_year,addressed_to,member_ids,share_socials,token_encrypted,allow_mug,allow_print,print_address_key)
+      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?11,?12,?13,?14,?15 FROM people WHERE id=?2 AND version=?10 AND phone IS NOT NULL ON CONFLICT(edition_year,person_id) WHERE person_id IS NOT NULL DO NOTHING RETURNING id`)
+      .bind(id,contact.id,await digest(raw),contact.name,contact.phone,now()+90*86400,year,addressedTo,JSON.stringify(members),contact.version,Number(!!data.shareSocials),await sealLink(raw,env.INVITATION_LINK_KEY,id,year),Number(!!data.allowMug),Number(!!data.allowPrint),printKey).first();
     if(!created)throw new Problem(409,"This verification contact already has an invitation here. Edit their existing invitation to include both people.");
     await audit(env,actor,"create-invitation",id).run();
     return json({id,personId:contact.id,url:invitationUrl(env,raw)},201);
@@ -415,7 +464,7 @@ export default {
     headers.set("Cache-Control","private, no-store"); headers.set("Referrer-Policy","no-referrer");
     headers.set("X-Content-Type-Options","nosniff"); headers.set("X-Frame-Options","DENY");
     headers.set("X-Robots-Tag","noindex, nofollow, noarchive");
-    headers.set("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    headers.set("Content-Security-Policy","default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     headers.set("Permissions-Policy","camera=(), microphone=(), geolocation=()");
     if (new URL(request.url).protocol === "https:") headers.set("Strict-Transport-Security","max-age=31536000");
     return new Response(response.body,{status:response.status,headers});

@@ -547,18 +547,22 @@ the full ledger independently of the recent-history display limit.
 
 No live USPS verification, Lob submission, payment, or mailing is connected.
 `PRINT_PROVIDER=local_mock` is accepted only on explicit HTTP loopback/test hosts;
-HTTPS cannot enable it. Local successes are labeled simulated. Apply migration
+HTTPS cannot enable that legacy mock. `ORDER_MODE=simulation` separately enables
+persisted simulated orders on HTTPS without calling any fulfillment API. Successes
+are labeled simulated. Apply migration
 0010 before deploying this support. Production print ordering stays off, and
 provider verification/fulfillment must be connected before enabling live orders.
 
 
 Invitation rows are collapsed by default. More details reveals sharing/link
 controls and print permissions; only one invitation can be expanded at once.
-Reset print allowance appears for a used allowance and requires confirmation.
-It grants one additional print without canceling existing orders or deleting their
-history. Processing/uncertain orders cannot be reset. Lifetime prints ordered and
-current allowance availability are displayed separately. Reset history is marked
-on the original order. Apply migration 0011 before deploying reset support.
+Postcard and mug allowance resets appear in invitation details once a simulation
+has used the corresponding allowance. Confirmation explicitly warns that the
+simulated order, saved design, and history are deleted; its counter returns to 0.
+Each reset targets the exact current order and cannot affect a newer order or the
+other gift type. Processing/uncertain or real submitted orders cannot be cleared.
+Apply migration 0015 before deploying either Worker. Future real fulfillment
+must preserve old order history and designs across allowance resets.
 
 
 ## Google address verification and autocomplete
@@ -685,3 +689,179 @@ when their verification session has expired. No SMS or new session is required t
 read that message. Republishing does not extend expired verification sessions or
 change invitation expiry/revocation. Guest media and printing remain inaccessible
 while offline; admin saved-draft previews remain available.
+
+## Bulk photo selection
+
+Photos has independent selection checkboxes beside the existing photo editor.
+Select all applies to the current photo/person filter; changing filters, tasks,
+or years clears the selection. Hide selected, Unhide selected, and Remove from
+draft change only the private draft until it is saved and published. Removed
+photos retain their draft metadata for re-adding from Already uploaded.
+
+Already uploaded has a separate selection and Delete selected confirmation listing
+the exact batch. Deletion uses the existing protected per-photo endpoint: any
+saved-draft or published reference blocks that item. Independent eligible items
+can complete; failures display their reasons and remain selected for retry. An
+unsaved draft removal must be saved before the server can allow deletion.
+
+## Pixelbook Studio and configurable mugs
+
+The sidebar now uses a pawprint and Pixelbook Studio branding. Each edition has
+Mugs alongside Photos, Story, Invitations, and Review & publish. Select up to 12
+uploaded photos, edit captions/descriptions, reorder/remove designs, or upload
+mug-only photos without adding them to the scrapbook gallery. These choices are
+stored as `mugDesigns` in the existing draft and published JSON with the usual
+version checks. Blank captions are allowed while writing; the visibility rule
+counts selected photos, with a minimum of four. The tab shows whether the next
+publication will show or hide the gift section. Mug designs are explicitly shared
+with every invitee regardless of the source photo's gallery audience.
+
+Guest journals expose only published designs when at least four distinct usable
+photos exist. Authenticated `/api/mugs/:id` serves their compressed preview;
+this never grants a gallery original or personal-photo download. The admin draft
+preview includes the configured designs at the same threshold. Fulfillment is not
+connected: production can browse the designs but cannot submit a gift order.
+The local fixture separately enables clearly labeled simulated claims.
+
+Apply migration `0014_mug_designs.sql` before deploying the changed guest/admin
+Workers. It adds race guards for mug references. Media deletion also checks saved
+and published mug designs, including selections below the visibility threshold.
+No production migration or deployment was performed during local implementation.
+
+## Browser-local mug cutouts
+
+Mugs now extracts a transparent PNG automatically when a photo is selected or
+uploaded there. Extraction uses a self-hosted U2Netp model and ONNX Runtime Web
+in a dedicated browser worker. No OpenAI/background-removal API, credentials,
+or paid inference service is used. Images stay within the authenticated admin
+and private R2. Keep the admin tab open while processing. Failures show a retry;
+previously saved artwork is retained if regeneration fails. Original photos and
+gallery previews are untouched. Each selection can also accept a prepared RGBA
+PNG, and automatic cutouts offer restore/erase brushes plus one-stroke undo to
+keep a bowl, couch, or another supporting detail. Prepared artwork can have a
+different crop, so it is replaced by upload rather than brushed against an
+unaligned source.
+
+After `npm ci`, run `npm run admin:model` once. It downloads the 4.6 MB U2Netp
+ONNX export from rembg's release and checks a pinned SHA-256. `admin:build` verifies
+that checksum again, builds the worker, and copies the matching WASM runtime
+and licenses into admin-only assets. All runtime/model requests are same-origin;
+there is no CDN fallback. The admin CSP allows WASM compilation and same-origin
+workers; guest CSP is unchanged. The initial runtime/model load is roughly 16 MB.
+Licenses are in `admin/vendor/`. Generated binaries remain ignored by Git.
+Sources: https://github.com/xuebinqin/U-2-Net and
+https://onnxruntime.ai/docs/tutorials/web/deploy.html.
+
+Cutouts use immutable, media/year-scoped R2 keys. Drafts pin `cutoutVersion`;
+saving or regenerating a PNG does not change a publication. Publish requires all
+selected mug cutouts to be ready (the guest section still requires at least four).
+The authenticated guest mug route streams only the published PNG. Prepared PNGs
+are limited to 12 MB / 4096px per side and RGBA; media deletion removes their
+version history with the media prefix. No additional D1 migration is needed for
+cutouts beyond the mug-selection race guards in 0014.
+
+The guest review and Pixel perfect receipt share a deterministic ceramic-mug
+illustration containing the selected artwork and exact caption. This is an
+illustrative preview, not a supplier print proof. Live fulfillment remains separate; neither the app nor its fixture can place physical orders.
+
+Successful simulated mug orders now show “text dad if you need a second one.
+just don’t mention i told you this” on Pixel perfect, alongside a no-order/no-charge
+notice. Preview-only claims do not show it. Admin Invitations shows separate mug
+and postcard order histories and counters; view their saved proofs before reset.
+
+Migration 0015 adds `mug_orders` and `invites.print_order_count` /
+`invites.mug_order_count`. Atomic order reservations and database triggers keep
+these independent counters at 0 or 1. Reset deletes the completed simulated order
+and its private artwork, releasing that allowance. Test history intentionally
+becomes zero rows. Once fulfillment is connected, change reset semantics to retain
+all prior orders and proofs; never enable this destructive simulation reset for
+real submitted orders. `ORDER_MODE=simulation` is set in both Worker configs;
+normal same-origin backend requests are used. Fulfillment remains simulated;
+address autocomplete and USPS verification through Google are live. Approved
+verified addresses are saved to the invitation verification contact in People.
+
+## Mug permission gates
+
+Migration `0016_mug_permissions.sql` adds two independent, default-off flags:
+`editions.allow_mug_orders` and `invites.allow_mug`. All existing invitations and
+scrapbooks are opted out on migration; new records also default off. Enable
+**Allow mug orders** on Mugs or Invitations, then **Allow complimentary mug** on
+eligible invitation rows (also offered in create/edit invitation). These settings
+apply immediately without content publication. At least four published mugshots
+are still required. Delivery remains US-only; do not enable invitations that need
+unsupported international delivery. No country is inferred from phone numbers.
+
+Both gates hide the guest gift section/catalog and are rechecked on the order
+endpoint and atomic reservation, so a previously opened picker cannot bypass a
+revocation. Disabling either flag preserves any existing order, allowance count,
+and frozen proof. Admin generic design previews remain available for editing;
+invitation-specific previews respect the flags. Orders remain simulated.
+
+
+Bulk deletion results group photos by their blocking reason instead of repeating
+one error per file. The dialog has a single scrolling body, expandable filename
+lists and persistent actions on desktop/mobile. Review & publish is a navigation
+shortcut only. The last publication continues to protect its photos while offline;
+saving draft removals alone does not replace that snapshot. Publishing the updated
+draft replaces it and reopens guest access. No deletion or publication happens
+through the review shortcut.
+
+
+Invitation create/edit is the single place for Share our socials, Allow
+complimentary mug and Allow complimentary print. The detail pane retains order
+counts, proofs and allowance reset actions without duplicate permission toggles.
+Print eligibility still requires three personal photos and a current verified US
+mailing contact, and is recalculated as members/contact change. Saving a changed
+print permission also saves the current draft through the standard validation and
+version checks; publication remains separate. If that draft save fails, invitation
+details remain saved, the print change stays visibly unsaved and can be retried.
+Socials and mug permissions continue to apply on saving the invitation.
+
+
+## Current fixed mug collection (supersedes browser cutout editing)
+
+Mugs is a caption-only studio for the six approved photos. Uploads, selection,
+regeneration, touch-up, descriptions and reordering have been removed. Mug-order
+permissions remain in Invitations. The approved catalog is guarded server-side
+against non-caption changes and artwork uploads from old clients. Prepared PNGs
+are private, versioned R2 objects; old artwork and frozen order proofs remain.
+The current build no longer requires or deploys a segmentation model/runtime.
+Earlier browser-model setup instructions are historical. The repeated simulated
+receipt sentence is removed; earlier simulation notices and behavior remain.
+
+
+## Immediate print permissions (current behavior)
+
+Migration 0017 moves household print permission into `invites.allow_print` and
+`print_address_key`. It preserves the most recent saved draft choice (including
+pending enables/disables), falling back to the publication only for legacy drafts
+without permission fields. Edit invitation saves socials, mug and print settings
+immediately with the invitation's optimistic version check. It never saves or
+publishes scrapbook content. Verified US address binding remains mandatory;
+changing the verification contact clears permission unless explicitly re-enabled.
+Guest status and atomic order reservation check the live flag/address binding,
+so stale checkout pages cannot bypass revocation. Published photos and postcard
+note are still required; historical draft/publication permission JSON is ignored
+for order authorization. Order counts and existing proofs are unchanged.
+
+Dialog openings focus a neutral heading instead of a button. Shared pointer /
+keyboard modality tracking suppresses lingering pointer-button rings while
+preserving keyboard focus. The guest decorative stars are inline SVGs to avoid
+Apple's emoji rendering.
+
+### Shared guest delivery address
+
+Mugs and prints reuse the phone-verification contact’s current USPS-verified US
+address read-only. Missing or expired addresses use US Google Places suggestions,
+Address Validation with USPS CASS, a canonical-address review, and explicit
+“Use address & save” approval. The server derives the contact from the session;
+clients cannot select another person or replace the verified result. The approved
+address is saved to People for future visits/years; verification metadata lasts
+28 days. Guests contact dad to change an already verified address.
+
+Address handling is live and shares the admin’s provider budgets. Only fulfillment
+is simulated (`ORDER_MODE=simulation`); no supplier, mail, or charge is initiated.
+Both Workers require server-side Google keys. Print permission can be enabled
+before an address exists; the guest completes verification before ordering. Order
+confirmation checks contact/invitation versions and freezes the verified shipping
+address with the design. Existing proofs are unchanged.
