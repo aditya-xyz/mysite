@@ -49,7 +49,7 @@ export async function startMugMockup(request:Request,env:PrintEnv,invite:Invitat
  await env.MEDIA.put(sourceKey,png,{httpMetadata:{contentType:'image/png'}});
  try{
   await env.DB.prepare('INSERT INTO mug_mockups(id,invitation_id,year,recipe_key,source_key,source_expires_at,next_poll_at,design_id,configuration_json,caption,cutout_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)').bind(id,invite.id,invite.edition_year,recipe,sourceKey,now()+1800,now()+10,design.id,JSON.stringify(configuration),design.caption,design.cutoutVersion).run();
-  const result=await printfulApi(env,`/mockup-generator/create-task/${style!.productId}`,{variant_ids:[variant.id],format:'png',width:1000,option_groups:[style!.id==='classic'?'Default':'Flat'],files:[{placement:'default',image_url:new URL(`/api/gift/mockup-source/${id}`,request.url).href}]}) as {task_key?:string};
+  const result=await printfulApi(env,`/mockup-generator/create-task/${style!.productId}`,{variant_ids:[variant.id],format:'png',width:1000,option_groups:[style!.id==='classic'?'Default':'Flat'],files:[{placement:'default',image_url:new URL(`/api/gift/mockup-source/${id}`,request.url).href,position:{area_width:variant.printWidth,area_height:variant.printHeight,width:variant.printWidth,height:variant.printHeight,top:0,left:0}}]}) as {task_key?:string};
   if(!result.task_key)throw new Error('No task');
   await env.DB.prepare("UPDATE mug_mockups SET status='pending',task_key=?1 WHERE id=?2").bind(result.task_key,id).run();
   return {id,status:'pending',retryAfter:10};
