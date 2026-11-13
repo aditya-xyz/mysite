@@ -36,3 +36,19 @@ test('prepared library loads only saved image bytes with no canvas, polling or g
   client.preload(design,configuration);client.update(figure,design,configuration);await settle();assert.equal(figure.children[0].tag,'img');assert.deepEqual(calls,['/api/gift/previews/prepared']);assert.equal(client.preparedId(design,configuration),'prepared');
  }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
 });
+test('missing saved preview stops the spinner and never competes with the preparation queue',async()=>{
+ const previousDocument=(globalThis as any).document,previousImage=(globalThis as any).Image;
+ const figure={isConnected:true,dataset:{},children:[] as any[],querySelector(){return {textContent:''};},replaceChildren(...values:any[]){this.children=values;}};
+ (globalThis as any).document={createElement(tag:string){return {tag,textContent:''};}};
+ (globalThis as any).Image=class{src='';async decode(){}};
+ const fetch=mock.method(globalThis,'fetch',async(path:string)=>{assert.equal(path,'/api/gift/previews/now-ready');return new Response(new Blob(['saved PNG'],{type:'image/png'}));});
+ const client=createMugMockups(),design={id:'photo',caption:'Caption'},configuration={style:'latte',size:'12oz',color:'white',font:'clean'};
+ try{
+  client.configure({prepared:true,styles:[],previews:[]});assert.equal(client.available(design,configuration),false);
+  client.preload(design,configuration);client.update(figure,design,configuration);await settle();
+  assert.equal(fetch.mock.callCount(),0);assert.match(figure.children[0].textContent,/still being prepared/);assert.equal(figure.children[0].className,'pb-mockup-wait');
+  client.configure({prepared:true,styles:[],previews:[{id:'now-ready',designId:'photo',caption:'Caption',configuration:{font:'clean',color:'white',size:'12oz',style:'latte'},src:'/api/gift/previews/now-ready'}]});
+  assert.equal(client.available(design,configuration),true,'Configuration property order does not affect saved lookup');
+  client.preload(design,configuration);await settle();assert.equal(figure.children[0].tag,'img');assert.equal(fetch.mock.callCount(),1);
+ }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
+});

@@ -804,12 +804,13 @@ D1 stores source/job/configuration metadata. Printful temporary URLs are never
 served to guests. Current target:414 preview images (six photos ×23 variants ×
 three fonts), prepared gradually under the provider’s generation rate limit.
 
-A variant enters the prepared guest catalog only when its images exist for every
-published photo and caption font. Once a prepared catalog is available, the guest
-loads saved images directly without canvas rendering, uploads, mockup creation or
-provider polling. The legacy on-demand cache remains during the initial fill and
-for historical proofs. Saved images are authenticated and publication-scoped;
-simulated receipts retain their exact prepared proof even after publication edits.
+The guest catalog includes saved previews as each combination finishes, without
+waiting for every photo/font on a variant. Customize marks unsaved combinations
+as preparing and disables those choices until their saved image exists. The open
+picker refreshes readiness every30 seconds. No live mockup creation or provider
+polling is started while the shared library fills. Saved images are authenticated
+and publication-scoped; simulated receipts retain their exact prepared proof even
+after publication edits. Historical proofs keep the legacy cache.
 The new default and enamel care note are unchanged.
 
 The picker opens immediately, with status/catalog checks in the background instead

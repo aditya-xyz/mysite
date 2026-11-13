@@ -37,12 +37,14 @@ test('shared mug library includes every font, queues only affordable variants an
   for(const plan of plans){const response=await preparedMugAdminRoute(new Request('https://admin.test',{method:'POST',headers:{'Content-Type':'image/png'},body:png}),env,'/api/mug-preview-library/sources/'+plan.id,2026);assert.equal(response?.status,200);}
   await syncPreparedMugs(env,2026);
   assert.equal((await db.prepare('SELECT desired_count FROM mug_preview_sync').first<any>()).desired_count,48);
-  assert.equal(await preparedMugCatalog(env,2026),null,'No incomplete combination is offered to guests');
+  const empty=await preparedMugCatalog(env,2026);assert.equal(empty.prepared,true);assert.equal(empty.previews.length,0,'Initial fill stays in saved-only mode with no live-generation fallback');
   failed=true;assert.equal(await startPreparedJob(env),false);failed=false;
   assert.equal((await db.prepare("SELECT count(*) n FROM mug_preview_jobs WHERE status='queued'").first<any>()).n,36);
   await db.prepare('UPDATE mug_preview_jobs SET next_check_at=0').run();await db.prepare("DELETE FROM rate_limits WHERE key='printful-mockup-lease'").run();
   assert.equal(await startPreparedJob(env),true);assert.equal(await startPreparedJob(env),false,'Persistent lease prevents generation bursts');
   const pending=await db.prepare("SELECT source_token FROM mug_preview_jobs WHERE status='pending'").first<any>();assert.equal((await preparedMugSource(env,pending.source_token)).status,200);
+  await db.prepare('UPDATE mug_preview_jobs SET next_check_at=0').run();await finishPreparedJobs(env);
+  const partial=await preparedMugCatalog(env,2026);assert.ok(partial.previews.length>0&&partial.previews.length<48,'Finished combinations are usable before every photo/font is ready');
   for(let i=0;i<45;i++){
    await db.prepare('UPDATE mug_preview_jobs SET next_check_at=0').run();await finishPreparedJobs(env);
    await db.prepare("DELETE FROM rate_limits WHERE key='printful-mockup-lease'").run();await startPreparedJob(env);

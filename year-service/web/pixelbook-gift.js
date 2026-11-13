@@ -53,7 +53,7 @@ export function mountPixelGift(journal,root){
       if(livePricing)warmSelected();
     });
     modal.querySelector('[data-customize-mug]')?.addEventListener('click',()=>{
-      customizer=openMugCustomizer(selected,configuration,value=>{configuration=value;quote=null;quoteKey='';customizer=null;render();modal.querySelector('[data-customize-mug]').focus();},styles,(element,design,value)=>{mockups.update(element,design,value);warmOptions(design,value);},previewMarkup);
+      customizer=openMugCustomizer(selected,configuration,value=>{configuration=value;quote=null;quoteKey='';customizer=null;render();modal.querySelector('[data-customize-mug]').focus();},styles,(element,design,value)=>{mockups.update(element,design,value);warmOptions(design,value);},previewMarkup,(design,value)=>mockups.available(design,value));
     });
     modal.querySelector('[data-gift-back]')?.addEventListener('click',()=>{if(step==='pick')modal.close();else{step=step==='address'?'review':'pick';render();}});
     modal.querySelector('[data-edit-address]')?.addEventListener('click',()=>{step='address';render();});
@@ -93,13 +93,15 @@ export function mountPixelGift(journal,root){
   function warmSelected(){warmOptions(selected,configuration);}
   let opening=false,contextReady=false,catalogPromise=null,catalogLoadedAt=0;const catalogController=new AbortController();
   function preloadCatalog(){
-    if(catalogPromise&&catalogLoadedAt&&Date.now()-catalogLoadedAt>60000){catalogPromise=null;catalogLoadedAt=0;}
+    if(catalogPromise&&catalogLoadedAt&&Date.now()-catalogLoadedAt>25000){catalogPromise=null;catalogLoadedAt=0;}
     catalogPromise??=fetch('/api/gift/catalog',{signal:catalogController.signal}).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load the saved mug collection.');catalogLoadedAt=Date.now();return result;}).catch(error=>{catalogPromise=null;throw error;});
     return catalogPromise;
   }
   function warmCatalog(){if(!journal.gift.livePricing||!ordering)return;preloadCatalog().then(catalog=>{if(modal.open)return;mockups.configure(catalog);const preferred=preferredMugOptions(catalog.styles);for(const design of designs)mockups.preload(design,preferred);}).catch(()=>{});}
   launch.addEventListener('pointerenter',warmCatalog,{once:true});launch.addEventListener('focus',warmCatalog,{once:true});
   const warmTimer=setTimeout(warmCatalog,1500);
+  let previewCount=0;
+  const catalogTimer=setInterval(()=>{if(!modal.open||!livePricing||receipt)return;preloadCatalog().then(catalog=>{styles=catalog.styles;mockups.configure(catalog);if(previewCount!==(catalog.previews?.length||0)){previewCount=catalog.previews?.length||0;customizer?.refresh();warmSelected();}}).catch(()=>{});},30000);
   launch.onclick=async()=>{
     if(modal.open||busy||opening)return;opening=true;contextReady=false;returnFocus=document.activeElement;
     // Pixel’s preferred design is the first published mugshot, independent of the rotating stack.
@@ -118,5 +120,5 @@ export function mountPixelGift(journal,root){
     finally{opening=false;launch.disabled=false;if(modal.open&&step==='pick')modal.querySelector('[data-gift-next]').disabled=!selected||!ordering||!contextReady;}
   };
   modal.addEventListener('close',()=>{quoteGeneration++;quoteKey='';quoteBusy=false;controller?.abort();returnFocus?.focus({preventScroll:true});});
-  return {destroy(){clearTimeout(warmTimer);catalogController.abort();controller?.abort();customizer?.destroy();mockups.destroy();delivery.destroy();modal.remove();}};
+  return {destroy(){clearInterval(catalogTimer);clearTimeout(warmTimer);catalogController.abort();controller?.abort();customizer?.destroy();mockups.destroy();delivery.destroy();modal.remove();}};
 }
