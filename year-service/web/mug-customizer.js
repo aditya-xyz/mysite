@@ -35,5 +35,5 @@ export function openMugCustomizer(design,current,finish,styles=mugStyles,preview
  dialog.addEventListener('cancel',event=>{event.preventDefault();if(openKey){const key=openKey;openKey=null;render(key);}});
  dialog.addEventListener('click',event=>{if(openKey&&!event.target.closest('.pb-custom-select')){const key=openKey;openKey=null;render(key);}});
  document.body.append(dialog);render();dialog.showModal();dialog.querySelector('[data-mug-control]').focus();
- return {refresh(){const key=document.activeElement?.closest('[data-mug-control],[data-option-key]')?.dataset;render(key?.mugControl||key?.optionKey);},destroy(){dialog.close();dialog.remove();}};
+ return {refresh(nextStyles=styles){styles=nextStyles;const key=document.activeElement?.closest('[data-mug-control],[data-option-key]')?.dataset;render(key?.mugControl||key?.optionKey);},destroy(){dialog.close();dialog.remove();}};
 }

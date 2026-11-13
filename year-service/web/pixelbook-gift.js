@@ -101,7 +101,7 @@ export function mountPixelGift(journal,root){
   launch.addEventListener('pointerenter',warmCatalog,{once:true});launch.addEventListener('focus',warmCatalog,{once:true});
   const warmTimer=setTimeout(warmCatalog,1500);
   let previewCount=0;
-  const catalogTimer=setInterval(()=>{if(!modal.open||!livePricing||receipt)return;preloadCatalog().then(catalog=>{styles=catalog.styles;mockups.configure(catalog);if(previewCount!==(catalog.previews?.length||0)){previewCount=catalog.previews?.length||0;customizer?.refresh();warmSelected();}}).catch(()=>{});},30000);
+  const catalogTimer=setInterval(()=>{if(!modal.open||!livePricing||receipt)return;preloadCatalog().then(catalog=>{styles=catalog.styles;mockups.configure(catalog);if(previewCount!==(catalog.previews?.length||0)){previewCount=catalog.previews?.length||0;customizer?.refresh(styles);warmSelected();}}).catch(()=>{});},30000);
   launch.onclick=async()=>{
     if(modal.open||busy||opening)return;opening=true;contextReady=false;returnFocus=document.activeElement;
     // Pixel’s preferred design is the first published mugshot, independent of the rotating stack.
