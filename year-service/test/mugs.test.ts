@@ -173,6 +173,19 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.ok(providerCalls.every(path=>path==='/products'||/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(path)||path==='/orders/estimate-costs'));
    await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});
   });
+  await t.test('signed-in estimates do not share the login POST budget and retain supplier limits',async()=>{
+   const ip='203.0.113.15',hash=await digest(ip),expiry=Math.floor(Date.now()/1000)+300;
+   await db.prepare('INSERT INTO rate_limits(key,count,expires_at) VALUES(?1,60,?2)').bind('ip:'+hash,expiry).run();
+   const request=(path:string,authenticated=true)=>mf.dispatchFetch('https://live.test/api/'+path,{method:'POST',headers:{Origin:'https://live.test','CF-Connecting-IP':ip,'Content-Type':'application/json',...(authenticated?{Cookie:'__Host-year_session='+raw}:{})},body:JSON.stringify({configuration:{style:'classic',size:'11oz',color:'white',font:'clean'},addressVersion:1})});
+   const quote=await request('gift/quote');assert.equal(quote.status,200,await quote.clone().text());
+   for(const path of ['open','gift/quote']){const blocked=await request(path,false);assert.equal(blocked.status,429,'Unauthenticated activity retains the existing login protection');assert.ok(Number(blocked.headers.get('Retry-After'))>0);assert.match((await blocked.json() as any).error,/try again in/);}
+   await db.prepare('INSERT OR REPLACE INTO rate_limits(key,count,expires_at) VALUES(?1,20,?2)').bind('mug-estimate:mug-invite',expiry).run();
+   const before=providerCalls.length;assert.equal((await request('gift/quote')).status,429);assert.equal(providerCalls.length,before,'Per-household provider limit still blocks external requests');
+   await db.prepare("DELETE FROM rate_limits WHERE key='mug-estimate:mug-invite'").run();
+   await db.prepare('UPDATE rate_limits SET count=600 WHERE key=?1').bind('activity-ip:'+hash).run();
+   assert.equal((await request('gift/quote')).status,429,'Signed-in network activity remains bounded');
+   assert.equal(providerCalls.length,before);
+  });
   await t.test('mockups expose only expiring print capabilities and cache authenticated provider images without ordering',async()=>{
    const live=async(path:string,init:any={})=>{
     const encoded=init.body instanceof FormData?new Request('https://live.test',{method:'POST',body:init.body}):null;

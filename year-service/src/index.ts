@@ -41,9 +41,12 @@ async function limited(env: Env, key: string, max: number, seconds: number) {
   // One atomic UPSERT: concurrent requests cannot each claim the final slot.
   const row = await env.DB.prepare(`INSERT INTO rate_limits(key,count,expires_at) VALUES(?1,1,?2)
     ON CONFLICT(key) DO UPDATE SET count=CASE WHEN expires_at<=?3 THEN 1 ELSE count+1 END,
-    expires_at=CASE WHEN expires_at<=?3 THEN ?2 ELSE expires_at END RETURNING count`)
-    .bind(key, now() + seconds, now()).first<{ count: number }>();
-  if (!row || row.count > max) throw new Failure(429, "A few too many attempts. Please try again later.");
+    expires_at=CASE WHEN expires_at<=?3 THEN ?2 ELSE expires_at END RETURNING count,expires_at`)
+    .bind(key, now() + seconds, now()).first<{ count: number; expires_at: number }>();
+  if (!row || row.count > max) {
+    const retryAfter=Math.max(1,(row?.expires_at||now()+seconds)-now()),minutes=Math.ceil(retryAfter/60);
+    throw new Failure(429, `A few too many attempts. Please try again in ${minutes} ${minutes===1?'minute':'minutes'}.`,retryAfter);
+  }
 }
 async function requireActive(env:Env,year:number){
   const row=await env.DB.prepare("SELECT is_active,taken_offline_at FROM editions WHERE year=?1").bind(year).first<{is_active:number;taken_offline_at:number|null}>();
@@ -104,7 +107,14 @@ async function route(request: Request, env: Env) {
   if (request.method === "POST" && !sameOrigin(request)) throw new Failure(403, "Please use this site's invitation page.");
   if (path.startsWith("/api/") && request.method === "POST") {
     const ip = request.headers.get("CF-Connecting-IP") || "local";
-    await limited(env, "ip:" + await digest(ip), 60, 3600);
+    const hash=await digest(ip);
+    const interaction=['/api/gift/quote','/api/gift/claim','/api/gift/mockup','/api/gift/mockup/lookup'].includes(path)||path.startsWith('/api/delivery-address/');
+    if(interaction){
+      // Verified app activity has its own network budget; it cannot exhaust login protection.
+      // Invalid/expired sessions still consume the original unauthenticated limit.
+      try{await authenticated(request,env);}catch(error){await limited(env,'ip:'+hash,60,3600);throw error;}
+      await limited(env,'activity-ip:'+hash,600,3600);
+    }else await limited(env,'ip:'+hash,60,3600);
   }
   if (path === "/api/open" && request.method === "POST") {
     const data = await body(request);

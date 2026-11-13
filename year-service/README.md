@@ -820,3 +820,9 @@ requests and32 retained private blob URLs; inactive image buffers are evicted an
 all URLs are revoked on teardown. Choosing a photo keeps that selection while
 background setup completes. Exact delivered-price checks still run at confirmation.
 Both Workers must remain `ORDER_MODE=simulation`; this adds no fulfillment adapter.
+
+Signed-in mug/address POST actions use a separate authenticated network budget
+(600/hour), after session validation, rather than consuming the60/hour login
+budget. Invalid sessions retain the login limit. Existing household/address and
+Printful estimate limits remain in force. Rate-limit responses include the
+remaining wait via Retry-After and a user-readable retry time.
