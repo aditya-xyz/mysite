@@ -221,3 +221,9 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-customizer-body>.pb-mug-preview{max-width:none}
 .pb-select-list button:disabled{opacity:.45;cursor:default}.pb-select-list button:disabled:hover{background:transparent}
 @media(max-width:700px){.pb-customizer-body{grid-template-columns:1fr;gap:12px}.pb-printful-mockup,.pb-live-preview .pb-mockup-wait{height:min(360px,75vw)}}
+
+.pb-order-review .pb-gift-price{margin:20px 0 0;padding:12px 16px;background:var(--surface);border-radius:8px}
+.pb-order-review .pb-gift-price>div{margin:0;align-items:center;gap:12px}
+.pb-gift-price dd{font-weight:600}.pb-gift-zero{font-size:20px;font-weight:700}
+.pb-mug-summary{margin-top:28px;display:grid;gap:8px}
+.pb-order-review .pb-mug-summary>p{margin:0}
