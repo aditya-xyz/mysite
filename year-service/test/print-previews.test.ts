@@ -46,3 +46,12 @@ test('failed background preparation stays quiet until checkout explicitly retrie
  cache.schedule(snapshot);t.mock.timers.tick(2000);assert.equal(calls,1,'Re-rendering does not repeatedly retry a failed background request');
  assert.deepEqual(await cache.load(snapshot,{retry:true}),pictures('retried'));assert.equal(calls,2);
 });
+
+test('front and inside placement share artwork bytes but never share the wrong proof',async t=>{
+ mockImages(t);const calls:string[]=[];
+ t.mock.method(globalThis,'fetch',async(_path:any,init:any)=>{const recipe=JSON.parse(init.body.get('recipe'));calls.push(recipe.frontDesign);return Response.json({status:'ready',pictures:pictures(recipe.frontDesign)});});
+ const cache=createPrintPreviews(),original=data(),personal={...original,recipe:{...original.recipe,mode:'personal',frontDesign:'personal'}},swapped={...personal,recipe:{...personal.recipe,frontDesign:'default'}};t.after(()=>cache.close());
+ assert.deepEqual(await cache.load(personal),pictures('personal'));assert.equal(cache.peek(swapped),null);
+ assert.deepEqual(await cache.load(swapped),pictures('default'));assert.deepEqual(cache.peek(personal),pictures('personal'));
+ await cache.load(personal);assert.deepEqual(calls,['personal','default'],'Swapping back reuses the original cached proof');
+});

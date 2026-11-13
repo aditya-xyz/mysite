@@ -15,7 +15,7 @@ export async function printAdminRoute(request:Request,env:PrintEnv,path:string,y
   return Response.json(await resetSimulatedOrder(env,'print',year,reset[1],await readBody()));
  }
  if(path==='/api/print-orders'&&request.method==='GET'){
-  const rows=await env.DB.prepare("SELECT o.id,o.invitation_id,o.status,o.recipient_name,o.note,o.default_note,o.address_json,o.created_at,o.allowance_reset_at,o.card_count,o.format,o.back_text,o.authors,o.handwrytten_preview_id,o.handwrytten_order_json FROM print_orders o WHERE o.year=?1 AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') ORDER BY o.created_at DESC LIMIT 200").bind(year).all();
+  const rows=await env.DB.prepare("SELECT o.id,o.invitation_id,o.status,o.recipient_name,o.note,o.default_note,o.address_json,o.created_at,o.allowance_reset_at,o.card_count,o.format,o.back_text,o.authors,o.handwrytten_preview_id,o.handwrytten_order_json,o.recipe_json FROM print_orders o WHERE o.year=?1 AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') ORDER BY o.created_at DESC LIMIT 200").bind(year).all();
   const counts=await env.DB.prepare("SELECT i.id AS invitation_id,i.print_order_count AS count,i.print_order_count AS used,o.id AS active_order_id,o.status FROM invites i LEFT JOIN print_orders o ON o.invitation_id=i.id AND o.year=i.edition_year AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') WHERE i.edition_year=?1").bind(year).all();
   return Response.json({orders:rows.results,counts:counts.results});
  }

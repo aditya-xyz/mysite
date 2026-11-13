@@ -33,7 +33,7 @@ export async function cleanPrintInvitations(draft:Draft,db:D1Database,year:numbe
 export const foldedPreviewNote='a little note is hiding here. i’d tell you what it says, but i’m very good at keeping things buried. 🐾';
 const guestFoldedPreview=(backText:string)=>({note:foldedPreviewNote,authors:'Pixel',backText});
 export const foldedBackText=(year:number)=>`pixelbook ’${String(year).slice(-2)}`;
-export interface PrintOrderProof {id:string;status:string;created_at:number;card_count:number;format?:string;back_text?:string|null;note?:string;authors?:string;handwrytten_preview_id?:string|null}
+export interface PrintOrderProof {id:string;status:string;created_at:number;card_count:number;format?:string;back_text?:string|null;note?:string;authors?:string;handwrytten_preview_id?:string|null;recipe_json?:string}
 export async function printContext(request:Request,env:PrintEnv,invite:InvitationAudience){
  const i=await env.DB.prepare('SELECT * FROM invites WHERE id=?1 AND revoked_at IS NULL AND expires_at>?2').bind(invite.id,now()).first<InvitationAudience&{version:number}>();
  if(!i)throw new PrintProblem(401,'This invitation is no longer available.');
@@ -42,7 +42,7 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  const published:Published|null=edition?.published_json?JSON.parse(edition.published_json):null;
  const photos=published?visiblePhotos(published,i.id,await invitationAudience(env.DB,i)).filter(p=>p.recipients.length):[];
  const defaults=edition?.is_active&&edition.allow_print_orders&&i.allow_print?await keepsakeDefault(env,i.edition_year):null;
- const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
+ const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
  const mode=simulatedOrders(request,env)?'local_mock':'disabled';
  let reason='';
  if(existing)reason='Your complimentary print has already been ordered.';
@@ -68,7 +68,7 @@ export async function readPrintArtwork(request:Request,env:PrintEnv,c:Awaited<Re
  if(!Number.isFinite(length)||length<=0||length>3*1024*1024)throw new PrintProblem(413,'Use a keepsake image under 3 MB.');
  const form=await request.formData(),artwork=form.get('artwork'),raw=form.get('recipe');
  if(!(artwork instanceof File)||artwork.type!=='image/jpeg'||typeof raw!=='string'||raw.length>5000)throw new PrintProblem(400,'Include the keepsake artwork and photo selection.');
- let recipe:{photoIds:string[];crops:unknown;frame:string;requestKey:string;confirmationKey:string;addressVersion:number;mode?:string;defaultRevision?:string;format?:string;previewId?:string};
+ let recipe:{photoIds:string[];crops:unknown;frame:string;requestKey:string;confirmationKey:string;addressVersion:number;mode?:string;defaultRevision?:string;format?:string;previewId?:string;frontDesign?:'personal'|'default'};
  try{recipe=JSON.parse(raw);}catch{throw new PrintProblem(400,'Check the print request.');}
  if(recipe?.format!=='folded')throw new PrintProblem(409,'Reopen your keepsake to preview the folded card.');
  const personalized=c.photos.length>=3;
@@ -79,17 +79,21 @@ export async function readPrintArtwork(request:Request,env:PrintEnv,c:Awaited<Re
  if(!['moss','classic','santa'].includes(recipe.frame)||!recipe.crops||typeof recipe.crops!=='object')throw new PrintProblem(400,'Check the frame and crops.');
  const crops=recipe.crops as Record<string,{x:number;y:number;zoom:number}>;
  if(personalized&&recipe.photoIds.some(id=>{const p=crops[id];return !p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||!Number.isFinite(p.zoom)||p.x<0||p.x>1||p.y<0||p.y>1||p.zoom<1||p.zoom>2.5;}))throw new PrintProblem(400,'Check the photo crops.');
+ if(recipe.frontDesign!==undefined&&!['personal','default'].includes(recipe.frontDesign))throw new PrintProblem(400,'Choose which keepsake goes on the front.');
+ recipe.frontDesign??=personalized?'personal':'default';
+ if(!personalized&&recipe.frontDesign!=='default')throw new PrintProblem(403,'This keepsake only has the default design.');
  const defaultFile=await env.MEDIA.get(c.defaults!.frames[recipe.frame]);if(!defaultFile)throw new PrintProblem(409,'The default keepsake is unavailable.');
  const defaultBytes=new Uint8Array(await defaultFile.arrayBuffer());
  const bytes=personalized?new Uint8Array(await artwork.arrayBuffer()):defaultBytes,dimensions=imageDimensions(bytes);
  if(!dimensions||dimensions.width!==1200||dimensions.height!==1500)throw new PrintProblem(400,'Use the 1200 by 1500 keepsake image.');
- return {recipe,personalized,bytes,defaultBytes};
+ const frontBytes=recipe.frontDesign==='default'?defaultBytes:bytes,insideBytes=personalized?(recipe.frontDesign==='default'?bytes:defaultBytes):null;
+ return {recipe,personalized,bytes,defaultBytes,frontBytes,insideBytes};
  }
 export async function createPrintOrder(request:Request,env:PrintEnv,invite:InvitationAudience){
  const c=await printContext(request,env,invite);
  if(c.existing)return {order:printOrderView(c.existing),reused:true};
  if(c.reason)throw new PrintProblem(409,c.reason);
- const {recipe,personalized,bytes,defaultBytes}=await readPrintArtwork(request,env,c);
+ const {recipe,personalized,bytes,frontBytes,insideBytes}=await readPrintArtwork(request,env,c);
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(recipe.requestKey)||recipe.confirmationKey!==c.confirmationKey||recipe.addressVersion!==c.person?.version)throw new PrintProblem(409,'The address or scrapbook changed. Reopen the order confirmation.');
  const proof=env.HANDWRYTTEN_PREVIEWS_ENABLED==='true'?await matchingHandwryttenPreview(env,c,recipe,bytes):null;
  const id='print-'+token().slice(0,24),key=`${c.i.edition_year}/print-orders/${id}/front.jpg`,defaultKey=personalized?`${c.i.edition_year}/print-orders/${id}/default.jpg`:key;
@@ -105,8 +109,9 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  .bind(id,recipe.requestKey,JSON.stringify({...recipe,layout:'a2-portrait-v1'}),key,c.i.id,c.i.version,now(),c.edition!.published_version,c.person!.id,c.person!.version,defaultKey,c.defaults!.revision,personalized?2:1,foldedBackText(c.i.edition_year),proof?.id||null).first();
  if(!inserted){const fresh=await printStatus(request,env,invite);if(fresh.order)return {order:fresh.order,reused:true};throw new PrintProblem(409,'The print settings changed, or this request was already attempted. Reopen the order confirmation.');}
  try{
-  await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:'image/jpeg'}});
-  if(personalized)await env.MEDIA.put(defaultKey,defaultBytes,{httpMetadata:{contentType:'image/jpeg'}});
+  await env.MEDIA.put(key,frontBytes,{httpMetadata:{contentType:'image/jpeg'}});
+  // Legacy column/key name: folded orders store the chosen inside-left image here.
+  if(insideBytes)await env.MEDIA.put(defaultKey,insideBytes,{httpMetadata:{contentType:'image/jpeg'}});
   const snapshot=await env.DB.prepare('SELECT note,authors,recipient_name,address_json FROM print_orders WHERE id=?1').bind(id).first<{note:string;authors:string;recipient_name:string;address_json:string}>();
   const address=JSON.parse(snapshot!.address_json) as MailingAddress,name=snapshot!.recipient_name.trim().split(/\s+/);
   const payload={card_id:proof?.card_id??null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:'United States',message:snapshot!.note,wishes:'With love,\n'+snapshot!.authors}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
@@ -118,11 +123,13 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
   await env.DB.prepare("UPDATE print_orders SET status='failed',updated_at=unixepoch() WHERE id=?1 AND status='preparing'").bind(id).run();
   await env.MEDIA.delete([key,defaultKey]).catch(()=>{});throw new PrintProblem(503,'The local order could not be saved. Retry with a new request.');
  }
- return {order:printOrderView({id,status:'simulated',created_at:now(),card_count:personalized?2:1,handwrytten_preview_id:proof?.id,format:'folded',back_text:foldedBackText(c.i.edition_year),note:(personalized?c.published!.printNote:c.published!.defaultPrintNote?.trim()||c.published!.printNote)||'',authors:c.published!.authors}),reused:false};
+ return {order:printOrderView({id,status:'simulated',created_at:now(),card_count:personalized?2:1,recipe_json:JSON.stringify(recipe),handwrytten_preview_id:proof?.id,format:'folded',back_text:foldedBackText(c.i.edition_year),note:(personalized?c.published!.printNote:c.published!.defaultPrintNote?.trim()||c.published!.printNote)||'',authors:c.published!.authors}),reused:false};
 }
 
 export function printOrderView(order:PrintOrderProof){
- return {id:order.id,status:order.status,created_at:order.created_at,cardCount:order.format==='folded'?1:order.card_count,format:order.format||'legacy',personalized:order.card_count===2,...(order.handwrytten_preview_id?{pictures:handwryttenPictureView(order.handwrytten_preview_id)}:{}),...(order.format==='folded'?{preview:guestFoldedPreview(order.back_text||''),defaultSrc:order.card_count===2?`/api/print/orders/${order.id}/default-artwork`:null}:{}),artworkSrc:`/api/print/orders/${order.id}/artwork`};
+ const recipe=order.recipe_json?JSON.parse(order.recipe_json):{};
+ const frontDesign=order.card_count===2&&recipe.frontDesign!=='default'?'personal':'default';
+ return {id:order.id,status:order.status,created_at:order.created_at,cardCount:order.format==='folded'?1:order.card_count,format:order.format||'legacy',personalized:order.card_count===2,frontDesign,...(order.handwrytten_preview_id?{pictures:handwryttenPictureView(order.handwrytten_preview_id)}:{}),...(order.format==='folded'?{preview:guestFoldedPreview(order.back_text||''),defaultSrc:order.card_count===2?`/api/print/orders/${order.id}/default-artwork`:null}:{}),artworkSrc:`/api/print/orders/${order.id}/artwork`};
 }
 export async function printOrderArtwork(env:PrintEnv,invite:InvitationAudience,id:string,inside=false){
  const order=await env.DB.prepare("SELECT artwork_key,default_artwork_key FROM print_orders WHERE id=?1 AND invitation_id=?2 AND year=?3 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')").bind(id,invite.id,invite.edition_year).first<{artwork_key:string;default_artwork_key:string|null}>();

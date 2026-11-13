@@ -250,6 +250,44 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    hwBadURL=false;const retry=await order(),r=JSON.parse(retry.get('recipe') as string);r.frame='classic';retry.set('recipe',JSON.stringify(r));
    assert.equal((await proofGuest('print/previews',retry)).status,200);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length,creates+1,'Render retries never create another design');
   });
+  await t.test('swapped picture placement regenerates the proof and is frozen with the simulated order',async()=>{
+   await reset();
+   const original=await proofGuest('print/previews',await order());assert.equal(original.status,200);const originalProof=(await original.json() as any).pictures;
+   const swapForm=await order(),swapRecipe=JSON.parse(swapForm.get('recipe') as string);swapRecipe.frontDesign='default';swapForm.set('recipe',JSON.stringify(swapRecipe));
+   const flipped=await proofGuest('print/previews',swapForm);assert.equal(flipped.status,200,await flipped.clone().text());const flippedProof=(await flipped.json() as any).pictures;
+   assert.notEqual(flippedProof.id,originalProof.id,'Different placement must have a different immutable vendor design');
+   const cover=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='cover').at(-1)!;
+   const inside=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='logo').at(-1)!;
+   assert.deepEqual(cover.body.bytes,[...defaultJPEG,4],'The default artwork is physically uploaded as the cover');assert.deepEqual(inside.body.bytes,[...defaultJPEG],'The personal artwork is uploaded inside left');
+   const request=await order(),recipe=JSON.parse(request.get('recipe') as string);recipe.frontDesign='default';recipe.previewId=originalProof.id;request.set('recipe',JSON.stringify(recipe));
+   assert.equal((await proofGuest('print/orders',request)).status,409,'An unswapped proof cannot confirm a swapped order');
+   const correct=await order(),r=JSON.parse(correct.get('recipe') as string);r.frontDesign='default';r.previewId=flippedProof.id;correct.set('recipe',JSON.stringify(r));
+   const placed=await proofGuest('print/orders',correct);assert.equal(placed.status,200,await placed.clone().text());const receipt=(await placed.json() as any).order;
+   assert.equal(receipt.frontDesign,'default');assert.equal(receipt.personalized,true);assert.equal(receipt.cardCount,1);assert.equal(receipt.pictures.id,flippedProof.id);assert.equal(receipt.status,'simulated');
+   const row=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(JSON.parse(row.recipe_json).frontDesign,'default');
+   assert.deepEqual(new Uint8Array(await (await bucket.get(row.artwork_key))!.arrayBuffer()),new Uint8Array([...defaultJPEG,4]));
+   assert.deepEqual(new Uint8Array(await (await bucket.get(row.default_artwork_key))!.arrayBuffer()),defaultJPEG);
+   assert.deepEqual(new Uint8Array(await (await proofGuest(receipt.artworkSrc.slice(5))).arrayBuffer()),new Uint8Array([...defaultJPEG,4]));
+   const payload=JSON.parse(row.handwrytten_order_json),vendor=await db.prepare('SELECT card_id FROM handwrytten_previews WHERE id=?1').bind(flippedProof.id).first<any>();
+   assert.equal(payload.card_id,vendor.card_id);assert.equal(payload.addresses[0].message,published.printNote,'Swapping artwork does not switch the personalized note');assert.equal(payload.font_size,13);
+   await db.prepare("UPDATE editions SET published_json=json_set(published_json,'$.printNote','Changed later') WHERE year=2026").run();
+   assert.equal((await status()).order.frontDesign,'default');
+   const history=(await (await admin('editions/2026/print-orders')).json() as any).orders[0];assert.equal(JSON.parse(history.recipe_json).frontDesign,'default');assert.equal(history.note,published.printNote);
+  });
+  await t.test('default-only guests cannot request a personal cover and invalid placement is rejected',async()=>{
+   await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,photos:[]})).run();
+   const before=vendorCalls.length,form=await order([]),recipe=JSON.parse(form.get('recipe') as string);recipe.frontDesign='personal';form.set('recipe',JSON.stringify(recipe));
+   assert.equal((await proofGuest('print/previews',form)).status,403);assert.equal(vendorCalls.length,before);
+   const invalid=await order([]),bad=JSON.parse(invalid.get('recipe') as string);bad.frontDesign='inside-right';invalid.set('recipe',JSON.stringify(bad));assert.equal((await guest('print/orders',invalid)).status,400);
+   const invalidOrder=await order([]),wrong=JSON.parse(invalidOrder.get('recipe') as string);wrong.frontDesign='personal';invalidOrder.set('recipe',JSON.stringify(wrong));assert.equal((await guest('print/orders',invalidOrder)).status,403);
+   assert.equal((await db.prepare('SELECT count(*) n FROM print_orders').first<any>()).n,0);
+  });
+  await t.test('local simulated orders also preserve swapped surfaces and legacy orders keep their original placement',async()=>{
+   await reset();const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.frontDesign='default';form.set('recipe',JSON.stringify(recipe));
+   const response=await guest('print/orders',form);assert.equal(response.status,200);const placed=(await response.json() as any).order;assert.equal(placed.frontDesign,'default');
+   const row=await db.prepare('SELECT * FROM print_orders').first<any>();assert.deepEqual(new Uint8Array(await (await bucket.get(row.artwork_key))!.arrayBuffer()),new Uint8Array([...defaultJPEG,4]));
+   assert.equal(printOrderView({...row,recipe_json:'{}'}).frontDesign,'personal');assert.equal(printOrderView({...row,card_count:1,recipe_json:'{}'}).frontDesign,'default');
+  });
   await t.test('simulated fulfillment and address verification cannot run over production HTTPS',async()=>{
    await reset();await db.prepare('UPDATE editions SET allow_print_orders=0 WHERE year=2026').run();
    const response=await mf.dispatchFetch('https://admin.test/api/editions/2026/print-settings',{method:'POST',headers:{Origin:'https://admin.test','Content-Type':'application/json','Cf-Access-Jwt-Assertion':jwt},body:JSON.stringify({allowPrintOrders:true})});

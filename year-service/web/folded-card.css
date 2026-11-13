@@ -33,3 +33,12 @@
 .fc-vendor-inside img{width:200%;height:auto;max-width:none;flex:0 0 200%}
 
 .fc-vendor-inside+.fc-note{background:#fff}
+
+.fc-preview .fc-views .fc-swap{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;border-color:currentColor;background:var(--surface,#e0e6d7);white-space:nowrap}
+.fc-swap svg{flex:none}
+@media(max-width:600px){
+ .fc-preview:has(.fc-swap) .fc-views{gap:6px}
+ .fc-preview:has(.fc-swap) [data-card-view]{padding-inline:12px}
+ .fc-preview .fc-views .fc-swap{width:44px;flex:0 0 44px;padding:10px}
+ .fc-swap span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+}

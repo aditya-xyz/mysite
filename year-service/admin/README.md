@@ -968,11 +968,21 @@ and use the default note inside right, falling back to the personalized note.
 There is one note per folded card. Front/Inside/Back previews are available in
 checkout, admin order history, and the default-only view-only receipt.
 
+Recipients with both designs can use **Swap pictures** in checkout to exchange
+the front and inside-left artwork. Each placement gets its own matching vendor
+proof; confirmation waits for that proof. `recipe_json.frontDesign` freezes the
+choice (`personal` or `default`), so no schema migration is needed. Historical
+orders without this field retain their original placement. The legacy
+`default_artwork_key` column holds the inside-left image for folded orders, even
+when that image is personalized. The note still follows recipient eligibility,
+independently of picture placement. Default-only recipients cannot swap.
+The personal editor omits the extra default thumbnail; checkout shows both designs.
+
 The database `card_count` retains its historical artwork-count meaning (1 default,
 2 personalized); API `cardCount` is 1 for folded orders. The `format` column keeps
 historical flat-card orders as `legacy`. Notes, authors, back signature, and artwork
-are frozen per order. Preview typography is illustrative; no vendor proof or
-fulfillment is requested. `ORDER_MODE=simulation` stays enabled in both Workers.
+are frozen per order. Preview typography is illustrative; fulfillment is never
+requested. `ORDER_MODE=simulation` stays enabled in both Workers.
 
 Guest previews and receipts use Pixel’s playful placeholder message; the real
 printed note is not returned by guest print APIs. Admin proofs retain the actual
@@ -988,7 +998,7 @@ both server Workers with `node scripts/provision.mjs handwrytten-secret`.
 is enabled. The API allowlist only adds card details and handwriting-font reads.
 
 Checkout prepares an A2 portrait design in Handwrytten Test Mode, with the exact
-front artwork, optional default artwork inside left, blank writing space inside
+front artwork, optional second artwork inside left, blank writing space inside
 right, and the 2026 Pixelbook logo on the back. The back asset is edition-specific;
 prepare a new brand asset before enabling this for another year. Design names
 contain an opaque digest, never recipient names. No real note or address is sent
@@ -996,7 +1006,7 @@ for preview generation. Browser credentials remain server-only.
 
 The app copies vendor front/inside/back proofs to private R2 and serves them via
 household-authenticated URLs. Cache keys include invitation, year, default revision,
-frame, selection, crops, artwork bytes and layout version. Confirmation requires a
+frame, selection, crops, artwork bytes, picture placement and layout version. Confirmation requires a
 ready matching proof; loading failures offer retry and never silently substitute
 local artwork. Render retries reuse the saved vendor card ID. The note remains a
 large local placeholder, independently of the API picture-page geometry.
@@ -1016,8 +1026,8 @@ blinking paw fills the picture-preview area while waiting, with a static paw for
 reduced-motion preferences. Preview requests are limited to 60 per household/hour.
 
 The folded cover uses 90% sizing to keep the full 4:5 artwork and all four candy-cane
-edges inside Handwrytten's A2 cover area. Preview cache version v2 invalidates the
-old cropped fit for new designs. Saved orders retain their original immutable proof.
+edges inside Handwrytten's A2 cover area. Preview cache version v3 binds the chosen
+picture placement. Saved orders retain their original immutable proof.
 
 Default keepsake artwork uses the greeting and signature in
 `scripts/keepsake-default-copy.mjs` (Angela & Aditya). Re-render all three private

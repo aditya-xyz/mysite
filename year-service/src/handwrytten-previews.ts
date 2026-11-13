@@ -4,12 +4,12 @@ import {prepareHandwryttenFoldedCard} from './handwrytten.ts';
 import {handwryttenBrandPNG,handwryttenBrandYear} from './handwrytten-brand.ts';
 import {digest,now} from './security.ts';
 import type {InvitationAudience} from './invitations.ts';
-export const handwryttenPreviewVersion='handwrytten-folded-v2-cover-fit90';
+export const handwryttenPreviewVersion='handwrytten-folded-v3-placement';
 interface Proof {id:string;invitation_id:string;year:number;status:string;card_id:number|null;front_key:string|null;inside_key:string|null;back_key:string|null;updated_at:number}
 export function handwryttenPictureView(id:string){return {provider:'handwrytten',id,frontSrc:`/api/print/previews/${id}/front`,insideSrc:`/api/print/previews/${id}/inside`,backSrc:`/api/print/previews/${id}/back`};}
 async function proofId(c:Awaited<ReturnType<typeof printContext>>,recipe:any,bytes:Uint8Array){
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer)),b=>b.toString(16).padStart(2,'0')).join('');
- return digest(JSON.stringify([handwryttenPreviewVersion,c.i.id,c.i.edition_year,c.defaults!.revision,recipe.mode,recipe.frame,recipe.photoIds,recipe.photoIds.map((id:string)=>recipe.crops[id]),hash]));
+ return digest(JSON.stringify([handwryttenPreviewVersion,c.i.id,c.i.edition_year,c.defaults!.revision,recipe.mode,recipe.frontDesign,recipe.frame,recipe.photoIds,recipe.photoIds.map((id:string)=>recipe.crops[id]),hash]));
 }
 export async function matchingHandwryttenPreview(env:PrintEnv,c:Awaited<ReturnType<typeof printContext>>,recipe:any,bytes:Uint8Array){
  const id=await proofId(c,recipe,bytes);
@@ -21,7 +21,7 @@ export async function createHandwryttenPreview(request:Request,env:PrintEnv,invi
  const c=await printContext(request,env,invite);
  if(c.reason&&!c.needsAddress)throw new PrintProblem(409,c.reason);
  if(c.i.edition_year!==handwryttenBrandYear)throw new PrintProblem(503,'The back signature for this edition is being prepared.');
- const {recipe,personalized,bytes,defaultBytes}=await readPrintArtwork(request,env,c),id=await proofId(c,recipe,bytes);
+ const {recipe,bytes,frontBytes,insideBytes}=await readPrintArtwork(request,env,c),id=await proofId(c,recipe,bytes);
  const previous=await env.DB.prepare('SELECT * FROM handwrytten_previews WHERE id=?1').bind(id).first<Proof>();
  if(previous?.status==='ready')return {status:'ready',pictures:handwryttenPictureView(id)};
  const row=await env.DB.prepare(`INSERT INTO handwrytten_previews(id,invitation_id,year,status) VALUES(?1,?2,?3,'preparing')
@@ -31,8 +31,8 @@ export async function createHandwryttenPreview(request:Request,env:PrintEnv,invi
   const asset=await env.DB.prepare('SELECT image_id FROM handwrytten_preview_assets WHERE id=?1').bind('back-'+handwryttenBrandYear+'-v1').first<{image_id:number}>();
   const back=Uint8Array.from(atob(handwryttenBrandPNG),c=>c.charCodeAt(0));
   const prepared=await prepareHandwryttenFoldedCard(env,{
-   name:'Pixelbook folded '+id.slice(0,16),front:new File([bytes],'front.jpg',{type:'image/jpeg'}),
-   ...(personalized?{inside:new File([defaultBytes],'inside-left.jpg',{type:'image/jpeg'})}:{}),
+   name:'Pixelbook folded '+id.slice(0,16),front:new File([frontBytes],'front.jpg',{type:'image/jpeg'}),
+   ...(insideBytes?{inside:new File([insideBytes],'inside-left.jpg',{type:'image/jpeg'})}:{}),
    back:new File([back],'pixelbook.png',{type:'image/png'}),backId:asset?.image_id,cardId:row.card_id||undefined,
    onBack:async imageId=>{await env.DB.prepare('INSERT INTO handwrytten_preview_assets(id,image_id) VALUES(?1,?2) ON CONFLICT(id) DO NOTHING').bind('back-'+handwryttenBrandYear+'-v1',imageId).run();},
    onCard:async cardId=>{await env.DB.prepare('UPDATE handwrytten_previews SET card_id=?1 WHERE id=?2').bind(cardId,id).run();}
