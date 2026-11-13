@@ -74,6 +74,25 @@ test('Google address verification requires admin review, respects quotas, and ne
    const saved=await request('contacts/contact/address',{version:p.version,verify:false,address:input});assert.equal(saved.status,200);const changed=(await saved.json() as any).person;assert.equal(changed.address_verified,0);assert.equal(changed.address_verified_until,null);assert.equal(changed.address_verification_key,null);assert.equal(calls,1);
    assert.equal((await request('contacts/contact/address',{version:changed.version,verify:true,address:input})).status,400);
   });
+  await t.test('clearing an address requires authorization and current version, and removes verification and pending approvals',async()=>{
+   await reset();const suggestion=await (await verify()).json() as any;const saved=(await (await approve(suggestion)).json() as any).person;
+   await db.prepare("INSERT INTO address_verification_challenges(id,person_id,person_version,address_json,provider,created_at,expires_at) VALUES('pending','contact',?1,?2,'google',unixepoch(),unixepoch()+900)").bind(saved.version,JSON.stringify(expected)).run();
+   const clear=(version=saved.version,options={})=>request('contacts/contact/address/clear',{version},options);
+   assert.equal((await clear(saved.version,{auth:false})).status,401);
+   assert.equal((await clear(saved.version,{origin:'https://wrong.test'})).status,403);
+   assert.equal((await clear(saved.version-1)).status,409);
+   assert.equal((await person()).mailing_address,saved.mailing_address);
+   const response=await clear();assert.equal(response.status,200);const cleared=(await response.json() as any).person;
+   assert.equal(cleared.mailing_address,null);assert.equal(cleared.address_verified,0);
+   for(const key of ['address_verifier','address_verified_at','address_verified_until','address_verification_key'])assert.equal(cleared[key],null);
+   assert.equal(cleared.version,saved.version+1);assert.equal(cleared.name,saved.name);assert.equal(cleared.phone,saved.phone);
+   assert.equal((await db.prepare('SELECT count(*) n FROM address_verification_challenges').first<any>()).n,0);
+   assert.equal((await db.prepare("SELECT version FROM people WHERE id='other'").first<any>()).version,1);
+   assert.equal(calls,1,'Clearing must not contact Google');
+   assert.equal((await request('contacts/contact/address',{version:cleared.version,verify:true,verificationId:'pending'})).status,409);
+   assert.equal((await clear()).status,409);
+   assert.equal((await request('contacts/contact/address/clear',{version:cleared.version},{host:'disabled.test'})).status,200,'Clearing works without a configured provider');
+  });
   await t.test('missing unit and incomplete or unconfirmed results cannot be approved',async()=>{
    for(const mutate of [(r:any)=>r.result.uspsData.dpvConfirmation='D',(r:any)=>r.result.uspsData.dpvConfirmation='S',(r:any)=>r.result.verdict.addressComplete=false,(r:any)=>r.result.verdict.hasUnconfirmedComponents=true,(r:any)=>r.result.uspsData.dpvVacant='Y',(r:any)=>r.result.address.postalAddress.regionCode='CA']){
     await reset();reply=valid();mutate(reply);assert.equal((await verify()).status,422);assert.equal((await person()).address_verified,0);assert.equal((await person()).mailing_address,null);assert.equal((await db.prepare('SELECT count(*) n FROM address_verification_challenges').first<any>()).n,0);

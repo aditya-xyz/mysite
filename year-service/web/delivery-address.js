@@ -10,7 +10,7 @@ export function createDeliveryAddress(changed=()=>{}){
  async function run(action){if(busy)return;busy=true;error='';notify();controller?.abort();controller=new AbortController();try{await action(controller.signal);}catch(e){if(e.name!=='AbortError')error=e.message;}finally{busy=false;notify();}}
  async function load(){await run(async signal=>{state=await request('',undefined,signal);preview=null;fields={};});}
  function addressMarkup(address,name){return `<address>${esc(name)}<br>${esc(address.line1)}${address.line2?'<br>'+esc(address.line2):''}<br>${esc(address.city)}, ${esc(address.state)} ${esc(address.postalCode)}<br>United States</address>`;}
- function summaryMarkup({showNote=true}={}){return state?.verified?`<section class="delivery-panel" aria-label="Shipping address"><h3>Sending to</h3>${addressMarkup(state.address,state.recipientName)}${showNote?'<p class="delivery-note">Contact dad if this address needs to change.</p>':''}</section>`:'';}
+ function summaryMarkup({showNote=true}={}){return state?.verified?`<section class="delivery-panel" aria-label="Shipping address"><h3>Sending to</h3>${addressMarkup(state.address,state.recipientName)}${showNote?'<p class="delivery-note">Contact mom or dad if this address needs to change.</p>':''}</section>`:'';}
  function markup(){
   if(!state)return `<p class="delivery-note">${error?esc(error):'Checking your saved address…'}</p><button type="button" class="text-button" data-address-reload>Try again</button>`;
   if(state.verified)return summaryMarkup();

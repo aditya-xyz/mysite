@@ -13,7 +13,7 @@ function shippingReserve(productId:number,size:string){const rate=auditedShippin
 export const printfulEnabled=(env:PrintEnv)=>env.PRINTFUL_ENABLED==='true';
 interface Variant {id:number;size:string;color:string;price:string;in_stock:boolean;availability_regions?:Record<string,string>;color_code?:string|null}
 export interface MugVariant {id:number;size:string;color:string;colorCode:string;baseCents:number;shippingReserveCents:number;productCeilingCents:number;printWidth?:number;printHeight?:number}
-export interface MugStyle {id:string;label:string;productId:number;sizes:string[];colors:string[];variants:MugVariant[];mockupGroup?:string;careNote?:string}
+export interface MugStyle {id:string;label:string;productId:number;sizes:string[];colors:string[];variants:MugVariant[];mockupGroup?:string;mockupOptions?:string[];careNote?:string}
 export interface MugQuote {provider:'printful';currency:'USD';variantId:number;productId:number;subtotalCents:number;shippingCents:number;taxCents:number;otherCents:number;totalCents:number;maxCents:number;withinBudget:boolean;estimatedAt:number}
 const aliases:Record<number,string>={19:'classic',403:'color-inside',837:'latte',300:'black-glossy',407:'enamel'};
 interface Product {id:number;type:string;title:string}
@@ -47,7 +47,7 @@ export async function printfulCatalog(env:PrintEnv,refresh=false){
  if(!cached||cached.credential!==env.PRINTFUL_API_TOKEN||cached.until<Date.now()){
   loading??=(async()=>{
    // Private persistent cache avoids refetching every product on cold isolates.
-   const cacheKey=`providers/printful/${env.PRINTFUL_STORE_ID||'store'}/catalog-v4.json`;
+   const cacheKey=`providers/printful/${env.PRINTFUL_STORE_ID||'store'}/catalog-v5.json`;
    const stored=await env.MEDIA?.get(cacheKey);
    if(stored&&!refresh){const value=await stored.json<{until:number;styles:MugStyle[]}>();if(value.until>Date.now())return value.styles;}
    const products=await printfulApi(env,'/products') as Product[];
@@ -56,8 +56,9 @@ export async function printfulCatalog(env:PrintEnv,refresh=false){
    const styles:MugStyle[]=[];
    for(const item of collection){
     const result=await style(env,item);if(!result.variants.length)continue;
-    const files=await printfulApi(env,`/mockup-generator/printfiles/${item.productId}`) as {printfiles?:{printfile_id:number;width:number;height:number}[];variant_printfiles?:{variant_id:number;placements:{default:number}}[];option_groups?:string[]};
+    const files=await printfulApi(env,`/mockup-generator/printfiles/${item.productId}`) as {printfiles?:{printfile_id:number;width:number;height:number}[];variant_printfiles?:{variant_id:number;placements:{default:number}}[];option_groups?:string[];options?:string[]};
     result.mockupGroup=['Default','Flat'].find(g=>files.option_groups?.includes(g));
+    result.mockupOptions=files.options?.filter(option=>/^(front|right|handle on right)$/i.test(option))||['Front'];
     for(const variant of result.variants){const mapping=files.variant_printfiles?.find(v=>v.variant_id===variant.id);const file=files.printfiles?.find(f=>f.printfile_id===mapping?.placements.default);if(file&&file.width>0&&file.height>0){variant.printWidth=file.width;variant.printHeight=file.height;}}
     styles.push(result);
    }

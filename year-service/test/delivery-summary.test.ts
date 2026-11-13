@@ -7,8 +7,8 @@ test('review summaries can omit repeated contact instructions while the address 
  globalThis.fetch=async()=>Response.json({verified:true,version:1,recipientName:'Example Friend',address:{line1:'123 Example Lane',city:'Portland',state:'OR',postalCode:'97201',country:'US'}});
  try{
   const delivery=createDeliveryAddress();await delivery.load();
-  assert.match(delivery.markup(),/Contact dad/);
-  const review=delivery.summaryMarkup({showNote:false});assert.match(review,/Sending to/);assert.match(review,/Example Friend/);assert.match(review,/123 Example Lane/);assert.doesNotMatch(review,/Contact dad/);
+  assert.match(delivery.markup(),/Contact mom or dad/);
+  const review=delivery.summaryMarkup({showNote:false});assert.match(review,/Sending to/);assert.match(review,/Example Friend/);assert.match(review,/123 Example Lane/);assert.doesNotMatch(review,/Contact mom or dad/);
   delivery.destroy();
  }finally{globalThis.fetch=original;}
 });

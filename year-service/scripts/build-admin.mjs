@@ -8,3 +8,5 @@ await copyFile('web/fonts/caveat-400.ttf','admin/web/fonts/caveat-400.ttf');
 await copyFile('web/fonts/Caveat-OFL.txt','admin/web/fonts/Caveat-OFL.txt');
 await copyFile('web/fonts/asap-variable.woff2','admin/web/fonts/asap-variable.woff2');
 await copyFile('web/fonts/Asap-OFL.txt','admin/web/fonts/Asap-OFL.txt');
+
+await copyFile('web/folded-card.css','admin/web/folded-card.css');

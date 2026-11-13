@@ -928,3 +928,93 @@ The approved key is an encrypted admin Worker secret, installed with
 `node scripts/provision.mjs handwrytten-secret`; never put it into browser assets.
 Only diagnostics and test card-design preparation are implemented. Guest orders
 remain local simulations with no Handwrytten submission or payment requests.
+
+## Address removal and separate keepsake notes
+
+People > Edit address now offers Delete address with confirmation. It clears the
+saved address, all verification metadata and pending address approvals using the
+person's current version. Guest delivery requires a new verified address; saved
+order shipping snapshots and permissions are retained.
+
+Story has separate Personalized keepsake note and Default keepsake note fields,
+each limited to 350 characters and 10 line breaks. A blank default note reuses
+the personalized note. Save and publish applies changes to future orders only.
+Migration `0024_default_keepsake_note.sql` must be applied before deploying either
+Worker: new orders freeze both notes and history displays the fixed card's note
+separately for two-card orders. Existing history falls back to its original note.
+Emoji text is retained and rendered by the browser in previews; physical vendor
+rendering remains unverified because guest fulfillment is still simulated.
+
+Guest keepsakes start with Candy cane selected. Default-only guests can order the
+gift without Save/Share actions; personalized keepsakes retain digital export.
+
+## Saved mug angles
+
+Migration `0025_mug_preview_views.sql` tags existing saved images as `front` and
+requests a library sync. The queue reuses source artwork and backfills
+`handle-right` images without rewriting existing front image IDs or order proofs.
+Saved preview counts now include both views. Guests start with Handle on right
+when it is ready and can switch to Front; front-only combinations remain usable
+while backfill runs. Both views depict the same existing print placement.
+
+## Folded keepsakes
+
+Apply `0026_folded_cards.sql` before deploying either Worker. New simulated orders
+use one A2 portrait folded card (closed 4.25 × 5.5 inches): personalized artwork on
+the front, the matching default artwork inside left, the personalized note inside
+right, and a small `pixelbook ’26` signature on the back (year follows the edition).
+Default-only cards use the default artwork on the front, leave inside left blank,
+and use the default note inside right, falling back to the personalized note.
+There is one note per folded card. Front/Inside/Back previews are available in
+checkout, admin order history, and the default-only view-only receipt.
+
+The database `card_count` retains its historical artwork-count meaning (1 default,
+2 personalized); API `cardCount` is 1 for folded orders. The `format` column keeps
+historical flat-card orders as `legacy`. Notes, authors, back signature, and artwork
+are frozen per order. Preview typography is illustrative; no vendor proof or
+fulfillment is requested. `ORDER_MODE=simulation` stays enabled in both Workers.
+
+Guest previews and receipts use Pixel’s playful placeholder message; the real
+printed note is not returned by guest print APIs. Admin proofs retain the actual
+frozen note for future fulfillment. Compact mobile checkout omits the layout
+paragraph and view caption and scales the card to the available viewport height.
+
+## Handwrytten picture proofs and simulated print payloads
+
+Apply `0027_handwrytten_previews.sql` before deploying either Worker. Enable
+`HANDWRYTTEN_PREVIEWS_ENABLED=true` and provision the existing API credential to
+both server Workers with `node scripts/provision.mjs handwrytten-secret`.
+`ORDER_MODE=simulation` remains required; no vendor order/basket/payment endpoint
+is enabled. The API allowlist only adds card details and handwriting-font reads.
+
+Checkout prepares an A2 portrait design in Handwrytten Test Mode, with the exact
+front artwork, optional default artwork inside left, blank writing space inside
+right, and the 2026 Pixelbook logo on the back. The back asset is edition-specific;
+prepare a new brand asset before enabling this for another year. Design names
+contain an opaque digest, never recipient names. No real note or address is sent
+for preview generation. Browser credentials remain server-only.
+
+The app copies vendor front/inside/back proofs to private R2 and serves them via
+household-authenticated URLs. Cache keys include invitation, year, default revision,
+frame, selection, crops, artwork bytes and layout version. Confirmation requires a
+ready matching proof; loading failures offer retry and never silently substitute
+local artwork. Render retries reuse the saved vendor card ID. The note remains a
+large local placeholder, independently of the API picture-page geometry.
+
+New simulated orders freeze a separate `handwrytten_order_json` using the ready
+card ID, real published note, authors/signoff, verified recipient address and
+`hwDavid` (Casual David), size 13, automatic fitting. No UI preview font or message
+is used. This payload is stored only; it is never transmitted to Handwrytten. It
+uses the account default return address when real submission is implemented.
+Historical orders retain their original artwork and proof format.
+
+Guest editors now start proof preparation after one second without a finished
+artwork change. Checkout shares the same pending request or immediately reuses its
+decoded images. Crop gestures, unfinished photo selection and editor cleanup cancel
+scheduled work; late results are kept separate by exact file/recipe snapshot. A
+blinking paw fills the picture-preview area while waiting, with a static paw for
+reduced-motion preferences. Preview requests are limited to 60 per household/hour.
+
+The folded cover uses 90% sizing to keep the full 4:5 artwork and all four candy-cane
+edges inside Handwrytten's A2 cover area. Preview cache version v2 invalidates the
+old cropped fit for new designs. Saved orders retain their original immutable proof.

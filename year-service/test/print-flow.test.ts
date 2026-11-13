@@ -9,7 +9,7 @@ test('keepsake review opens from preloaded data but rechecks permissions before 
  globalThis.fetch=async(input:any)=>{const path=String(input);calls.push(path);return Response.json(path==='/api/print/status'?{eligible:allowed,mode:'simulation',contentVersion:1,addressVersion:1,confirmationKey:'test'}:address);};
  Object.defineProperty(globalThis,'document',{configurable:true,value:{body:{append(node:any){node.isConnected=true;}},createElement(){
   const nodes=new Map(),events=new Map();
-  sheet={open:false,isConnected:false,innerHTML:'',setAttribute(){},querySelector(selector:string){if(!nodes.has(selector))nodes.set(selector,{innerHTML:'',textContent:'',disabled:false,focus(){},querySelector(){return null;}});return nodes.get(selector);},addEventListener(name:string,handler:any){events.set(name,handler);},showModal(){this.open=true;},close(){this.open=false;events.get('close')?.();},remove(){this.isConnected=false;}};return sheet;
+  sheet={open:false,isConnected:false,innerHTML:'',querySelectorAll(){return [];},setAttribute(){},querySelector(selector:string){if(!nodes.has(selector))nodes.set(selector,{innerHTML:'',textContent:'',disabled:false,focus(){},querySelector(){return null;}});return nodes.get(selector);},addEventListener(name:string,handler:any){events.set(name,handler);},showModal(){this.open=true;},close(){this.open=false;events.get('close')?.();},remove(){this.isConnected=false;}};return sheet;
  }}});
  try{
   const flow=createPrintFlow({getData:()=>({file:new File(['proof'],'proof.jpg',{type:'image/jpeg'}),cardCount:1,recipe:{}}),onChange(){}});

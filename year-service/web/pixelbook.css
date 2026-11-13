@@ -128,6 +128,14 @@ header .signature .pb-header-volume{font-size:var(--pb-text-label);font-weight:6
 /* Touch/pointer clicks should not retain keyboard rings inside dialogs. */
 html[data-input-modality=pointer] dialog :is(button,a):focus-visible{outline:none!important}
 dialog h2[tabindex="-1"]:focus{outline:none}
+/* Address entry keeps its normal border when focused. */
+.delivery-form input:focus{outline:none}
+/* Keep gift sheets still on long presses and prevent scroll bounce. */
+:is(.pb-gift-dialog,.pb-mug-customizer,.ks-print-dialog,#keepsake){overscroll-behavior:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+:is(.pb-gift-dialog,.pb-mug-customizer,.ks-print-dialog,#keepsake) img{-webkit-user-drag:none;user-select:none;-webkit-user-select:none}
+#keepsake .ks-body{overscroll-behavior:none}
+:is(.pb-gift-dialog,.pb-mug-customizer,.ks-print-dialog,#keepsake) :is(input,textarea){user-select:text;-webkit-user-select:text;-webkit-touch-callout:default}
+html:has(:is(.pb-gift-dialog,.pb-mug-customizer,.ks-print-dialog,#keepsake)[open]){overflow:hidden;overscroll-behavior:none}
 .delivery-panel{font-size:16px;line-height:1.6;text-align:left}.delivery-panel h3{font-size:18px;margin:0 0 12px}.delivery-panel address{font-style:normal;line-height:1.65}.delivery-note{font-size:14px;color:var(--muted);margin:12px 0}.delivery-form fieldset{border:0;padding:0;margin:0;min-width:0}.delivery-field{margin:14px 0}.delivery-field>span{display:block;font-size:14px;margin-bottom:6px}.delivery-form input{font:inherit;font-size:16px;letter-spacing:normal;padding:12px;margin:0;border:1px solid var(--line);border-radius:8px;width:100%;min-height:48px}.delivery-row{display:grid;grid-template-columns:2fr 1fr 1.3fr;gap:12px}.delivery-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap}.delivery-panel .button{font-size:14px}.delivery-panel .address-search{position:relative}.delivery-panel .address-autocomplete{position:absolute;top:100%;left:0;right:0;background:var(--paper);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #142b1926;z-index:5;max-height:260px;overflow:auto}.delivery-panel .address-autocomplete [role=option]{display:block;width:100%;text-align:left;padding:12px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;font-size:14px;cursor:pointer}.delivery-panel .address-autocomplete [role=option]:hover,.delivery-panel .address-autocomplete [aria-selected=true]{background:var(--surface)}.delivery-panel .google-attribution{font-size:12px;margin:10px 12px;color:var(--muted)}.delivery-panel .address-autocomplete-status{font-size:13px;margin:8px 0}.delivery-panel [hidden]{display:none!important}@media(max-width:600px){.delivery-row{grid-template-columns:1fr 1fr}.delivery-row .delivery-field:first-child{grid-column:1/-1}}
 
 /* Small physical gestures, composed for touch first. */
@@ -230,6 +238,10 @@ header .theme-toggle{min-width:44px;min-height:44px}
 
 /* Enlarge the actual mug within the existing preview space; surrounding layout stays put. */
 .pb-order-review .pb-printful-mockup,.pb-mug-customizer .pb-printful-mockup{transform:scale(1.25);transform-origin:center}
+.pb-mockup-views{position:relative;display:flex;justify-content:center;gap:8px;margin:12px 0 8px}
+.pb-mockup-views .pb-mockup-view{min-height:44px;padding:8px 14px;border:1px solid var(--line);border-radius:24px;background:var(--paper);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.pb-mockup-views .pb-mockup-view[aria-pressed=true]{background:var(--button);color:var(--button-ink);border-color:var(--button)}
+.pb-mockup-views .pb-mockup-view:disabled{opacity:.45;cursor:default}
 
 /* Both physical gifts share one place and the same visual weight. */
 .pb-presents{margin:64px 0 56px}

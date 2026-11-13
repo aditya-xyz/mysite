@@ -4,14 +4,31 @@ import {readFile} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {generateKeyPair,exportJWK,SignJWT} from 'jose';
 import {digest} from '../src/security.ts';
-import {personalCount,localPrintProvider} from '../src/printing.ts';
+import {personalCount,localPrintProvider,printOrderView,foldedPreviewNote} from '../src/printing.ts';
 test('local print ordering is gated, atomic, private, and preserves submitted snapshots',async t=>{
  const {privateKey,publicKey}=await generateKeyPair('RS256',{extractable:true});
  const issuer='https://print-test.cloudflareaccess.com',jwk={...await exportJWK(publicKey),kid:'print',alg:'RS256',use:'sig'};
- const outbound=async(r:{url:string})=>{assert.equal(r.url,issuer+'/cdn-cgi/access/certs','No print, address, or SMS provider may be contacted');return Response.json({keys:[jwk]});};
+ const vendorCalls:{path:string;body?:any}[]=[];let hwMode=1,hwImage=900,hwCard=700,hwBadURL=false,pendingImage=true;
+ const outbound=async(r:Request)=>{
+  const url=new URL(r.url);
+  if(url.hostname==='api.handwrytten.com'){
+   const path=url.pathname;assert.equal(r.headers.get('Authorization'),'synthetic-key');
+   const call:{path:string;body?:any}={path};vendorCalls.push(call);
+   if(path.endsWith('/checkauth/auth'))return Response.json({status:'ok',test_mode:hwMode});
+   if(path.endsWith('/design/dimensions'))return Response.json({status:'ok',dimensions:[{id:4,orientation:'portrait',format:'folded',open_width:'8.500',open_height:'5.500'}]});
+   if(path.endsWith('/fonts/list'))return Response.json({status:'ok',fonts:[{id:'hwDavid'}]});
+   if(path.endsWith('/uploadCustomLogo')){const form=await r.formData(),file=form.get('file') as File;call.body={type:form.get('type'),bytes:[...new Uint8Array(await file.arrayBuffer())]};return Response.json({status:'ok',id:++hwImage});}
+   if(path.endsWith('/createCustomCard')){call.body=await r.json();return Response.json({status:'ok',card_id:++hwCard});}
+   assert.equal(path,'/v2/cards/view','Order, basket and payment requests are forbidden');
+   return Response.json({status:'ok',card:{images:Object.fromEntries(['front','inside','back'].map(side=>[side,[{image:hwBadURL?'https://untrusted.test/private':'https://d3e924qpzqov0g.cloudfront.net/cardimages/customCards/'+url.searchParams.get('card_id')+'-'+side+'.png'}]]))}});
+  }
+  if(url.hostname==='d3e924qpzqov0g.cloudfront.net'){if(pendingImage){pendingImage=false;return new Response(null,{status:403});}return new Response(new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0]),{headers:{'Content-Type':'image/png'}});}
+  assert.equal(r.url,issuer+'/cdn-cgi/access/certs','Unexpected provider request');return Response.json({keys:[jwk]});
+ };
  const common={modules:true,compatibilityDate:'2026-08-06',d1Databases:{DB:'print-test'},r2Buckets:{MEDIA:'print-test'},outboundService:outbound};
  const mf=new Miniflare(convertV4MiniflareOptions({workers:[
   {...common,name:'admin',routes:['admin.test/*'],scriptPath:'.wrangler/admin-test-bundle/index.js',bindings:{ADMIN_EMAIL:'owner@example.com',ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'print',JOURNAL_ORIGIN:'http://guest.test',PRINT_PROVIDER:'local_mock'}},
+  {...common,name:'proof-guest',routes:['proof.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{ORDER_MODE:'simulation',HANDWRYTTEN_PREVIEWS_ENABLED:'true',HANDWRYTTEN_API_KEY:'synthetic-key',SMS_ENABLED:'false'}},
   {...common,name:'guest',routes:['guest.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{PRINT_PROVIDER:'local_mock',SMS_ENABLED:'false'}}
  ]}));
  const jwt=await new SignJWT({email:'owner@example.com'}).setProtectedHeader({alg:'RS256',kid:'print'}).setSubject('owner').setIssuedAt().setIssuer(issuer).setAudience('print').setExpirationTime('1h').sign(privateKey);
@@ -24,6 +41,9 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
     await db.batch((await readFile('migrations/0016_mug_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0017_immediate_print_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0023_keepsake_default_sets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.exec(await readFile('migrations/0024_default_keepsake_note.sql','utf8'));
+  await db.batch((await readFile('migrations/0026_folded_cards.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0027_handwrytten_previews.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   const expires=Math.floor(Date.now()/1000)+86400,session='c'.repeat(64);
   await db.prepare("INSERT INTO people(id,name,phone) VALUES('contact','Test Recipient','+15555550100'),('partner','Test Partner',NULL)").run();
   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('invite','contact',?1,'Test Recipient','+15555550100',?2,?3)").bind(await digest('a'.repeat(64)),expires,JSON.stringify(['contact','partner'])).run();
@@ -48,8 +68,12 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    const encoded=data?new Request('http://guest.test',{method:'POST',body:data}):null,bytes=encoded?await encoded.arrayBuffer():null;
    return mf.dispatchFetch('http://guest.test/api/'+path,{method:data?'POST':'GET',headers:{Origin:options.origin||'http://guest.test',...(options.cookie===false?{}:{Cookie:'__Host-year_session='+session}),...(encoded?{'Content-Type':encoded.headers.get('Content-Type')!,'Content-Length':String(bytes!.byteLength)}:{})},...(bytes?{body:bytes}:{})});
   }
+  async function proofGuest(path:string,data?:FormData,cookie=session){
+   const encoded=data?new Request('http://proof.test',{method:'POST',body:data}):null,bytes=encoded?await encoded.arrayBuffer():null;
+   return mf.dispatchFetch('http://proof.test/api/'+path,{method:data?'POST':'GET',headers:{Origin:'http://proof.test',...(cookie?{Cookie:'__Host-year_session='+cookie}:{}),...(encoded?{'Content-Type':encoded.headers.get('Content-Type')!,'Content-Length':String(bytes!.byteLength)}:{})},...(bytes?{body:bytes}:{})});
+  }
   const status=async()=>await (await guest('print/status')).json() as any;
-  async function order(ids=['one','two','three'],key=crypto.randomUUID(),confirmationKey?:string){const s=await status(),form=new FormData();const jpg=new Uint8Array([255,216,255,192,0,11,8,5,220,4,176,1,1,17,0,255,217]);form.set('artwork',new File([jpg],'keepsake.jpg',{type:'image/jpeg'}));form.set('recipe',JSON.stringify({mode:ids.length?'personal':'default',defaultRevision,photoIds:ids,frame:'moss',crops:Object.fromEntries(ids.map(id=>[id,{x:.5,y:.5,zoom:1}])),requestKey:key,confirmationKey:confirmationKey||s.confirmationKey,addressVersion:s.addressVersion}));return form;}
+  async function order(ids=['one','two','three'],key=crypto.randomUUID(),confirmationKey?:string){const s=await status(),form=new FormData();const jpg=new Uint8Array([255,216,255,192,0,11,8,5,220,4,176,1,1,17,0,255,217]);form.set('artwork',new File([jpg],'keepsake.jpg',{type:'image/jpeg'}));form.set('recipe',JSON.stringify({format:'folded',mode:ids.length?'personal':'default',defaultRevision,photoIds:ids,frame:'moss',crops:Object.fromEntries(ids.map(id=>[id,{x:.5,y:.5,zoom:1}])),requestKey:key,confirmationKey:confirmationKey||s.confirmationKey,addressVersion:s.addressVersion}));return form;}
   await t.test('schema defaults off and a couple’s overlapping photo counts only once',async()=>{
    assert.equal((await db.prepare('SELECT allow_print_orders FROM editions WHERE year=2026').first<any>()).allow_print_orders,0);
    assert.equal(personalCount(published as any,['contact','partner']),3);
@@ -110,13 +134,51 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
     const tampered=await order(['one','two','three']);assert.equal((await guest('print/orders',tampered)).status,403);
     const response=await guest('print/orders',await order([]));assert.equal(response.status,200,await response.clone().text());
     const result=await response.json() as any,row=await db.prepare('SELECT * FROM print_orders WHERE id=?1').bind(result.order.id).first<any>();
-    assert.equal(row.card_count,1);assert.equal(row.artwork_key,row.default_artwork_key);assert.deepEqual(new Uint8Array(await (await bucket.get(row.artwork_key))!.arrayBuffer()),new Uint8Array([...defaultJPEG,4]),'Server-owned default replaces any uploaded substitute');
+    assert.equal(row.card_count,1);assert.equal(row.format,'folded');assert.equal(row.back_text,'pixelbook ’26');assert.equal(row.artwork_key,row.default_artwork_key);assert.deepEqual(new Uint8Array(await (await bucket.get(row.artwork_key))!.arrayBuffer()),new Uint8Array([...defaultJPEG,4]),'Server-owned default replaces any uploaded substitute');
     assert.equal((await db.prepare("SELECT print_order_count FROM invites WHERE id='invite'").first<any>()).print_order_count,1);
    }
    for(const sql of ['UPDATE editions SET allow_print_orders=0 WHERE year=2026',"UPDATE invites SET allow_print=0 WHERE id='invite'"]){await reset();await db.prepare(sql).run();assert.equal((await guest(path)).status,403);const journal=await (await guest('journal')).json() as any;assert.equal(journal.keepsake.enabled,false);assert.equal((await guest('print/orders',await order())).status,409);}
   });
+  await t.test('separate default notes persist with emojis, select the right card, and freeze on each order',async()=>{
+   const defaultPrintNote='From our pack to yours 🐾❤️';
+   for(const count of [2,3]){
+    await reset();
+    const initial=await (await admin('editions/2026/state')).json() as any;
+    const draft={...published,defaultPrintNote,photos:photos.slice(0,count)};
+    const save=await admin('editions/2026/draft',{version:initial.version,draft});assert.equal(save.status,200,await save.clone().text());
+    const saved=await save.json() as any;
+    assert.equal((await (await admin('editions/2026/state')).json() as any).draft.defaultPrintNote,defaultPrintNote);
+    assert.equal((await admin('editions/2026/publish',{version:saved.version})).status,200);
+    const response=await guest('print/orders',await order(count>=3?['one','two','three']:[]));assert.equal(response.status,200,await response.clone().text());
+    const row=await db.prepare('SELECT * FROM print_orders').first<any>();
+    assert.equal(row.note,count>=3?published.printNote:defaultPrintNote);assert.equal(row.default_note,defaultPrintNote);
+    await db.prepare("UPDATE editions SET published_json=json_set(published_json,'$.defaultPrintNote','Changed later') WHERE year=2026").run();
+    const history=(await (await admin('editions/2026/print-orders')).json() as any).orders[0];assert.equal(history.default_note,defaultPrintNote);assert.equal(history.note,row.note);
+   }
+   await reset();const initial=await (await admin('editions/2026/state')).json() as any;
+   for(const note of ['x'.repeat(351),Array(12).fill('line').join('\n')])assert.equal((await admin('editions/2026/draft',{version:initial.version,draft:{...published,defaultPrintNote:note}})).status,400);
+  });
+  await t.test('default-only orders expose their frozen proof only to their household and survive new default designs',async()=>{
+   await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,photos:[]})).run();
+   const response=await guest('print/orders',await order([]));assert.equal(response.status,200);
+   const placed=(await response.json() as any).order;assert.equal(placed.cardCount,1);assert.equal(placed.artworkSrc,`/api/print/orders/${placed.id}/artwork`);
+   const path=placed.artworkSrc.slice(5),before=await guest(path);assert.equal(before.status,200);const bytes=new Uint8Array(await before.arrayBuffer());
+   assert.equal((await guest(path,undefined,{cookie:false})).status,401);
+   const otherSession='e'.repeat(64);
+   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('other-proof','partner','other-proof-hash','Other household','+15555550101',?1,'[\"partner\"]')").bind(expires).run();
+   await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?1,'other-proof',?2)").bind(await digest(otherSession),expires).run();
+   assert.equal((await mf.dispatchFetch('http://guest.test'+placed.artworkSrc,{headers:{Cookie:'__Host-year_session='+otherSession}})).status,404);
+   await db.prepare("UPDATE keepsake_defaults SET revision=?1 WHERE year=2026").bind('f'.repeat(32)).run();
+   await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify(published)).run();
+   const journal=(await (await guest('journal')).json() as any).keepsake;assert.equal(journal.mode,'default');assert.equal(journal.order.id,placed.id);assert.equal(journal.order.artworkSrc,placed.artworkSrc);
+   assert.deepEqual(new Uint8Array(await (await guest(path)).arrayBuffer()),bytes);
+   assert.equal((await status()).order.artworkSrc,placed.artworkSrc);
+   assert.equal((await admin('editions/2026/invitations/invite/reset-print-allowance',{orderId:placed.id,confirm:true})).status,200);
+   assert.equal((await guest(path)).status,404);assert.equal((await (await guest('journal')).json() as any).keepsake.order,undefined);
+   await db.prepare('UPDATE keepsake_defaults SET revision=?1 WHERE year=2026').bind(defaultRevision).run();
+  });
   await t.test('personalized orders snapshot two proofs in the same border and reset releases both',async()=>{
-   await reset();const journal=await (await guest('journal')).json() as any;assert.equal(journal.keepsake.mode,'personal');assert.equal(journal.keepsake.cardCount,2);
+   await reset();const journal=await (await guest('journal')).json() as any;assert.equal(journal.keepsake.mode,'personal');assert.equal(journal.keepsake.cardCount,1);assert.equal(journal.keepsake.format,'folded');
    const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.frame='santa';form.set('recipe',JSON.stringify(recipe));
    const response=await guest('print/orders',form);assert.equal(response.status,200,await response.clone().text());const result=await response.json() as any;
    const row=await db.prepare('SELECT * FROM print_orders WHERE id=?1').bind(result.order.id).first<any>();assert.equal(row.card_count,2);assert.notEqual(row.artwork_key,row.default_artwork_key);assert.equal(row.default_revision,defaultRevision);
@@ -124,6 +186,69 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    assert.equal((await admin('editions/2026/print-orders/'+result.order.id+'/default-artwork')).status,200);
    assert.equal((await admin('editions/2026/invitations/invite/reset-print-allowance',{orderId:result.order.id,confirm:true})).status,200);
    assert.equal(await bucket.head(row.artwork_key),null);assert.equal(await bucket.head(row.default_artwork_key),null);
+  });
+  await t.test('only folded cards can be created and every surface is frozen with one physical card',async()=>{
+   await reset();const invalid=await order(),recipe=JSON.parse(invalid.get('recipe') as string);recipe.format='flat';invalid.set('recipe',JSON.stringify(recipe));
+   assert.equal((await guest('print/orders',invalid)).status,409);
+   assert.equal((await db.prepare('SELECT count(*) n FROM print_orders').first<any>()).n,0);
+   const response=await guest('print/orders',await order());assert.equal(response.status,200);
+   const placed=(await response.json() as any).order;
+   assert.equal(placed.format,'folded');assert.equal(placed.cardCount,1);assert.equal(placed.personalized,true);
+   assert.equal(placed.preview.backText,'pixelbook ’26');assert.equal(placed.preview.note,foldedPreviewNote);assert.equal(placed.preview.authors,'Pixel');assert.ok(!JSON.stringify(placed).includes(published.printNote),'Guest receipts never expose the real note');assert.equal((await status()).preview.note,foldedPreviewNote);
+   const row=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(row.format,'folded');assert.equal(row.note,published.printNote,'Actual note is frozen for fulfillment');assert.equal(row.back_text,'pixelbook ’26');assert.equal(row.status,'simulated');const payload=JSON.parse(row.handwrytten_order_json);assert.equal(payload.addresses[0].message,published.printNote);assert.equal(payload.font,'hwDavid');assert.equal(payload.font_size,13);assert.equal(payload.auto_font_size,true);assert.ok(!JSON.stringify(payload).includes(foldedPreviewNote));assert.equal(JSON.parse(row.recipe_json).layout,'a2-portrait-v1');
+   const inside=await guest(placed.defaultSrc.slice(5));assert.equal(inside.status,200);const frozen=await inside.arrayBuffer();
+   assert.equal((await guest(placed.defaultSrc.slice(5),undefined,{cookie:false})).status,401);
+   await db.prepare("UPDATE editions SET published_json=json_set(published_json,'$.printNote','New note','$.authors','New authors') WHERE year=2026").run();
+   await bucket.put('default-moss.jpg',new Uint8Array([1,2,3]));
+   const saved=(await status()).order;assert.deepEqual(saved.preview,placed.preview);
+   assert.deepEqual(await (await guest(saved.defaultSrc.slice(5))).arrayBuffer(),frozen);
+   const history=(await (await admin('editions/2026/print-orders')).json() as any).orders[0];assert.equal(history.back_text,'pixelbook ’26');assert.equal(history.format,'folded');assert.equal(history.note,published.printNote,'Admin proofs retain the real note');
+   await bucket.put('default-moss.jpg',new Uint8Array([...defaultJPEG,4]));
+   assert.equal(printOrderView({...row,format:'legacy'}).cardCount,2,'Historical two-card orders keep their original meaning');
+  });
+  await t.test('Handwrytten proofs are cached, household-scoped, and bind the simulated order to the exact artwork',async()=>{
+   await reset();const before=vendorCalls.length;
+   assert.equal((await proofGuest('print/previews',await order(),'' )).status,401);assert.equal(vendorCalls.length,before);
+   const invalid=await order(['one','two','shared']);assert.equal((await proofGuest('print/previews',invalid)).status,403);assert.equal(vendorCalls.length,before);
+   const first=await proofGuest('print/previews',await order());assert.equal(first.status,200,await first.clone().text());const result=await first.json() as any;
+   assert.equal(result.status,'ready');assert.equal(result.pictures.provider,'handwrytten');
+   const count=vendorCalls.length;assert.equal((await proofGuest('print/previews',await order())).status,200);assert.equal(vendorCalls.length,count,'Identical previews reuse the immutable cached design');
+   assert.equal((await proofGuest(result.pictures.frontSrc.slice(5))).status,200);
+   assert.equal((await proofGuest(result.pictures.frontSrc.slice(5),undefined,'' )).status,401);
+   const foreign='f'.repeat(64);await db.prepare("INSERT INTO people(id,name) VALUES('foreign-person','Other')").run();await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('foreign-proof','foreign-person','foreign-hash','Other','+15555550999',?1,'[\"partner\"]')").bind(expires).run();
+   await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?1,'foreign-proof',?2)").bind(await digest(foreign),expires).run();
+   assert.equal((await proofGuest(result.pictures.frontSrc.slice(5),undefined,foreign)).status,404);
+   assert.equal((await proofGuest('print/orders',await order())).status,409,'An unseen or different proof cannot be ordered');
+   const tampered=await order(),bad=JSON.parse(tampered.get('recipe') as string);bad.previewId=result.pictures.id;bad.frame='santa';tampered.set('recipe',JSON.stringify(bad));
+   assert.equal((await proofGuest('print/orders',tampered)).status,409);
+   const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.previewId=result.pictures.id;recipe.note='wrong preview note';recipe.font='preview-font';recipe.font_size=80;form.set('recipe',JSON.stringify(recipe));
+   const placed=await proofGuest('print/orders',form);assert.equal(placed.status,200,await placed.clone().text());
+   const orderResult=(await placed.json() as any).order;assert.equal(orderResult.pictures.id,result.pictures.id);assert.equal(orderResult.status,'simulated');assert.equal(vendorCalls.length,count,'Order simulation makes no vendor requests');
+   const row=await db.prepare('SELECT * FROM print_orders').first<any>(),payload=JSON.parse(row.handwrytten_order_json);
+   assert.equal(payload.card_id,701);assert.equal(payload.addresses[0].message,published.printNote);assert.equal(payload.addresses[0].wishes,'With love,\n'+published.authors);assert.equal(payload.font,'hwDavid');assert.equal(payload.font_size,13);assert.equal(payload.auto_font_size,true);
+   assert.ok(!JSON.stringify(payload).includes('wrong preview note'));assert.equal(orderResult.preview.note,foldedPreviewNote);assert.ok(!JSON.stringify(orderResult).includes(published.printNote));
+   assert.equal((await admin('editions/2026/print-orders/'+orderResult.id+'/vendor-inside')).status,200);
+   for(const call of vendorCalls){assert.ok(!/\/(orders|basket|payments)\//.test(call.path));if(call.path.endsWith('/createCustomCard'))assert.ok(!JSON.stringify(call.body).includes(published.printNote));}
+   await db.prepare("UPDATE invites SET allow_print=0 WHERE id='invite'").run();assert.equal((await proofGuest(result.pictures.frontSrc.slice(5))).status,200,'Saved ordered proofs survive permission changes');
+   await db.prepare('DELETE FROM print_orders').run();assert.equal((await proofGuest(result.pictures.frontSrc.slice(5))).status,403);
+  });
+  await t.test('default previews use the server artwork, leave inside left blank, and require Handwrytten Test Mode',async()=>{
+   await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,photos:[],defaultPrintNote:'The real default note 🐾'})).run();
+   hwMode=0;const before=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')).length;
+   assert.equal((await proofGuest('print/previews',await order([]))).status,409);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')).length,before);
+   hwMode=1;const response=await proofGuest('print/previews',await order([]));assert.equal(response.status,200,await response.clone().text());const result=await response.json() as any;
+   const cover=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='cover').at(-1)!;assert.deepEqual(cover.body.bytes,[...defaultJPEG,4]);
+   const card=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).at(-1)!.body;assert.equal(card.cover_size_percent,90,'Inset the cover to protect all four border edges');assert.equal(card.main_type,'text');assert.equal(card.main_text,'');assert.equal(card.main_logo_id,undefined);
+   const form=await order([]),recipe=JSON.parse(form.get('recipe') as string);recipe.previewId=result.pictures.id;form.set('recipe',JSON.stringify(recipe));
+   const placed=await proofGuest('print/orders',form);assert.equal(placed.status,200);const payload=JSON.parse((await db.prepare('SELECT handwrytten_order_json FROM print_orders').first<any>()).handwrytten_order_json);assert.equal(payload.addresses[0].message,'The real default note 🐾');
+   const manifest=(await (await proofGuest('journal')).json() as any).keepsake;assert.equal(manifest.order.pictures.id,result.pictures.id);assert.equal(manifest.order.preview.note,foldedPreviewNote);
+  });
+  await t.test('failed proof retrieval retries the same design and never fetches an arbitrary URL',async()=>{
+   await reset();const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.frame='classic';form.set('recipe',JSON.stringify(recipe));
+   hwBadURL=true;const creates=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length;
+   assert.equal((await proofGuest('print/previews',form)).status,502);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length,creates+1);
+   hwBadURL=false;const retry=await order(),r=JSON.parse(retry.get('recipe') as string);r.frame='classic';retry.set('recipe',JSON.stringify(r));
+   assert.equal((await proofGuest('print/previews',retry)).status,200);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length,creates+1,'Render retries never create another design');
   });
   await t.test('simulated fulfillment and address verification cannot run over production HTTPS',async()=>{
    await reset();await db.prepare('UPDATE editions SET allow_print_orders=0 WHERE year=2026').run();
@@ -151,7 +276,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await t.test('concurrent taps and retries create exactly one simulated order',async()=>{
    await reset();const results=await Promise.all(Array.from({length:6},async()=>{const r=await guest('print/orders',await order());assert.equal(r.status,200);return await r.json() as any;}));
    assert.equal(new Set(results.map(r=>r.order.id)).size,1);assert.equal((await db.prepare('SELECT count(*) n FROM print_orders').first<any>()).n,1);assert.equal((await status()).remaining,0);
-   const row=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(row.status,'simulated');assert.ok(await bucket.get(row.artwork_key));assert.equal(row.note,published.printNote);
+   const row=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(row.status,'simulated');assert.ok(await bucket.get(row.artwork_key));assert.equal(row.note,published.printNote);assert.equal(row.default_note,published.printNote);
    await admin('editions/2026/print-settings',{allowPrintOrders:false});await db.prepare("UPDATE people SET mailing_address=?1 WHERE id='contact'").bind(JSON.stringify({...address,line1:'456 Different Lane'})).run();
    assert.equal((await status()).order.id,row.id);const saved=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(saved.address_json,row.address_json);assert.equal(saved.note,row.note);
    assert.equal((await admin('editions/2027/print-orders/'+row.id+'/artwork')).status,404);

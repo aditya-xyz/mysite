@@ -1,4 +1,4 @@
-import {PrintProblem,type PrintEnv} from './printing.ts';
+import {PrintProblem,printOrderView,type PrintOrderProof,type PrintEnv} from './printing.ts';
 import type {InvitationAudience} from './invitations.ts';
 export interface KeepsakeDefault {revision:string;frames:Record<string,string>}
 export async function keepsakeDefault(env:PrintEnv,year:number):Promise<KeepsakeDefault|null>{
@@ -11,8 +11,10 @@ export async function keepsakeAccess(env:PrintEnv,invite:InvitationAudience){
 }
 export async function keepsakeManifest(env:PrintEnv,invite:InvitationAudience,personalCount:number){
  if(!await keepsakeAccess(env,invite))return {enabled:false};
+ const ordered=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id FROM print_orders WHERE invitation_id=?1 AND year=?2 AND card_count=1 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(invite.id,invite.edition_year).first<PrintOrderProof>();
+ if(ordered)return {enabled:true,mode:'default',cardCount:1,order:printOrderView(ordered)};
  const defaults=await keepsakeDefault(env,invite.edition_year);if(!defaults)return {enabled:false};
- return {enabled:true,mode:personalCount>=3?'personal':'default',cardCount:personalCount>=3?2:1,defaultRevision:defaults.revision,defaultSrc:`/api/keepsake/default/${defaults.revision}/`};
+ return {enabled:true,mode:personalCount>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults.revision,defaultSrc:`/api/keepsake/default/${defaults.revision}/`};
 }
 export async function keepsakeDefaultImage(env:PrintEnv,invite:InvitationAudience,revision:string,frame:string){
  if(!await keepsakeAccess(env,invite))throw new PrintProblem(403,'Keepsakes are not enabled for this invitation and scrapbook.');

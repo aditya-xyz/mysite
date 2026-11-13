@@ -72,6 +72,8 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
   });
   const printNote=text(d.printNote??'','printed postcard note',350,false);
   if(printNote.split('\n').length>11)return fail('Use at most 10 line breaks in the postcard note.');
+  const defaultPrintNote=text(d.defaultPrintNote??'','default keepsake note',350,false);
+  if(defaultPrintNote.split('\n').length>11)return fail('Use at most 10 line breaks in the default keepsake note.');
   const printSettings=await cleanPrintInvitations({...d,photos},env.DB,year);
   if(d.mugDesigns!==undefined&&(!Array.isArray(d.mugDesigns)||d.mugDesigns.length>MAX_MUG_DESIGNS))return fail(`Use at most ${MAX_MUG_DESIGNS} mug photos.`);
   const mugIds=new Set<string>();
@@ -83,7 +85,7 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
   });
   const current=JSON.parse((await edition(env,year)).draft_json) as Draft;
   if(curatedMugChange(current.mugDesigns||[],mugDesigns))return fail('The curated mug photos and artwork are fixed. Only captions and display order can be changed.');
-  return {printNote,...printSettings,mugDesigns,title:text(d.title,"title",150),authors:text(d.authors,"authors",100),intro:text(d.intro,"invitation introduction",1000),
+  return {printNote,defaultPrintNote,...printSettings,mugDesigns,title:text(d.title,"title",150),authors:text(d.authors,"authors",100),intro:text(d.intro,"invitation introduction",1000),
     note:text(d.note,"opening note",10000),sharedTitle:text(d.sharedTitle,"shared chapter title",150),stories,photos};
 }
 async function snapshot(draft: Draft, env: Env, year: number): Promise<Published> {

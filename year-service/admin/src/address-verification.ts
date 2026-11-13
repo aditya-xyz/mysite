@@ -64,13 +64,21 @@ export async function addressAdminRoute(request:Request,env:AddressEnv,path:stri
   const budget=limits(env),date=new Date().toISOString(),usage=await env.DB.prepare("SELECT coalesce(sum(CASE WHEN day=?1 THEN requests ELSE 0 END),0) AS today,coalesce(sum(requests),0) AS month FROM address_verification_usage WHERE provider='google' AND month=?2").bind(date.slice(0,10),date.slice(0,7)).first();
   return Response.json({mode:addressMode(request,env),limits:budget,usage,autocompleteAvailable:autocompleteAvailable(request,env),autocompleteLimits:limits(env,'google_places')});
  }
- const route=/^\/api\/contacts\/([a-z0-9-]{1,100})\/address(\/verify)?$/.exec(path);
+ const route=/^\/api\/contacts\/([a-z0-9-]{1,100})\/address(\/verify|\/clear)?$/.exec(path);
  if(!route||request.method!=='POST')return null;
  await clearExpiredAddressVerifications(env.DB);
  const data=await readBody(),id=route[1];
  if(!Number.isInteger(data.version))throw new PrintProblem(400,'Check the person version.');
  const person=await env.DB.prepare('SELECT * FROM people WHERE id=?1 AND version=?2').bind(id,data.version as number).first();
  if(!person)throw new PrintProblem(409,'This person changed in another window. Refresh before saving the address.');
+ if(route[2]==='/clear'){
+  const [updated]=await env.DB.batch([
+   env.DB.prepare('UPDATE people SET mailing_address=NULL,address_verified=0,address_verified_at=NULL,address_verified_until=NULL,address_verifier=NULL,address_verification_key=NULL,version=version+1,updated_at=unixepoch() WHERE id=?1 AND version=?2 RETURNING *').bind(id,data.version as number),
+   env.DB.prepare('DELETE FROM address_verification_challenges WHERE person_id=?1 AND person_version<=?2 AND EXISTS(SELECT 1 FROM people WHERE id=?1 AND version=?2+1 AND mailing_address IS NULL)').bind(id,data.version as number)
+  ]);
+  if(!updated.results.length)throw new PrintProblem(409,'This person changed in another window. Refresh before deleting the address.');
+  return Response.json({person:updated.results[0],simulated:false});
+ }
  const mode=addressMode(request,env);
  if(route[2]){
   if(mode==='disabled')throw new PrintProblem(503,'Address validation is not configured. You can save an unverified address.');

@@ -1,0 +1,35 @@
+.fc-preview{margin:8px auto 12px;max-width:580px;color:#244637}
+.fc-views{display:flex;justify-content:center;gap:8px;margin-bottom:10px}
+.fc-preview .fc-views button{min-height:44px;padding:8px 20px;border:1px solid #c7caba;border-radius:24px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.fc-preview .fc-views button[aria-pressed=true]{background:#2e5745;color:#fff9ec;border-color:#2e5745}
+.fc-surface{display:flex;max-width:225px;margin:auto;filter:drop-shadow(0 4px 7px #14251b18)}
+.fc-surface[hidden]{display:none}
+.fc-page{box-sizing:border-box;aspect-ratio:4.25/5.5;background:#fffaf0;min-width:0;width:100%;overflow:hidden}
+.fc-art{display:flex;align-items:center;justify-content:center;padding:3%}
+.fc-art img{display:block;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
+.fc-spread{max-width:450px;container-type:inline-size}
+.fc-spread>.fc-page{width:50%;flex:0 0 50%}
+.fc-spread>.fc-page:first-child{border-right:1px solid #d9d4c6}
+.fc-note canvas{display:block;width:100%;height:100%}
+.fc-back{display:flex;align-items:flex-end;justify-content:center;padding:0 12% 13%;font:600 13px/1.4 Georgia,serif;letter-spacing:.04em}
+@media(max-width:420px){.fc-surface{max-width:190px}.fc-spread{max-width:380px}.fc-preview .fc-views button{padding:8px 16px}}
+
+.ks-default-editor>.fc-preview{width:100%}
+
+/* Guest note previews use screen-sized text instead of shrinking a print canvas. */
+.fc-readable .fc-note{display:flex;align-items:center;padding:18px}
+.fc-note-copy{width:100%;font:16px/1.45 Georgia,serif;color:#244637}
+.fc-preview .fc-note-copy p{font:inherit;color:inherit;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;max-width:none}
+.fc-preview .fc-note-copy .fc-note-signoff{margin-top:12px;font-style:italic}
+
+@media(max-width:600px){
+ .ks-print-dialog .fc-readable.fc-spread{width:100%;max-width:450px;min-width:0}
+ .fc-readable.fc-spread>.fc-page{aspect-ratio:auto}
+ .fc-readable .fc-note{padding:10px}
+}
+
+.fc-vendor-art,.fc-vendor-inside{padding:0}
+.fc-vendor-inside{justify-content:flex-start}
+.fc-vendor-inside img{width:200%;height:auto;max-width:none;flex:0 0 200%}
+
+.fc-vendor-inside+.fc-note{background:#fff}

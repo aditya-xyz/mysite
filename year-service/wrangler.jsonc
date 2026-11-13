@@ -11,6 +11,7 @@
   "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },
   "vars": {
     "ORDER_MODE": "simulation",
+    "HANDWRYTTEN_PREVIEWS_ENABLED": "true",
     "PRINTFUL_ENABLED": "true", "PRINTFUL_STORE_ID": "19057580",
     "ADDRESS_VERIFICATION_PROVIDER": "google", "GOOGLE_PLACES_ENABLED": "true",
     "ADDRESS_VALIDATION_DAILY_LIMIT": "50", "ADDRESS_VALIDATION_MONTHLY_LIMIT": "1000",

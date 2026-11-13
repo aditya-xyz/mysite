@@ -5,7 +5,7 @@ export interface PublishedMugDesign extends MugDesign { preview_key:string; view
 export const MIN_MUG_DESIGNS=4, MAX_MUG_DESIGNS=12;
 export interface Draft {
   title: string; authors: string; intro: string; note: string; sharedTitle: string;
-  stories: Story[]; photos: DraftPhoto[]; mugDesigns?:MugDesign[]; printNote?:string; printInvitations?:string[]; printAddressKeys?:Record<string,string>;
+  stories: Story[]; photos: DraftPhoto[]; mugDesigns?:MugDesign[]; printNote?:string; defaultPrintNote?:string; printInvitations?:string[]; printAddressKeys?:Record<string,string>;
 }
 export interface PublishedPhoto extends DraftPhoto {
   preview_key: string; viewer_key?:string|null; original_key: string | null; filename: string; mime: string; width?:number; height?:number;
