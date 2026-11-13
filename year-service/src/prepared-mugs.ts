@@ -92,8 +92,8 @@ async function refreshPreparedManifest(env:PrintEnv,year:number){
  const manifest=styles.length?{...catalog,styles,prepared:true,artworkRevision,previews:images.filter(i=>complete.has(i.variant_id)).map(i=>({id:i.id,designId:i.design_id,caption:i.caption,configuration:{style:i.style,size:i.size,color:i.color,font:i.font},src:`/api/gift/previews/${i.id}`}))}:null;
  await env.DB.prepare('UPDATE mug_preview_sync SET manifest_json=?1,ready_count=?2 WHERE year=?3').bind(manifest?JSON.stringify(manifest):null,images.length,year).run();
 }
-export async function preparedMugCatalog(env:PrintEnv,year:number){
- const sync=await env.DB.prepare('SELECT manifest_json FROM mug_preview_sync WHERE year=?1').bind(year).first<{manifest_json:string|null}>();if(!sync?.manifest_json)return null;const manifest=JSON.parse(sync.manifest_json);const designs=await published(env,year),revision=await digest(JSON.stringify([LAYOUT,designs.map(d=>[d.id,d.cutoutVersion,d.caption])]));return revision===manifest.artworkRevision?manifest:null;
+export async function preparedMugCatalog(env:PrintEnv,year:number,includeSavedCatalog=false){
+ const sync=await env.DB.prepare('SELECT manifest_json,catalog_json FROM mug_preview_sync WHERE year=?1').bind(year).first<{manifest_json:string|null;catalog_json:string|null}>();const fallback=includeSavedCatalog&&sync?.catalog_json?JSON.parse(sync.catalog_json):null;if(!sync?.manifest_json)return fallback;const manifest=JSON.parse(sync.manifest_json);const designs=await published(env,year),revision=await digest(JSON.stringify([LAYOUT,designs.map(d=>[d.id,d.cutoutVersion,d.caption])]));return revision===manifest.artworkRevision?manifest:fallback;
 }
 export async function preparedMugImage(env:PrintEnv,invite:InvitationAudience,id:string){
  const row=await env.DB.prepare('SELECT * FROM mug_preview_images WHERE id=?1 AND year=?2').bind(id,invite.edition_year).first<Image>();

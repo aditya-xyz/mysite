@@ -49,8 +49,8 @@ export function createMugMockups(){
   try{await record.lookup;}catch(error){record.lookup=null;throw error;}
  }
  async function run(record,design,configuration){
-  if(prepared){const saved=prepared.get(key(design,configuration));if(!saved){record.error='This preview is being prepared.';paint(record);record.started=false;return;}try{await accept(record,{id:saved.id,src:saved.src});}catch(error){record.error=error.message;record.started=false;paint(record);}return;}
   if(disposed||!connected(record)){record.started=false;return;}
+  if(prepared){const saved=prepared.get(key(design,configuration));if(!saved){record.error='This preview is being prepared.';paint(record);record.started=false;return;}try{await accept(record,{id:saved.id,src:saved.src});}catch(error){record.error=error.message;record.started=false;paint(record);}return;}
   try{
    await lookup(record,design,configuration);if(record.imageUrl){paint(record);return;}
    if(!connected(record)){record.started=false;return;}
@@ -73,7 +73,7 @@ export function createMugMockups(){
  }
  function drain(){while(!disposed&&preloadActive<3&&preloadQueue.length){preloadActive++;preloadQueue.shift()().finally(()=>{preloadActive--;drain();});}}
  return {
-  configure(value){catalog=value;prepared=value.prepared?new Map((value.previews||[]).map(p=>[key({id:p.designId,caption:p.caption},p.configuration),p])):null;},
+  configure(value){if(value.prepared&&!prepared){preloadQueue.length=0;urls.forEach(url=>URL.revokeObjectURL(url));urls.clear();records.clear();}catalog=value;prepared=value.prepared?new Map((value.previews||[]).map(p=>[key({id:p.designId,caption:p.caption},p.configuration),p])):null;},
   preparedId(design,configuration){return prepared?.get(key(design,configuration))?.id||null;},
   id(design,configuration){return records.get(key(design,configuration))?.id||null;},
   preload(design,configuration){if(!catalog||disposed)return;const record=recordFor(design,configuration);if(prepared){if(record.imageUrl||record.warming)return;record.warming=true;preloadQueue.push(()=>lookup(record,design,configuration).catch(()=>{}).finally(()=>{record.warming=false;}));drain();}else lookup(record,design,configuration).catch(()=>{});},

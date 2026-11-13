@@ -197,7 +197,7 @@ async function route(request: Request, env: Env) {
   if(mockup&&request.method==='GET')return mugMockupResult(request,env,await authenticated(request,env),mockup[1],!!mockup[2]);
   if(path==='/api/gift/catalog'&&request.method==='GET'){
     const invite=await authenticated(request,env);if(!await mugAllowed(env,invite))throw new PrintProblem(403,'Complimentary mugs are not enabled for this invitation.');
-    await limited(env,'mug-catalog:'+invite.id,30,600);return json(await preparedMugCatalog(env,invite.edition_year)||await printfulCatalog(env));
+    await limited(env,'mug-catalog:'+invite.id,30,600);return json(await preparedMugCatalog(env,invite.edition_year,true)||await printfulCatalog(env));
   }
   if((path==='/api/gift/quote'||path==='/api/gift/claim')&&request.method==='POST'){
     const invite=await authenticated(request,env);

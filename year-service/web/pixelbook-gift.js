@@ -91,9 +91,10 @@ export function mountPixelGift(journal,root){
     for(const font of ['clean','serif','handwritten'])mockups.preload(design,{...options,font});
   }
   function warmSelected(){warmOptions(selected,configuration);}
-  let opening=false,contextReady=false,catalogPromise=null;const catalogController=new AbortController();
+  let opening=false,contextReady=false,catalogPromise=null,catalogLoadedAt=0;const catalogController=new AbortController();
   function preloadCatalog(){
-    catalogPromise??=fetch('/api/gift/catalog',{signal:catalogController.signal}).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load the saved mug collection.');return result;}).catch(error=>{catalogPromise=null;throw error;});
+    if(catalogPromise&&catalogLoadedAt&&Date.now()-catalogLoadedAt>60000){catalogPromise=null;catalogLoadedAt=0;}
+    catalogPromise??=fetch('/api/gift/catalog',{signal:catalogController.signal}).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load the saved mug collection.');catalogLoadedAt=Date.now();return result;}).catch(error=>{catalogPromise=null;throw error;});
     return catalogPromise;
   }
   function warmCatalog(){if(!journal.gift.livePricing||!ordering)return;preloadCatalog().then(catalog=>{if(modal.open)return;mockups.configure(catalog);const preferred=preferredMugOptions(catalog.styles);for(const design of designs)mockups.preload(design,preferred);}).catch(()=>{});}
