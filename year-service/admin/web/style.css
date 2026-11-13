@@ -246,3 +246,6 @@ dialog h2[tabindex="-1"]:focus{outline:none}
 .invitation-options .allowance-row .hint{margin:0;line-height:1.6}
 .invitation-options .allowance-reset{justify-self:end;min-height:44px;min-width:154px;padding:10px 14px;font-size:12px;white-space:nowrap}
 @media(max-width:600px){.invitation-options .allowance-row{gap:10px}.invitation-options .allowance-reset{min-width:0;padding:10px 12px;font-size:11px}}
+
+@font-face{font-family:Caveat;src:url('/fonts/caveat-400.ttf') format('truetype');font-weight:400;font-display:swap}
+@font-face{font-family:Asap;src:url('/fonts/asap-variable.woff2') format('woff2');font-weight:100 900;font-display:swap}

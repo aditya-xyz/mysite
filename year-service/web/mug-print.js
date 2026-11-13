@@ -2,8 +2,8 @@ import {mugFonts} from './mug-options.js';
 // Render only the selected, authenticated published cutout and caption. PNG
 // contains pixels, not embedded font files; no gallery originals are requested.
 export async function renderMugPrint(design,configuration,variant){
- const canvas=document.createElement('canvas');canvas.width=1800;canvas.height=Math.round(1800*variant.printHeight/variant.printWidth);
- const context=canvas.getContext('2d'),image=new Image();image.src=design.src;await image.decode();
+ const canvas=document.createElement('canvas');canvas.width=variant.renderWidth||1800;canvas.height=Math.round(canvas.width*variant.printHeight/variant.printWidth);
+ const context=canvas.getContext('2d'),image=variant.sourceImage||new Image();if(!variant.sourceImage){image.src=design.src;await image.decode();}
  const family=mugFonts.find(f=>f.id===configuration.font)?.family||'Asap, sans-serif';
  await document.fonts.load(`600 32px ${family}`);
  const h=canvas.height,padding=h*.08,caption=String(design.caption||'');

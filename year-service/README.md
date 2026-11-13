@@ -778,3 +778,44 @@ and mockup calls. There is no order creation/confirmation endpoint in the adapte
 no shop connection, and no automatic payment or fulfillment. Connecting billing
 or approving live fulfillment is separate work. Do not add write-order scope for
 catalog, estimates or mockups: all three were verified with `orders/read` only.
+
+## Prepared mug preview library
+
+Migration0022 adds a shared, invitation-independent preview library. The owner’s
+Mugs screen offers **Prepare previews** and shows artwork/preview progress. It
+renders each published cutout + exact caption in Clean, Bookish and Handwritten,
+with light/dark caption ink, into36 immutable1200px transparent PNG source files
+for the current six photos. Font pixels are embedded; private source files stay
+in R2, and no font file or original photo is sent to Printful. Source preparation
+uses the authenticated owner browser once; keep that tab open until artwork is
+saved. Publishing caption/artwork changes starts new source preparation. Ordinary
+nightly additions of mug styles/sizes/colors reuse the stored source artwork and
+need no open browser.
+
+The guest Worker has a nightly09:23UTC catalog sync and a once-per-minute queue
+processor. Sync discovers eligible, in-stock US variants using the conservative
+$25 budget, queues only missing images, and retires obsolete work after caption
+or artwork changes. A mockup task groups compatible colors sharing a print area.
+The persistent31-second lease is shared with the legacy generator. Background
+processing respects provider retry limits, stores completed PNGs privately, and
+closes each temporary source URL. Failed/interrupted tasks retry without placing
+orders; unchanged nightly runs preserve completed images. R2 holds binary images;
+D1 stores source/job/configuration metadata. Printful temporary URLs are never
+served to guests. Current target:414 preview images (six photos ×23 variants ×
+three fonts), prepared gradually under the provider’s generation rate limit.
+
+A variant enters the prepared guest catalog only when its images exist for every
+published photo and caption font. Once a prepared catalog is available, the guest
+loads saved images directly without canvas rendering, uploads, mockup creation or
+provider polling. The legacy on-demand cache remains during the initial fill and
+for historical proofs. Saved images are authenticated and publication-scoped;
+simulated receipts retain their exact prepared proof even after publication edits.
+The new default and enamel care note are unchanged.
+
+The picker opens immediately, with status/catalog checks in the background instead
+of disabling the launch button (which caused the wait cursor). Saved catalog and
+likely images warm on idle/hover/focus. Image fetching uses at most three parallel
+requests and32 retained private blob URLs; inactive image buffers are evicted and
+all URLs are revoked on teardown. Choosing a photo keeps that selection while
+background setup completes. Exact delivered-price checks still run at confirmation.
+Both Workers must remain `ORDER_MODE=simulation`; this adds no fulfillment adapter.

@@ -1,3 +1,4 @@
+import {preparedMugCatalog,preparedMugImage,preparedMugSource,tickPreparedMugs} from './prepared-mugs.ts';
 import {deliveryAddressRoute} from './delivery-address.ts';
 import type {AddressEnv} from '../admin/src/address-verification.ts';
 import {themeAssetManifest,themeAssetResponse} from './theme-assets.ts';
@@ -178,6 +179,10 @@ async function route(request: Request, env: Env) {
     if(response)return response;
   }
   if(path==='/api/gift/status'&&request.method==='GET')return json(await mugStatus(request,env,await authenticated(request,env)));
+  const preparedSource=/^\/api\/gift\/prepared-source\/([a-f0-9]{64})$/.exec(path);
+  if(preparedSource&&['GET','HEAD'].includes(request.method))return preparedMugSource(env,preparedSource[1]);
+  const preparedImage=/^\/api\/gift\/previews\/([a-f0-9]{64})$/.exec(path);
+  if(preparedImage&&request.method==='GET'){const invite=await authenticated(request,env);if(!await mugAllowed(env,invite))throw new PrintProblem(403,'Mug previews are unavailable.');return preparedMugImage(env,invite,preparedImage[1]);}
   const mockupSource=/^\/api\/gift\/mockup-source\/([a-f0-9]{64})$/.exec(path);
   if(mockupSource&&['GET','HEAD'].includes(request.method))return mugMockupSource(env,mockupSource[1]);
   if(path==='/api/gift/mockup'&&request.method==='POST'){
@@ -192,7 +197,7 @@ async function route(request: Request, env: Env) {
   if(mockup&&request.method==='GET')return mugMockupResult(request,env,await authenticated(request,env),mockup[1],!!mockup[2]);
   if(path==='/api/gift/catalog'&&request.method==='GET'){
     const invite=await authenticated(request,env);if(!await mugAllowed(env,invite))throw new PrintProblem(403,'Complimentary mugs are not enabled for this invitation.');
-    await limited(env,'mug-catalog:'+invite.id,30,600);return json(await printfulCatalog(env));
+    await limited(env,'mug-catalog:'+invite.id,30,600);return json(await preparedMugCatalog(env,invite.edition_year)||await printfulCatalog(env));
   }
   if((path==='/api/gift/quote'||path==='/api/gift/claim')&&request.method==='POST'){
     const invite=await authenticated(request,env);
@@ -219,7 +224,7 @@ async function route(request: Request, env: Env) {
       Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,i.edition_year)});
       const giftStatus=await mugStatus(request,env,i);
       if(!giftStatus.eligible){data.gift.enabled=false;data.gift.designs=[];}
-      Object.assign(data.gift,{hasOrder:!!giftStatus.claim,orderingEnabled:giftStatus.eligible&&simulatedOrders(request,env),mode:giftStatus.mode});
+      Object.assign(data.gift,{hasOrder:!!giftStatus.claim,orderingEnabled:giftStatus.eligible&&simulatedOrders(request,env),mode:giftStatus.mode,livePricing:printfulEnabled(env)});
       // Old publications remain unchanged; resolve missing preview dimensions read-only.
       for(let offset=0;offset<data.photos.length;offset+=8)await Promise.all(data.photos.slice(offset,offset+8).map(async photo=>{
         if(!photo.width||!photo.height)Object.assign(photo,await previewDimensions(env.MEDIA,edition.photos.find(p=>p.id===photo.id)!.preview_key));
@@ -292,11 +297,14 @@ export default {
     return new Response(response.body, { status: response.status, headers });
   },
   async scheduled(_event: ScheduledEvent, env: Env) {
+    if(_event.cron==='23 9 * * *'){
     await clearExpiredAddressVerifications(env.DB);
     await cleanMugMockups(env);
     await env.DB.batch([
       env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?1").bind(now()),
       env.DB.prepare("DELETE FROM rate_limits WHERE expires_at<=?1").bind(now())
     ]);
+    }
+    await tickPreparedMugs(env,_event.cron==='23 9 * * *');
   }
 };

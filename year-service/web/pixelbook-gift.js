@@ -44,16 +44,16 @@ export function mountPixelGift(journal,root){
   function doneMarkup(){return `<div class="pb-gift-done"><span class="pb-done-mark" aria-hidden="true">✓</span><p class="pb-eyebrow">${local?'preview claim saved':receipt?.status==='simulated'?'test order saved':'gift request received'}</p><h3>Pixel perfect.</h3><p>excellent choice. one of my favorite photos of me.</p>${previewMarkup(receipt?.design||selected,receipt?.configuration||configuration)}<p>${esc(mugOptionsLabel(receipt?.configuration||configuration))}</p>${['simulated','submitted'].includes(receipt?.status)?'<p class="pb-dialog-budget">text dad if you need a second one. just don’t mention i told you this.</p>':''}${local?'<p>That’s the whole flow. No mug has been ordered or charged.</p>':receipt?.status==='simulated'?'':'<p>Your household’s gift request is saved. Check back here for updates.</p>'}</div>`;}
   function render(){
     const title=step==='pick'?'pick your mugshot.':step==='address'?'where’s home?':step==='review'?'look good?':'that’s a wrap.';
-    modal.innerHTML=`<div class="pb-dialog-top"><div><p class="pb-eyebrow">a gift from Pixel</p><h2 id="pb-order-title" tabindex="-1">${title}</h2></div><button type="button" class="pb-close" data-close-gift aria-label="Close gift picker">${closeIcon}</button></div>${local||simulated?'<p class="pb-preview-banner">Orders are simulated · no physical orders or charges</p>':!ordering?'<p class="pb-preview-banner">Gift ordering opens soon. You can browse the mugshots for now.</p>':''}${step==='done'?'':steps()}<div class="pb-dialog-body">${step==='pick'?pickMarkup():step==='address'?addressMarkup():step==='review'?reviewMarkup():doneMarkup()}<p class="pb-gift-status error" role="alert"></p></div><div class="pb-dialog-bottom">${step==='done'?'<button class="button" data-close-gift>back to my scrapbook</button>':`<button class="text-button" data-gift-back>${step==='pick'?'keep browsing':'← back'}</button>${step==='review'?`<button type="button" class="button pb-secondary-button" data-customize-mug>Customize</button>`:''}<button class="button" data-gift-next ${(step==='pick'&&(!selected||!ordering)||step==='address'&&!canConfirm())?'disabled':''}>${step==='pick'?ordering?'this is the one →':'ordering opens soon':step==='review'?'proceed →':local||simulated?'confirm test mug order':'confirm & order'}</button>`}</div>`;
+    modal.innerHTML=`<div class="pb-dialog-top"><div><p class="pb-eyebrow">a gift from Pixel</p><h2 id="pb-order-title" tabindex="-1">${title}</h2></div><button type="button" class="pb-close" data-close-gift aria-label="Close gift picker">${closeIcon}</button></div>${local||simulated?'<p class="pb-preview-banner">Orders are simulated · no physical orders or charges</p>':!ordering?'<p class="pb-preview-banner">Gift ordering opens soon. You can browse the mugshots for now.</p>':''}${step==='done'?'':steps()}<div class="pb-dialog-body">${step==='pick'?pickMarkup():step==='address'?addressMarkup():step==='review'?reviewMarkup():doneMarkup()}<p class="pb-gift-status error" role="alert"></p></div><div class="pb-dialog-bottom">${step==='done'?'<button class="button" data-close-gift>back to my scrapbook</button>':`<button class="text-button" data-gift-back>${step==='pick'?'keep browsing':'← back'}</button>${step==='review'?`<button type="button" class="button pb-secondary-button" data-customize-mug>Customize</button>`:''}<button class="button" data-gift-next ${(step==='pick'&&(!selected||!ordering||opening)||step==='address'&&!canConfirm())?'disabled':''}>${step==='pick'?ordering?'this is the one →':'ordering opens soon':step==='review'?'proceed →':local||simulated?'confirm test mug order':'confirm & order'}</button>`}</div>`;
     modal.querySelectorAll('[data-close-gift]').forEach(b=>b.onclick=()=>modal.close());
     modal.querySelectorAll('[data-design]').forEach(b=>b.onclick=()=>{
       selected=designs.find(d=>d.id===b.dataset.design);
       modal.querySelectorAll('[data-design]').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.design===selected.id)));
-      modal.querySelector('[data-gift-next]').disabled=!ordering;
-      if(livePricing)mockups.preload(selected,configuration);
+      modal.querySelector('[data-gift-next]').disabled=!ordering||opening;
+      if(livePricing)warmSelected();
     });
     modal.querySelector('[data-customize-mug]')?.addEventListener('click',()=>{
-      customizer=openMugCustomizer(selected,configuration,value=>{configuration=value;quote=null;quoteKey='';customizer=null;render();modal.querySelector('[data-customize-mug]').focus();},styles,(element,design,value)=>mockups.update(element,design,value),previewMarkup);
+      customizer=openMugCustomizer(selected,configuration,value=>{configuration=value;quote=null;quoteKey='';customizer=null;render();modal.querySelector('[data-customize-mug]').focus();},styles,(element,design,value)=>{mockups.update(element,design,value);warmOptions(design,value);},previewMarkup);
     });
     modal.querySelector('[data-gift-back]')?.addEventListener('click',()=>{if(step==='pick')modal.close();else{step=step==='address'?'review':'pick';render();}});
     modal.querySelector('[data-edit-address]')?.addEventListener('click',()=>{step='address';render();});
@@ -70,7 +70,7 @@ export function mountPixelGift(journal,root){
     const result=await response.json();if(!response.ok)throw new Error(result.error||'Couldn’t save that. Please try again.');return result;
   }
   async function next(){
-    if(busy||!ordering)return;
+    if(busy||opening||!contextReady||!ordering)return;
     if(step==='pick'){if(!selected)return;step='review';render();return;}
     if(step==='review'){busy=true;modal.querySelector('[data-gift-next]').disabled=true;await delivery.load();busy=false;if(!modal.open)return;step='address';render();refreshQuote();return;}
     if(step!=='address'||!canConfirm())return;
@@ -78,28 +78,44 @@ export function mountPixelGift(journal,root){
     modal.querySelectorAll('[data-gift-next],[data-gift-back],[data-edit-address],[data-customize-mug]').forEach(button=>button.disabled=true);
     try{
       await delivery.confirm();
-      const result=await request('claim',{designId:selected.id,configuration,addressVersion:delivery.state.version,requestKey,mockupId:mockups.id(selected,configuration)});receipt={...result.claim,design:result.claim.design||{...selected}};
+      const result=await request('claim',{designId:selected.id,configuration,addressVersion:delivery.state.version,requestKey,mockupId:mockups.id(selected,configuration),preparedPreviewId:mockups.preparedId(selected,configuration)});receipt={...result.claim,design:result.claim.design||{...selected}};
       if(!modal.isConnected)return;selected=designs.find(d=>d.id===receipt.designId)||selected;step='done';render();launch.textContent='view your household’s gift';
     }catch(error){if(error.name!=='AbortError'&&modal.open){modal.querySelector('.pb-gift-status').textContent=error.message;modal.querySelectorAll('[data-gift-next],[data-gift-back],[data-edit-address],[data-customize-mug]').forEach(button=>button.disabled=false);}}
     finally{busy=false;modal.removeAttribute('aria-busy');}
   }
+  function warmOptions(design,options){
+    mockups.preload(design,options);if(!livePricing)return;
+    const style=styles.find(s=>s.id===options.style);
+    for(const color of style?.colors||[])if(!style.variants||style.variants.some(v=>v.size===options.size&&v.color===color))mockups.preload(design,{...options,color});
+    for(const other of styles){const v=other.variants?.find(v=>v.size===options.size)||other.variants?.[0];if(v)for(const font of ['clean','serif','handwritten'])mockups.preload(design,{style:other.id,size:v.size,color:v.color,font});}
+    for(const font of ['clean','serif','handwritten'])mockups.preload(design,{...options,font});
+  }
+  function warmSelected(){warmOptions(selected,configuration);}
+  let opening=false,contextReady=false,catalogPromise=null;const catalogController=new AbortController();
+  function preloadCatalog(){
+    catalogPromise??=fetch('/api/gift/catalog',{signal:catalogController.signal}).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load the saved mug collection.');return result;}).catch(error=>{catalogPromise=null;throw error;});
+    return catalogPromise;
+  }
+  function warmCatalog(){if(!journal.gift.livePricing||!ordering)return;preloadCatalog().then(catalog=>{if(modal.open)return;mockups.configure(catalog);const preferred=preferredMugOptions(catalog.styles);for(const design of designs)mockups.preload(design,preferred);}).catch(()=>{});}
+  launch.addEventListener('pointerenter',warmCatalog,{once:true});launch.addEventListener('focus',warmCatalog,{once:true});
+  const warmTimer=setTimeout(warmCatalog,1500);
   launch.onclick=async()=>{
-    if(modal.open||busy)return;returnFocus=document.activeElement;launch.disabled=true;
+    if(modal.open||busy||opening)return;opening=true;contextReady=false;returnFocus=document.activeElement;
     // Pixel’s preferred design is the first published mugshot, independent of the rotating stack.
     const previewDesign=designs[0];
-    configuration=pixelMugOptions();
+    configuration=pixelMugOptions();step='pick';selected=previewDesign;render();modal.showModal();modal.querySelector('h2').focus();
     try{
-      if(!ordering){step='pick';selected=previewDesign;render();modal.showModal();modal.querySelector('h2').focus();return;}
+      if(!ordering){contextReady=true;step='pick';selected=previewDesign;render();modal.querySelector('h2').focus();return;}
       const result=await request('status');receipt=result.claim||null;
       livePricing=result.livePricing===true;quote=null;quoteKey='';quoteError='';quoteBusy=false;quoteGeneration++;
-      if(livePricing&&!receipt){const catalog=await request('catalog');styles=catalog.styles;mockups.configure(catalog);configuration=preferredMugOptions(styles);}
+      if(livePricing&&!receipt){const catalog=await preloadCatalog();styles=catalog.styles;mockups.configure(catalog);configuration=preferredMugOptions(styles);}
       if(!modal.isConnected)return;
-      if(receipt){configuration=receipt.configuration||configuration;selected=receipt.design||designs.find(d=>d.id===receipt.designId);step='done';launch.textContent='view your household’s gift';}else{step='pick';selected=previewDesign;requestKey=crypto.randomUUID();launch.textContent='pick your mugshot';}
-      render();modal.showModal();modal.querySelector('h2').focus();
-      if(livePricing&&!receipt)mockups.preload(selected,configuration);
-    }catch(error){if(error.name!=='AbortError'){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}
-    finally{launch.disabled=false;}
+      if(receipt){configuration=receipt.configuration||configuration;selected=receipt.design||designs.find(d=>d.id===receipt.designId);step='done';launch.textContent='view your household’s gift';}else{step='pick';selected=selected||previewDesign;requestKey=crypto.randomUUID();launch.textContent='pick your mugshot';}
+      if(!modal.open)return;contextReady=true;if(receipt){render();modal.querySelector('h2').focus();}
+      if(livePricing&&!receipt){warmSelected();for(const design of designs)mockups.preload(design,configuration);}
+    }catch(error){if(error.name!=='AbortError'){if(modal.open)modal.querySelector('.pb-gift-status').textContent=error.message;let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}
+    finally{opening=false;launch.disabled=false;if(modal.open&&step==='pick')modal.querySelector('[data-gift-next]').disabled=!selected||!ordering||!contextReady;}
   };
   modal.addEventListener('close',()=>{quoteGeneration++;quoteKey='';quoteBusy=false;controller?.abort();returnFocus?.focus({preventScroll:true});});
-  return {destroy(){controller?.abort();customizer?.destroy();mockups.destroy();delivery.destroy();modal.remove();}};
+  return {destroy(){clearTimeout(warmTimer);catalogController.abort();controller?.abort();customizer?.destroy();mockups.destroy();delivery.destroy();modal.remove();}};
 }

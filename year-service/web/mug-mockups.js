@@ -1,6 +1,6 @@
 import {renderMugPrint} from './mug-print.js';
 export function createMugMockups(){
- const records=new Map(),timers=new Set(),controllers=new Set(),urls=new Set();let catalog=null,disposed=false;
+ const records=new Map(),timers=new Set(),controllers=new Set(),urls=new Set();let catalog=null,disposed=false;let prepared=null;const preloadQueue=[];let preloadActive=0;
  const key=(design,options)=>JSON.stringify([design.id,design.caption,options]);
  const connected=record=>[...record.elements].some(e=>e.isConnected);
  function later(action,ms){const timer=setTimeout(()=>{timers.delete(timer);if(!disposed)action();},ms);timers.add(timer);}
@@ -31,17 +31,25 @@ export function createMugMockups(){
   if(result.id)record.id=result.id;
   record.nextCheck=Date.now()+Math.max(0,result.retryAfter||0)*1000;
   if(!result.src||record.imageUrl)return;
-  const response=await fetchResponse(result.src),blob=await response.blob();
-  if(disposed)return;
-  const url=URL.createObjectURL(blob);urls.add(url);
-  const image=new Image();image.src=url;await image.decode();if(disposed){URL.revokeObjectURL(url);urls.delete(url);return;}
-  record.src=result.src;record.imageUrl=url;record.blob=null;paint(record);
+  if(record.imagePromise){await record.imagePromise;return;}
+  record.imagePromise=(async()=>{
+   const response=await fetchResponse(result.src),blob=await response.blob();if(disposed)return;
+   const url=URL.createObjectURL(blob);urls.add(url);const image=new Image();image.src=url;await image.decode();
+   if(disposed){URL.revokeObjectURL(url);urls.delete(url);return;}
+   record.src=result.src;record.imageUrl=url;record.blob=null;record.loadedAt=Date.now();paint(record);
+   if(urls.size>32)for(const stale of [...records.values()].filter(r=>r!==record&&r.imageUrl&&!connected(r)).sort((a,b)=>a.loadedAt-b.loadedAt)){
+    URL.revokeObjectURL(stale.imageUrl);urls.delete(stale.imageUrl);stale.imageUrl=null;stale.started=false;stale.lookup=null;if(urls.size<=32)break;
+   }
+  })();
+  try{await record.imagePromise;}finally{record.imagePromise=null;}
  }
  async function lookup(record,design,configuration){
+  if(prepared){const saved=prepared.get(key(design,configuration));if(saved)await accept(record,{id:saved.id,src:saved.src});return;}
   record.lookup??=(async()=>{const result=await request('/lookup',{designId:design.id,configuration});await accept(record,result);})();
   try{await record.lookup;}catch(error){record.lookup=null;throw error;}
  }
  async function run(record,design,configuration){
+  if(prepared){const saved=prepared.get(key(design,configuration));if(!saved){record.error='This preview is being prepared.';paint(record);record.started=false;return;}try{await accept(record,{id:saved.id,src:saved.src});}catch(error){record.error=error.message;record.started=false;paint(record);}return;}
   if(disposed||!connected(record)){record.started=false;return;}
   try{
    await lookup(record,design,configuration);if(record.imageUrl){paint(record);return;}
@@ -63,10 +71,12 @@ export function createMugMockups(){
    if([429,503].includes(error.status)){later(()=>{record.error='';run(record,design,configuration);},(error.retryAfter||60)*1000);}else record.started=false;
   }
  }
+ function drain(){while(!disposed&&preloadActive<3&&preloadQueue.length){preloadActive++;preloadQueue.shift()().finally(()=>{preloadActive--;drain();});}}
  return {
-  configure(value){catalog=value;},
+  configure(value){catalog=value;prepared=value.prepared?new Map((value.previews||[]).map(p=>[key({id:p.designId,caption:p.caption},p.configuration),p])):null;},
+  preparedId(design,configuration){return prepared?.get(key(design,configuration))?.id||null;},
   id(design,configuration){return records.get(key(design,configuration))?.id||null;},
-  preload(design,configuration){if(!catalog||disposed)return;const record=recordFor(design,configuration);lookup(record,design,configuration).catch(()=>{});},
+  preload(design,configuration){if(!catalog||disposed)return;const record=recordFor(design,configuration);if(prepared){if(record.imageUrl||record.warming)return;record.warming=true;preloadQueue.push(()=>lookup(record,design,configuration).catch(()=>{}).finally(()=>{record.warming=false;}));drain();}else lookup(record,design,configuration).catch(()=>{});},
   update(element,design,configuration){
    if(!element||!catalog||disposed)return;
    const record=recordFor(design,configuration);record.elements.add(element);paint(record);

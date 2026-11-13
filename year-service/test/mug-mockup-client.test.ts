@@ -24,3 +24,15 @@ test('cached mockups skip canvas/uploads, decode before display and reuse image 
   assert.deepEqual(calls,['/api/gift/mockup/lookup','/api/gift/mockup/cached/image']);assert.equal(canvasCalls,0);assert.equal(client.id(design,configuration),'cached');
  }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
 });
+test('prepared library loads only saved image bytes with no canvas, polling or generation requests',async()=>{
+ const calls:string[]=[],previousDocument=(globalThis as any).document,previousImage=(globalThis as any).Image;
+ const figure={isConnected:true,dataset:{},children:[] as any[],querySelector(){return {textContent:''};},replaceChildren(...values:any[]){this.children=values;}};
+ (globalThis as any).document={createElement(tag:string){assert.notEqual(tag,'canvas');return {tag};}};
+ (globalThis as any).Image=class{src='';async decode(){}};
+ const fetch=mock.method(globalThis,'fetch',async(path:string,init?:RequestInit)=>{calls.push(path);assert.equal(init?.method,'GET');assert.equal(path,'/api/gift/previews/prepared');return new Response(new Blob(['saved PNG'],{type:'image/png'}));});
+ const client=createMugMockups(),design={id:'photo',caption:'Caption',src:'/approved.png'},configuration={style:'color-inside',size:'15oz',color:'dark blue',font:'handwritten'};
+ try{
+  client.configure({prepared:true,styles:[],previews:[{id:'prepared',designId:'photo',caption:'Caption',configuration,src:'/api/gift/previews/prepared'}]});
+  client.preload(design,configuration);client.update(figure,design,configuration);await settle();assert.equal(figure.children[0].tag,'img');assert.deepEqual(calls,['/api/gift/previews/prepared']);assert.equal(client.preparedId(design,configuration),'prepared');
+ }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
+});

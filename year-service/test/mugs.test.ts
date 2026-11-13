@@ -61,7 +61,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
   async function publish(){const response=await admin('publish',{version});assert.equal(response.status,200,await response.clone().text());}
   await t.test('unauthenticated mug requests are denied and old editions have no gift section',async()=>{
    assert.equal((await guest('mugs/mug-0',false)).status,401);
-   assert.equal((await admin('draft',{draft,version},'')).status,401);
+   assert.equal((await admin('draft',{draft,version},'')).status,401);assert.equal((await admin('mug-preview-library',undefined,'')).status,401);
    await save();await publish();const journal:any=await (await guest('journal')).json();assert.equal(journal.gift.enabled,false);
   });
   await t.test('theme photos are authenticated, edition-scoped and available in both journal and admin preview',async()=>{

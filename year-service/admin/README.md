@@ -905,3 +905,14 @@ Blue /15oz is Pixel recommended. Enamel is eligible with an explicit hand-wash,
 not-dishwasher-safe note. New defaults never rewrite stored order configurations.
 Guest cache lookups and decoded image reuse remove the illustration swap;0021
 adds the lookup index. Fulfillment remains simulated.
+
+## Shared prepared mug previews
+
+Mugs now has a Saved mug previews panel. **Prepare previews** saves36 canonical
+artwork files for the current six published photos, all three caption fonts and
+two caption ink colors. Keep the owner tab open while artwork is being saved;
+Printful generation then continues in the guest Worker’s background queue without
+an open browser. The panel shows saved/desired preview counts. Publishing updated
+captions prepares new immutable sources. Nightly catalog additions reuse existing
+sources, and only budget-eligible variants are queued. Apply0022 before deployment.
+No Printful secret is needed in admin, and no orders are created by preparation.

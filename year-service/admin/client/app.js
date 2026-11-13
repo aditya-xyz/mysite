@@ -1,3 +1,4 @@
+import {mountMugPreviewLibrary,ensureMugLibrarySources} from './mug-preview-library.js';
 import {installFocusModality} from '../../web/focus.js';
 installFocusModality();
 import {themePhoto} from '../../web/pixelbook.js';
@@ -29,7 +30,7 @@ async function requestApi(path,data,signal){
 async function api(path,data){
   if(!state)throw new Error('Choose a scrapbook first.');
   pendingRequests++;updateBadge();
-  try{return await requestApi(`editions/${state.year}/${path}`,data);}
+  try{const result=await requestApi(`editions/${state.year}/${path}`,data);if(path==='publish')ensureMugLibrarySources(state.year).catch(error=>toast(error.message));return result;}
   finally{pendingRequests--;updateBadge();}
 }
 const editionViews=['story','photos','mugs','sharing','preview'];
@@ -381,7 +382,7 @@ function bind(){
   bindOrdering();
   bindBulkPhotos();
   mountMugOrders({view,state,api,showModal,toast});
-  if(view==='mugs'){bindMugEditor({root:app,state,mark});}
+  if(view==='mugs'){bindMugEditor({root:app,state,mark});mountMugPreviewLibrary({root:app,state,toast});}
   app.querySelectorAll('[data-preview-edition]').forEach(b=>b.onclick=async()=>{await navigate('photos',true,Number(b.dataset.previewEdition));openPreview();});
   app.querySelectorAll('[data-photo-filter]').forEach(b=>b.onclick=()=>{photoFilter=b.dataset.photoFilter;draftSelection.clear();selectedPhotoId='';photoEditorOpen=false;render();});
   app.querySelectorAll('[data-select-photo]').forEach(b=>b.onclick=()=>{selectedPhotoId=b.dataset.selectPhoto;photoEditorOpen=true;render();if(innerWidth<=800)byId('photo-inspector')?.scrollIntoView({block:'start',behavior:'instant'});});

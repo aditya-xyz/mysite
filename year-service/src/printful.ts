@@ -41,14 +41,15 @@ async function style(env:PrintEnv,item:Collection):Promise<MugStyle>{
  const variants=data.variants.filter(v=>v.in_stock===true&&v.availability_regions?.US&&typeof v.size==='string'&&typeof v.color==='string').map(v=>({id:v.id,size:v.size.replace(/\s/g,''),color:v.color.toLowerCase(),colorCode:v.color_code||colors[v.color.toLowerCase()]||'#ffffff',baseCents:cents(v.price),shippingReserveCents:shippingReserve(item.productId,v.size.replace(/\s/g,'')),productCeilingCents:MAX_MUG_CENTS-MUG_TAX_RESERVE_CENTS-shippingReserve(item.productId,v.size.replace(/\s/g,''))})).filter(v=>Number.isInteger(v.id)&&v.baseCents<=v.productCeilingCents);
  return {...item,...(/hand.wash only|not dishwasher/i.test(data.product?.description||'')||item.productId===407?{careNote:'Not dishwasher safe · hand wash only'}:{}),sizes:[...new Set(variants.map(v=>v.size))],colors:[...new Set(variants.map(v=>v.color))],variants};
 }
-export async function printfulCatalog(env:PrintEnv){
+export async function printfulCatalog(env:PrintEnv,refresh=false){
  if(!printfulEnabled(env)||!env.PRINTFUL_API_TOKEN)throw new PrintProblem(503,'Live mug pricing is temporarily unavailable. Please try again later.');
+ if(refresh)cached=undefined;
  if(!cached||cached.credential!==env.PRINTFUL_API_TOKEN||cached.until<Date.now()){
   loading??=(async()=>{
    // Private persistent cache avoids refetching every product on cold isolates.
    const cacheKey=`providers/printful/${env.PRINTFUL_STORE_ID||'store'}/catalog-v4.json`;
    const stored=await env.MEDIA?.get(cacheKey);
-   if(stored){const value=await stored.json<{until:number;styles:MugStyle[]}>();if(value.until>Date.now())return value.styles;}
+   if(stored&&!refresh){const value=await stored.json<{until:number;styles:MugStyle[]}>();if(value.until>Date.now())return value.styles;}
    const products=await printfulApi(env,'/products') as Product[];
    if(!Array.isArray(products))throw new PrintProblem(503,'Printful’s mug catalog is temporarily unavailable.');
    const collection=products.filter(p=>p.type==='MUG').map(p=>({id:aliases[p.id]||`mug-${p.id}`,productId:p.id,label:mugStyles.find((s:{id:string})=>s.id===aliases[p.id])?.label||p.title}));
