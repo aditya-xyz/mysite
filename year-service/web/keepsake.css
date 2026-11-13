@@ -122,3 +122,10 @@ html:has(#keepsake[open]){overflow:hidden}
 
 .ks-print-dialog[open]{animation:ks-paper-in .24s ease-out both}
 @media(prefers-reduced-motion:reduce){.ks-print-dialog[open]{animation:none}}
+
+@media(min-width:760px){
+ .ks-print-dialog{width:min(820px,calc(100vw - 48px))}
+ .ks-print-body{padding:24px 32px}
+ .ks-order-proofs{gap:24px}
+ .ks-order-proofs figure{max-width:300px}
+}
