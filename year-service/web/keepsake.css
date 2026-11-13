@@ -119,3 +119,6 @@ html:has(#keepsake[open]){overflow:hidden}
 #keepsake .ks-default-editor .ks-preview-wrap{width:min(100%,680px,calc((100dvh - 250px)*.8));min-width:0;margin:0 auto}
 .ks-default-editor .ks-description{margin:0;text-align:center}
 @media(max-width:600px){#keepsake .ks-default-editor .ks-preview-wrap{width:100%}}
+
+.ks-print-dialog[open]{animation:ks-paper-in .24s ease-out both}
+@media(prefers-reduced-motion:reduce){.ks-print-dialog[open]{animation:none}}
