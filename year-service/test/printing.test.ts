@@ -16,6 +16,8 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    const call:{path:string;body?:any}={path};vendorCalls.push(call);
    if(path.endsWith('/checkauth/auth'))return Response.json({status:'ok',test_mode:hwMode});
    if(path.endsWith('/design/dimensions'))return Response.json({status:'ok',dimensions:[{id:4,orientation:'portrait',format:'folded',open_width:'8.500',open_height:'5.500'}]});
+   if(path.endsWith('/profile/listAddresses'))return Response.json({status:'ok',addresses:[{id:17,default:true,country_id:1,name:'Synthetic sender',address1:'123 Example Lane',city:'Portland',state:'OR',zip:'97201'}]});
+   if(path.endsWith('/outbound/process')){call.body=await r.json();return Response.json({status:'ok',quantity:1,prices:{card_price:3.75,postage_price:.82,tax:.29,shipping_price:0,insert_price:0,bundle_price:0,without_tax:4.57,total:4.86}});}
    if(path.endsWith('/fonts/list'))return Response.json({status:'ok',fonts:[{id:'hwDavid'}]});
    if(path.endsWith('/uploadCustomLogo')){const form=await r.formData(),file=form.get('file') as File;call.body={type:form.get('type'),bytes:[...new Uint8Array(await file.arrayBuffer())]};return Response.json({status:'ok',id:++hwImage});}
    if(path.endsWith('/createCustomCard')){call.body=await r.json();return Response.json({status:'ok',card_id:++hwCard});}
@@ -44,6 +46,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await db.exec(await readFile('migrations/0024_default_keepsake_note.sql','utf8'));
   await db.batch((await readFile('migrations/0026_folded_cards.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0027_handwrytten_previews.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.exec(await readFile('migrations/0028_handwrytten_quotes.sql','utf8'));
   const expires=Math.floor(Date.now()/1000)+86400,session='c'.repeat(64);
   await db.prepare("INSERT INTO people(id,name,phone) VALUES('contact','Test Recipient','+15555550100'),('partner','Test Partner',NULL)").run();
   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('invite','contact',?1,'Test Recipient','+15555550100',?2,?3)").bind(await digest('a'.repeat(64)),expires,JSON.stringify(['contact','partner'])).run();
@@ -254,6 +257,21 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    const cover=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='cover').at(-1)!,inside=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='logo').at(-1)!;
    assert.deepEqual(cover.body.bytes,[...defaultJPEG,4]);assert.deepEqual(inside.body.bytes,[...defaultJPEG]);
    const row=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(JSON.parse(row.recipe_json).frontDesign,'default');assert.equal(JSON.parse(row.handwrytten_order_json).addresses[0].message,published.printNote);
+  });
+  await t.test('admin quotes saved orders without submission, persists the full breakdown and rejects other years',async()=>{
+   await reset();const response=await proofGuest('print/orders',await order()),receipt=(await response.json() as any).order;
+   const route='editions/2026/print-orders/'+receipt.id+'/quote',before=vendorCalls.length;
+   assert.equal((await admin(route,{},false)).status,401);assert.equal(vendorCalls.length,before);
+   assert.equal((await admin('editions/2025/print-orders/'+receipt.id+'/quote',{})).status,404);assert.equal(vendorCalls.length,before);
+   await db.prepare("UPDATE editions SET published_json=json_set(published_json,'$.printNote','Changed after order') WHERE year=2026").run();
+   const result=await admin(route,{card_id:999,records:900,note:'Tampered'});assert.equal(result.status,200,await result.clone().text());const data=await result.json() as any;
+   assert.equal(data.quote.amounts.total,486);assert.equal(data.quote.amounts.tax,29);assert.equal(data.quote.amounts.postage,82);assert.equal(data.quote.submitted,false);
+   const row=await db.prepare('SELECT * FROM print_orders WHERE id=?1').bind(receipt.id).first<any>();assert.equal(row.status,'simulated');assert.deepEqual(JSON.parse(row.handwrytten_quote_json),data.quote);
+   const call=vendorCalls.filter(c=>c.path.endsWith('/outbound/process')).at(-1)!;assert.equal(call.body.card_id,JSON.parse(row.handwrytten_order_json).card_id);assert.equal(call.body.message,published.printNote+'\n\nWith love,\n'+published.authors);assert.equal(call.body.records,1);assert.equal(call.body.return_address_id,17);
+   assert.equal((await (await admin('editions/2026/print-orders')).json() as any).orders[0].handwrytten_quote_json,row.handwrytten_quote_json);
+   const guestStatus=await (await proofGuest('print/status')).json() as any;assert.ok(!JSON.stringify(guestStatus).includes('amounts'));assert.ok(!JSON.stringify(guestStatus).includes(published.printNote));
+   const creates=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length;assert.equal((await admin(route,{})).status,200);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length,creates,'Refreshing a quote reuses the proof');
+   assert.ok(vendorCalls.every(c=>!/(\/orders\/|\/basket\/|payment|addToBasket)/.test(c.path)));
   });
   await t.test('default-only guests cannot request a personal cover and invalid placement is rejected',async()=>{
    await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,photos:[]})).run();

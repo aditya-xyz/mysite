@@ -1036,3 +1036,30 @@ border variants with that copy included in the revision digest before publishing
 The publisher checks the manifest copy against this shared configuration. Publish
 new immutable R2 keys, then switch the `keepsake_defaults` revision; never overwrite
 saved order proofs or an existing artwork revision.
+
+## Handwrytten checkout pricing previews
+
+Apply `0028_handwrytten_quotes.sql` before deploying the admin Worker. In a saved
+simulated folded order, **Get checkout total** prepares/reuses its immutable card
+proof, then calls Handwrytten's documented `POST /outbound/process` pricing preview
+for one card, standard US mail, and the frozen note plus closing. It selects the
+enforced/default sender, or the sole saved sender if no default flag is present.
+With several senders and no default, the quote stops and asks for a default.
+The chosen return address is shown with the quote. No payment details are needed.
+
+The admin-only `POST /api/editions/:year/print-orders/:id/quote` ignores client
+pricing inputs and reads the saved order. The response includes card cost,
+postage, shipping, inserts/bundles if applicable, tax, subtotal and total in USD
+cents. Missing tax, negative/nonfinite values, a quantity other than one or
+inconsistent arithmetic rejects the quote. The latest valid quote, sender and
+timestamp are saved in `handwrytten_quote_json`, available only in admin history.
+A failed refresh never overwrites a previous valid quote. Guest APIs omit it.
+
+This is the provider's domestic pricing preview, documented under Prospecting,
+not a submitted checkout. Final checkout pricing may change. Test Mode is required;
+`/outbound/addToBasket`, order submission, basket mutations and payment endpoints
+remain excluded from the API allowlist. A Test Mode submission can authorize a
+payment even though it is not captured, so this integration never submits one.
+
+Official references: https://www.handwrytten.com/api/preview-order/ and
+https://www.handwrytten.com/api-redoc/ .

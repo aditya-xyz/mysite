@@ -2,7 +2,8 @@ import {imageDimensions} from './image-dimensions.ts';
 import {PrintProblem} from './printing.ts';
 export interface HandwryttenEnv {HANDWRYTTEN_API_KEY?:string}
 // Deliberately excludes order submission, basket changes, payments and test-mode toggles.
-const allowed=new Set(['/checkauth/auth','/design/dimensions','/basket/count','/cards/uploadCustomLogo','/cards/createCustomCard','/cards/view','/fonts/list']);
+// /outbound/process is the documented pricing preview, not /outbound/addToBasket.
+const allowed=new Set(['/checkauth/auth','/design/dimensions','/basket/count','/cards/uploadCustomLogo','/cards/createCustomCard','/cards/view','/fonts/list','/profile/listAddresses','/outbound/process']);
 async function api(env:HandwryttenEnv,path:string,body?:Record<string,unknown>|FormData){
  if(!env.HANDWRYTTEN_API_KEY)throw new PrintProblem(503,'Handwrytten is not connected.');
  if(!allowed.has(path.split('?')[0]))throw new PrintProblem(400,'Only Handwrytten diagnostics and card preparation are enabled.');
@@ -10,7 +11,7 @@ async function api(env:HandwryttenEnv,path:string,body?:Record<string,unknown>|F
  let response:Response;try{response=await fetch('https://api.handwrytten.com/v2'+path,{method:body?'POST':'GET',headers:{Authorization:env.HANDWRYTTEN_API_KEY,...(body&&!form?{'Content-Type':'application/json'}:{})},...(body?{body:form?body:JSON.stringify(body)}:{}),redirect:'manual',signal:AbortSignal.timeout(20000)});}catch{throw new PrintProblem(503,'Handwrytten is temporarily unavailable.');}
  if(!response.ok)throw new PrintProblem(502,'Handwrytten could not complete the preview request.');
  let result:Record<string,any>;try{result=await response.json() as Record<string,any>;}catch{throw new PrintProblem(502,'Handwrytten returned an invalid preview response.');}
- if(!response.ok||result.status!=='ok')throw new PrintProblem(502,'Handwrytten could not complete the preview request.');
+ if(!response.ok||String(result.status).toLowerCase()!=='ok')throw new PrintProblem(502,'Handwrytten could not complete the preview request.');
  return result;
 }
 export async function handwryttenStatus(env:HandwryttenEnv){
@@ -67,4 +68,28 @@ export async function prepareHandwryttenFoldedCard(env:HandwryttenEnv,input:{fro
   proofs[side]=url.href;
  }
  return {cardId:cardId!,proofs};
+}
+
+// Official pricing preview: one domestic folded card, standard mail, no inserts.
+// No recipient address, credit card, basket or payment endpoint is involved.
+export async function handwryttenCheckoutQuote(env:HandwryttenEnv,input:{cardId:number;message:string}){
+ if(!Number.isSafeInteger(input.cardId)||input.cardId<=0||!input.message.trim())throw new PrintProblem(409,'Prepare the saved card proof and note first.');
+ const auth=await api(env,'/checkauth/auth');
+ if(Number(auth.test_mode)!==1)throw new PrintProblem(409,'Enable Handwrytten Test Mode before requesting a test quote.');
+ const senders=await api(env,'/profile/listAddresses'),addresses=Array.isArray(senders.addresses)?senders.addresses:[];
+ const enforced=Number(senders.enforced_return_address_id);
+ const sender=enforced>0?addresses.find((a:any)=>Number(a.id)===enforced):(addresses.find((a:any)=>a.default===true||a.default===1||a.default==='1')||(addresses.length===1?addresses[0]:null));
+ if(!sender||!Number.isSafeInteger(Number(sender.id))||Number(sender.id)<=0)throw new PrintProblem(409,'Choose a default return address in Handwrytten, or save one sender address, before requesting a quote.');
+ if(Number(sender.country_id)!==1)throw new PrintProblem(409,'Use a US return address for this domestic quote.');
+ const response=await api(env,'/outbound/process',{card_id:input.cardId,country:'United States',message:input.message,records:1,return_address_id:Number(sender.id),shipping_method_id:1});
+ const money=(key:string)=>{
+  const value=response.prices?.[key];
+  if(!['number','string'].includes(typeof value)||String(value).trim()===''||!Number.isFinite(Number(value))||Number(value)<0)throw new PrintProblem(502,'Handwrytten returned an incomplete pricing preview. No order was submitted.');
+  const cents=Math.round(Number(value)*100);
+  if(!Number.isSafeInteger(cents)||Math.abs(Number(value)*100-cents)>.001)throw new PrintProblem(502,'Handwrytten returned an invalid price.');return cents;
+ };
+ if(Number(response.quantity)!==1)throw new PrintProblem(502,'Handwrytten quoted a different card quantity.');
+ const amounts={card:money('card_price'),postage:money('postage_price'),tax:money('tax'),shipping:money('shipping_price'),inserts:money('insert_price'),bundles:response.prices?.bundle_price===undefined?0:money('bundle_price'),subtotal:money('without_tax'),total:money('total')};
+ if(amounts.card+amounts.postage+amounts.shipping+amounts.inserts+amounts.bundles!==amounts.subtotal||amounts.subtotal+amounts.tax!==amounts.total)throw new PrintProblem(502,'Handwrytten returned inconsistent totals. Refresh the quote before proceeding.');
+ return {currency:'USD',quantity:1,amounts,quotedAt:Math.floor(Date.now()/1000),sender:{id:Number(sender.id),name:String(sender.name||[sender.first_name,sender.last_name].filter(Boolean).join(' ')),line1:String(sender.address1||''),city:String(sender.city||''),state:String(sender.state||''),postalCode:String(sender.zip||'')},source:'handwrytten-pricing-preview',submitted:false};
 }

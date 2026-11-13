@@ -1,3 +1,4 @@
+import {printQuoteMarkup} from './print-quote.js';
 import {loadingPaw} from '../../web/loading.js';
 import {foldedCardMarkup,bindFoldedCard} from '../../web/folded-card.js';
 import {mountAddressEditor,addressIsCurrent} from './address-editor.js';
@@ -39,19 +40,32 @@ export function mountPrintAdmin({view,state,contacts,api,requestApi,mark,saveDra
  });}
  rows();document.querySelector('#sharing-search')?.addEventListener('input',()=>{rows();loadOrders();});
  function showFoldedOrder(o){
+  let quote=o.handwrytten_quote_json?JSON.parse(o.handwrytten_quote_json):null;
   const frontDesign=JSON.parse(o.recipe_json||'{}').frontDesign||(o.card_count===2?'personal':'default');
   const markup=()=>foldedCardMarkup({readableNote:false,frontDesign,pictures:o.handwrytten_preview_id?{frontSrc:`/api/editions/${state.year}/print-orders/${o.id}/vendor-front`,insideSrc:`/api/editions/${state.year}/print-orders/${o.id}/vendor-inside`,backSrc:`/api/editions/${state.year}/print-orders/${o.id}/vendor-back`}:null,frontSrc:`/api/editions/${state.year}/print-orders/${o.id}/artwork`,insideSrc:o.card_count===2?`/api/editions/${state.year}/print-orders/${o.id}/default-artwork`:null,preview:{note:o.note,authors:o.authors,backText:o.back_text}});
-  showModal(`<p class="kicker">Folded card · ${esc(o.status)}</p><h2>${esc(o.recipient_name)}</h2><div data-saved-card>${markup()}</div><p class="hint" data-proof-status role="status">${o.handwrytten_preview_id?'Handwrytten picture proof · note illustrated locally.':'Local preview of the saved order.'}</p>${!o.handwrytten_preview_id&&o.status==='simulated'?'<button class="secondary" data-prepare-proof>Prepare Handwrytten proof</button>':''}<p class="hint">The artwork, note, back signature and mailing address were frozen when this order was created. Handwriting: Casual David · 13 pt, automatic fit. Submission remains disabled.</p>`);
-  const modal=document.querySelector('#modal'),region=modal.querySelector('[data-saved-card]'),message=modal.querySelector('[data-proof-status]'),button=modal.querySelector('[data-prepare-proof]');bindFoldedCard(region);
+  showModal(`<p class="kicker">Folded card · ${esc(o.status)}</p><h2>${esc(o.recipient_name)}</h2><div data-saved-card>${markup()}</div><p class="hint" data-proof-status role="status">${o.handwrytten_preview_id?'Handwrytten picture proof · note illustrated locally.':'Local preview of the saved order.'}</p>${!o.handwrytten_preview_id&&o.status==='simulated'?'<button class="secondary" data-prepare-proof>Prepare Handwrytten proof</button>':''}<p class="hint">The artwork, note, back signature and mailing address were frozen when this order was created. Handwriting: Casual David · 13 pt, automatic fit. Submission remains disabled.</p><div data-quote>${printQuoteMarkup(quote)}</div>${o.status==='simulated'?'<button class="secondary" data-get-quote>'+(quote?'Refresh checkout total':'Get checkout total')+'</button>':''}<p class="hint" data-quote-status role="status"></p>`);
+  const modal=document.querySelector('#modal'),region=modal.querySelector('[data-saved-card]'),message=modal.querySelector('[data-proof-status]'),button=modal.querySelector('[data-prepare-proof]'),quoteButton=modal.querySelector('[data-get-quote]'),quoteRegion=modal.querySelector('[data-quote]'),quoteMessage=modal.querySelector('[data-quote-status]');bindFoldedCard(region);
   if(button)button.onclick=async()=>{
-   button.disabled=true;message.innerHTML=loadingPaw()+' Preparing Handwrytten picture proofs… No order is submitted.';
+   button.disabled=true;if(quoteButton)quoteButton.disabled=true;message.innerHTML=loadingPaw()+' Preparing Handwrytten picture proofs… No order is submitted.';
    try{
     const result=await api(`print-orders/${o.id}/prepare-proof`,{});
     if(!region.isConnected)return;
     if(result.status==='ready'){
      o.handwrytten_preview_id=result.id;region.innerHTML=markup();bindFoldedCard(region);button.remove();message.textContent='Handwrytten picture proof · note illustrated locally. No mail or charges.';
     }else{message.textContent='The proof is still being prepared. Check again shortly.';button.disabled=false;button.textContent='Check Handwrytten proof';}
-   }catch(error){if(region.isConnected){message.textContent=error.message;button.disabled=false;button.textContent='Retry Handwrytten proof';}}
+   }catch(error){if(region.isConnected){message.textContent=error.message;button.disabled=false;button.textContent='Retry Handwrytten proof';}}finally{if(quoteButton?.isConnected)quoteButton.disabled=false;}
+  };
+  if(quoteButton)quoteButton.onclick=async()=>{
+   quoteButton.disabled=true;if(button?.isConnected)button.disabled=true;quoteMessage.innerHTML=loadingPaw()+' Getting the card, postage and tax total…';
+   try{
+    const result=await api(`print-orders/${o.id}/quote`,{});if(!quoteRegion.isConnected)return;
+    if(result.status==='ready'){
+     quote=result.quote;o.handwrytten_quote_json=JSON.stringify(quote);o.handwrytten_preview_id=result.proofId;
+     region.innerHTML=markup();bindFoldedCard(region);button?.remove();message.textContent='Handwrytten picture proof · note illustrated locally.';
+     quoteRegion.innerHTML=printQuoteMarkup(quote);quoteMessage.textContent='Quote ready. Nothing submitted; orders remain simulated.';quoteButton.textContent='Refresh checkout total';
+    }else{quoteMessage.textContent='The saved card proof is still preparing. Check the total again shortly.';quoteButton.textContent='Check checkout total';}
+   }catch(error){if(quoteRegion.isConnected){quoteMessage.textContent=error.message;quoteButton.textContent='Retry checkout total';}}
+   finally{if(quoteButton.isConnected)quoteButton.disabled=false;if(button?.isConnected)button.disabled=false;}
   };
  }
  async function loadOrders(){try{const result=await api('print-orders');if(!panel.isConnected)return;for(const row of app.querySelectorAll('[data-print-invitation]')){const used=result.counts.find(o=>o.invitation_id===row.dataset.printInvitation);row.querySelector('[data-print-count]').textContent=`Prints ordered: ${used?.count||0} · ${used?.used?'Allowance used':'Allowance available'}`;
