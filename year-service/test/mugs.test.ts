@@ -153,7 +153,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.equal((await admin(resetPath,{orderId:first.id,confirm:true})).status,409);assert.equal((await (await sim('gift/status')).json() as any).claim.id,second.id);
    assert.equal((await admin(resetPath,{orderId:second.id,confirm:true})).status,200);
   });
-  await t.test('live pricing uses the saved address, enforces the delivered cap server-side and only saves simulated orders',async()=>{
+  await t.test('budget-filtered mug claims need no address estimate and only save simulated orders',async()=>{
    const live=(path:string,data?:unknown,auth=true)=>mf.dispatchFetch('https://live.test/api/gift/'+path,{method:data===undefined?'GET':'POST',headers:{Origin:'https://live.test',...(auth?{Cookie:'__Host-year_session='+raw}:{}),'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});
    const payload={addressVersion:1,designId:'mug-0',requestKey:crypto.randomUUID(),configuration:{style:'classic',size:'11oz',color:'white',font:'clean'}};
    assert.equal((await live('catalog',undefined,false)).status,401);assert.equal((await live('quote',payload,false)).status,401);
@@ -162,13 +162,16 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const catalogResponse=await live('catalog');const catalog=await catalogResponse.json() as any;assert.equal(catalogResponse.status,200,JSON.stringify({catalog,providerCalls}));assert.equal(catalog.provider,'printful');assert.equal(catalog.styles[0].variants[0].id,1320);
    assert.equal((await (await live('quote',payload)).json() as any).totalCents,1424);
    estimatedTotal=25.01;assert.equal((await (await live('quote',payload)).json() as any).withinBudget,false);
-   const blocked=await live('claim',{...payload,totalCents:1,quote:{withinBudget:true}});assert.equal(blocked.status,409);assert.match(await blocked.text(),/budget/);
+   const blocked=await live('claim',{...payload,configuration:{style:'classic',size:'99oz',color:'white',font:'clean'}});assert.equal(blocked.status,400,'Only eligible catalog variants can be claimed');
    assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);
-   providerFailed=true;assert.equal((await live('claim',payload)).status,503);providerFailed=false;
-   estimatedTotal=14.24;const response=await live('claim',payload);assert.equal(response.status,200,await response.clone().text());
+   await db.prepare("INSERT OR REPLACE INTO rate_limits(key,count,expires_at) VALUES('mug-estimate:mug-invite',21,unixepoch()+300)").run();
+   const beforeClaim=providerCalls.length;providerFailed=true;
+   const response=await live('claim',payload);assert.equal(response.status,200,await response.clone().text());providerFailed=false;
+   assert.equal(providerCalls.length,beforeClaim,'Claim does not send an address or request a Printful cost estimate');
    const result=await response.json() as any;assert.equal(result.claim.status,'simulated');
-   const row=await db.prepare('SELECT quote_json,status FROM mug_orders').first<any>();assert.equal(row.status,'simulated');assert.equal(JSON.parse(row.quote_json).totalCents,1424);
-   const history=await (await admin('mug-orders')).json() as any;assert.equal(JSON.parse(history.orders[0].quote_json).shippingCents,709);
+   const row=await db.prepare('SELECT quote_json,status FROM mug_orders').first<any>();assert.equal(row.status,'simulated');assert.equal(row.quote_json,null);
+   const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders[0].quote_json,null);
+   estimatedTotal=14.24;await db.prepare("DELETE FROM rate_limits WHERE key='mug-estimate:mug-invite'").run();
    const callsBefore=providerCalls.length;assert.equal((await live('claim',payload)).status,200);assert.equal(providerCalls.length,callsBefore,'Idempotent replay needs no new supplier call');
    assert.ok(providerCalls.every(path=>path==='/products'||/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(path)||path==='/orders/estimate-costs'));
    await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});

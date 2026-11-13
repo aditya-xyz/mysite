@@ -735,7 +735,7 @@ reserve. Shipping reserves use the highest STANDARD rate measured across mainlan
 US/Alaska/Hawaii, plus the $0.40 holiday surcharge and a $0.50 buffer, rounded up
 to whole dollars; unknown combinations use an $11 reserve until reviewed. These
 are planning assumptions, not a promise of the maximum tax or shipping charge.
-The exact delivered quote is still checked fresh before every simulated claim.
+Checkout uses this budget-filtered saved catalog, without an address-specific price check.
 The current filtered catalog has five styles /23 variants; travel mugs fail price
 filtering. All Printful colors/sizes that pass the budget are included. Font
 choices are our rendered caption artwork, not catalog variants. An unavailable
@@ -744,11 +744,12 @@ preferred variant falls back to the first available curated mug.
 Authenticated catalog and quote endpoints never create orders. Quotes use only
 the invitation contact's verified US street/city/state/ZIP, with stale address
 versions rejected. No name, phone, email or artwork is sent for an estimate.
-`POST /orders/estimate-costs` includes shipping, tax and additional charges;
-the server obtains a fresh quote on each simulated claim and enforces a **$25
-USD delivered maximum**. Provider failures block checkout. Saved owner history
-contains the quote breakdown/time/variant. These remain estimates, not a locked
-price for future fulfillment. Existing simulated claims retain their old proof.
+The diagnostic estimate endpoint remains available, but guest checkout does not
+call it or display a supplier price. Simulated claims validate the selected tuple
+against the budget-filtered saved catalog, then save the verified address and
+order directly; new claims have no quote breakdown. Historical quotes remain in
+owner history. The $25 cutoff is based on catalog planning reserves, rather than
+a verified destination-specific total. No physical order or payment is created.
 Apply migrations 0019 and 0020 before deploying both Workers.
 
 Printful mockups compose the selected published cutout and caption/font into a
@@ -818,7 +819,7 @@ of disabling the launch button (which caused the wait cursor). Saved catalog and
 likely images warm on idle/hover/focus. Image fetching uses at most three parallel
 requests and32 retained private blob URLs; inactive image buffers are evicted and
 all URLs are revoked on teardown. Choosing a photo keeps that selection while
-background setup completes. Exact delivered-price checks still run at confirmation.
+background setup completes. Confirmation saves the simulated order directly without a delivered-price check.
 Both Workers must remain `ORDER_MODE=simulation`; this adds no fulfillment adapter.
 
 Signed-in mug/address POST actions use a separate authenticated network budget

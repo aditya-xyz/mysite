@@ -211,7 +211,8 @@ async function route(request: Request, env: Env) {
   }
   if((path==='/api/gift/quote'||path==='/api/gift/claim')&&request.method==='POST'){
     const invite=await authenticated(request,env);
-    if(printfulEnabled(env)){await limited(env,'mug-estimate:'+invite.id,20,600);await limited(env,'mug-estimate:global',12,60);}
+    if(path.endsWith('/claim'))await limited(env,'mug-claim:'+invite.id,20,600);
+    else if(printfulEnabled(env)){await limited(env,'mug-estimate:'+invite.id,20,600);await limited(env,'mug-estimate:global',12,60);}
     return json(path.endsWith('/quote')?await mugQuote(request,env,invite,await body(request)):await createMugOrder(request,env,invite,await body(request)));
   }
   const mugProof=/^\/api\/gift\/orders\/(mug-[a-z0-9]+)\/(artwork|mockup)$/.exec(path);
