@@ -17,8 +17,13 @@ export async function printAdminRoute(request:Request,env:PrintEnv,path:string,y
   return Response.json(await resetSimulatedOrder(env,'print',year,reset[1],await readBody()));
  }
  if(path==='/api/print-orders'&&request.method==='GET'){
-  const rows=await env.DB.prepare("SELECT o.id,o.invitation_id,o.status,o.recipient_name,o.note,o.default_note,o.address_json,o.created_at,o.allowance_reset_at,o.card_count,o.format,o.back_text,o.authors,o.handwrytten_preview_id,o.handwrytten_order_json,o.handwrytten_quote_json,o.recipe_json,o.provider_id,f.state AS fulfillment_state,f.error AS fulfillment_error FROM print_orders o LEFT JOIN print_fulfillment f ON f.order_id=o.id WHERE o.year=?1 AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') ORDER BY o.created_at DESC LIMIT 200").bind(year).all();
-  const counts=await env.DB.prepare("SELECT i.id AS invitation_id,i.print_order_count AS count,i.print_order_count AS used,o.id AS active_order_id,o.status FROM invites i LEFT JOIN print_orders o ON o.invitation_id=i.id AND o.year=i.edition_year AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') WHERE i.edition_year=?1").bind(year).all();
+  const rows=await env.DB.prepare("SELECT o.id,o.invitation_id,o.status,o.recipient_name,o.note,o.default_note,o.address_json,o.created_at,o.allowance_reset_at,o.card_count,o.format,o.back_text,o.authors,o.handwrytten_preview_id,o.handwrytten_order_json,o.handwrytten_quote_json,o.recipe_json,o.provider_id,f.state AS fulfillment_state,f.error AS fulfillment_error FROM print_orders o LEFT JOIN print_fulfillment f ON f.order_id=o.id WHERE o.year=?1 AND o.status IN ('preparing','simulated','submitted','unknown') ORDER BY o.created_at DESC LIMIT 200").bind(year).all();
+  const counts=await env.DB.prepare(`SELECT i.id AS invitation_id,
+ (SELECT count(*) FROM print_orders h WHERE h.invitation_id=i.id AND h.year=i.edition_year AND h.status IN ('preparing','simulated','submitted','unknown')) AS count,
+ i.print_order_count AS used,o.id AS active_order_id,o.status,
+ CASE WHEN o.status IN ('simulated','submitted') AND (f.order_id IS NULL OR f.state='submitted' OR (f.state='review' AND f.basket_item_id IS NULL)) THEN 1 ELSE 0 END AS can_reset
+ FROM invites i LEFT JOIN print_orders o ON o.invitation_id=i.id AND o.year=i.edition_year AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown')
+ LEFT JOIN print_fulfillment f ON f.order_id=o.id WHERE i.edition_year=?1`).bind(year).all();
   return Response.json({orders:rows.results,counts:counts.results});
  }
  const quote=/^\/api\/print-orders\/([a-z0-9-]+)\/quote$/.exec(path);

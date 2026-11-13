@@ -208,10 +208,10 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    assert.deepEqual(new Uint8Array(await (await guest(path)).arrayBuffer()),bytes);
    assert.equal((await status()).order.artworkSrc,placed.artworkSrc);
    assert.equal((await admin('editions/2026/invitations/invite/reset-print-allowance',{orderId:placed.id,confirm:true})).status,200);
-   assert.equal((await guest(path)).status,404);assert.equal((await (await guest('journal')).json() as any).keepsake.order,undefined);
+   assert.equal((await guest(path)).status,200);assert.equal((await (await guest('journal')).json() as any).keepsake.order,undefined);
    await db.prepare('UPDATE keepsake_defaults SET revision=?1 WHERE year=2026').bind(defaultRevision).run();
   });
-  await t.test('personalized orders snapshot two proofs in the same border and reset releases both',async()=>{
+  await t.test('personalized orders preserve both frozen proofs when resetting the allowance',async()=>{
    await reset();const journal=await (await guest('journal')).json() as any;assert.equal(journal.keepsake.mode,'personal');assert.equal(journal.keepsake.cardCount,1);assert.equal(journal.keepsake.format,'folded');
    const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.frame='santa';form.set('recipe',JSON.stringify(recipe));
    const response=await guest('print/orders',form);assert.equal(response.status,200,await response.clone().text());const result=await response.json() as any;
@@ -219,7 +219,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    assert.deepEqual(new Uint8Array(await (await bucket.get(row.default_artwork_key))!.arrayBuffer()),new Uint8Array([...defaultJPEG,5]));
    assert.equal((await admin('editions/2026/print-orders/'+result.order.id+'/default-artwork')).status,200);
    assert.equal((await admin('editions/2026/invitations/invite/reset-print-allowance',{orderId:result.order.id,confirm:true})).status,200);
-   assert.equal(await bucket.head(row.artwork_key),null);assert.equal(await bucket.head(row.default_artwork_key),null);
+   assert.ok(await bucket.head(row.artwork_key));assert.ok(await bucket.head(row.default_artwork_key));
   });
   await t.test('automatic test mode enqueues only newly confirmed orders and keeps the reservation idempotent',async()=>{
    await reset();const before=vendorCalls.length,form=await order(),encoded=new Request('http://guest.test/api/print/orders',{method:'POST',body:form}),bytes=await encoded.arrayBuffer();
@@ -338,18 +338,46 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    assert.equal((await guest('print/orders',await order(['one','one','two']))).status,403);assert.equal((await guest('print/orders',await order(['one','two','shared']))).status,403);
    assert.equal((await db.prepare('SELECT count(*) n FROM print_orders').first<any>()).n,0);
   });
-  await t.test('simulation reset clears count and proof, scopes by year, and cannot clear a newer order on retry',async()=>{
+  await t.test('print reset preserves history and proofs, scopes by year, and cannot release a newer order on retry',async()=>{
    await reset();const first=await (await guest('print/orders',await order())).json() as any;
    const path='editions/2026/invitations/invite/reset-print-allowance',data={orderId:first.order.id,confirm:true};
    assert.equal((await admin(path,data,false)).status,401);
    assert.equal((await admin('editions/2027/invitations/invite/reset-print-allowance',data)).status,404);
    assert.equal((await admin(path,data)).status,200);assert.equal((await status()).eligible,true);
-   assert.equal(await db.prepare('SELECT * FROM print_orders WHERE id=?1').bind(first.order.id).first(),null);assert.equal((await db.prepare("SELECT print_order_count FROM invites WHERE id='invite'").first<any>()).print_order_count,0);assert.equal((await admin('editions/2026/print-orders/'+first.order.id+'/artwork')).status,404);assert.equal((await (await admin('editions/2026/print-orders')).json() as any).orders.length,0);
+   assert.ok((await db.prepare('SELECT allowance_reset_at FROM print_orders WHERE id=?1').bind(first.order.id).first<any>()).allowance_reset_at);assert.equal((await db.prepare("SELECT print_order_count FROM invites WHERE id='invite'").first<any>()).print_order_count,0);assert.equal((await admin('editions/2026/print-orders/'+first.order.id+'/artwork')).status,200);assert.equal((await (await admin('editions/2026/print-orders')).json() as any).orders.length,1);
    const second=await (await guest('print/orders',await order())).json() as any;assert.notEqual(second.order.id,first.order.id);
    assert.equal((await admin(path,data)).status,409);assert.equal((await status()).eligible,false);
-   const history=await (await admin('editions/2026/print-orders')).json() as any;assert.equal(history.orders.length,1);assert.equal(history.counts[0].count,1);assert.equal(history.counts[0].used,1);
+   const history=await (await admin('editions/2026/print-orders')).json() as any;assert.equal(history.orders.length,2);assert.equal(history.counts[0].count,2);assert.equal(history.counts[0].used,1);
    await db.prepare("UPDATE print_orders SET status='unknown' WHERE id=?1").bind(second.order.id).run();assert.equal((await admin(path,{orderId:second.order.id,confirm:true})).status,409);
    await db.prepare("UPDATE print_orders SET status='preparing' WHERE id=?1").bind(second.order.id).run();assert.equal((await admin(path,{orderId:second.order.id,confirm:true})).status,409);
+  });
+  await t.test('submitted test print reset preserves fulfillment and frozen order data, and grants only one extra allowance',async()=>{
+   await reset();const placed=(await (await guest('print/orders',await order())).json() as any).order;
+   await db.prepare("UPDATE print_orders SET status='submitted',provider_id='handwrytten-test-123',handwrytten_quote_json=?1 WHERE id=?2").bind(JSON.stringify({totalCents:486,submitted:true}),placed.id).run();
+   await db.prepare("INSERT INTO print_fulfillment(order_id,state,vendor_order_id,basket_item_id) VALUES(?1,'submitted',123,456)").bind(placed.id).run();
+   const before=await db.prepare('SELECT * FROM print_orders WHERE id=?1').bind(placed.id).first<any>();
+   const path='editions/2026/invitations/invite/reset-print-allowance',data={orderId:placed.id,confirm:true};
+   const results=await Promise.all([admin(path,data),admin(path,data)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+   const after=await db.prepare('SELECT * FROM print_orders WHERE id=?1').bind(placed.id).first<any>();
+   for(const key of Object.keys(before).filter(k=>!['allowance_reset_at','updated_at'].includes(k)))assert.deepEqual(after[key],before[key],key);
+   assert.ok(after.allowance_reset_at);assert.ok(await bucket.head(after.artwork_key));assert.ok(await bucket.head(after.default_artwork_key));
+   assert.equal((await db.prepare('SELECT state FROM print_fulfillment WHERE order_id=?1').bind(placed.id).first<any>()).state,'submitted');
+   const history=await (await admin('editions/2026/print-orders')).json() as any;assert.equal(history.orders.length,1);assert.equal(history.counts[0].count,1);assert.equal(history.counts[0].used,0);assert.equal(history.counts[0].can_reset,0);
+   assert.equal((await status()).eligible,true);const next=(await (await guest('print/orders',await order())).json() as any).order;assert.notEqual(next.id,placed.id);assert.equal((await status()).eligible,false);
+  });
+  await t.test('print allowance reset blocks active or uncertain fulfillment and retains unsent review history',async()=>{
+   for(const state of ['pending','preparing','staging','staged','submitting','unknown','review']){
+    await reset();const placed=(await (await guest('print/orders',await order())).json() as any).order;
+    await db.prepare('INSERT INTO print_fulfillment(order_id,state,basket_item_id) VALUES(?1,?2,456)').bind(placed.id,state).run();
+    const path='editions/2026/invitations/invite/reset-print-allowance',data={orderId:placed.id,confirm:true};
+    assert.equal((await admin(path,data)).status,409,state);assert.equal((await status()).eligible,false);
+    const history=await (await admin('editions/2026/print-orders')).json() as any;assert.equal(history.counts[0].can_reset,0,state);
+    if(state==='review'){
+     await db.prepare('UPDATE print_fulfillment SET basket_item_id=NULL WHERE order_id=?1').bind(placed.id).run();
+     assert.equal((await admin(path,data)).status,200);assert.equal((await status()).eligible,true);
+     assert.equal((await db.prepare('SELECT state FROM print_fulfillment WHERE order_id=?1').bind(placed.id).first<any>()).state,'review');
+    }
+   }
   });
   await t.test('concurrent taps and retries create exactly one simulated order',async()=>{
    await reset();const results=await Promise.all(Array.from({length:6},async()=>{const r=await guest('print/orders',await order());assert.equal(r.status,200);return await r.json() as any;}));

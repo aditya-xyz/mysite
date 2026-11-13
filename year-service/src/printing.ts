@@ -136,7 +136,7 @@ export function printOrderView(order:PrintOrderProof){
  return {id:order.id,status:order.status,...(order.fulfillment_state?{fulfillment:order.fulfillment_state,testMode:true}:{}),created_at:order.created_at,cardCount:order.format==='folded'?1:order.card_count,format:order.format||'legacy',personalized:order.card_count===2,frontDesign,...(order.format==='folded'?{preview:guestFoldedPreview(order.back_text||''),defaultSrc:order.card_count===2?`/api/print/orders/${order.id}/default-artwork`:null}:{}),artworkSrc:`/api/print/orders/${order.id}/artwork`};
 }
 export async function printOrderArtwork(env:PrintEnv,invite:InvitationAudience,id:string,inside=false){
- const order=await env.DB.prepare("SELECT artwork_key,default_artwork_key FROM print_orders WHERE id=?1 AND invitation_id=?2 AND year=?3 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')").bind(id,invite.id,invite.edition_year).first<{artwork_key:string;default_artwork_key:string|null}>();
+ const order=await env.DB.prepare("SELECT artwork_key,default_artwork_key FROM print_orders WHERE id=?1 AND invitation_id=?2 AND year=?3 AND status IN ('preparing','simulated','submitted','unknown')").bind(id,invite.id,invite.edition_year).first<{artwork_key:string;default_artwork_key:string|null}>();
  const file=order&&await env.MEDIA.get(inside?(order.default_artwork_key||order.artwork_key):order.artwork_key);
  if(!file)throw new PrintProblem(404,'Ordered keepsake not found.');
  return new Response(file.body,{headers:{'Content-Type':'image/jpeg','Cache-Control':'no-store, private'}});

@@ -10,15 +10,15 @@ export function handwryttenPictureView(id:string){return {provider:'handwrytten'
 // Admin proofs always read immutable order artwork rather than current editor/defaults.
 export async function prepareSavedOrderProof(env:PrintEnv,year:number,orderId:string){
  if(env.HANDWRYTTEN_PREVIEWS_ENABLED!=='true')throw new PrintProblem(503,'Handwrytten previews are not enabled.');
- const order=await env.DB.prepare("SELECT * FROM print_orders WHERE id=?1 AND year=?2 AND format='folded' AND status='simulated' AND allowance_reset_at IS NULL").bind(orderId,year).first<{id:string;invitation_id:string;year:number;artwork_key:string;default_artwork_key:string;card_count:number;handwrytten_preview_id:string|null}>();
+ const order=await env.DB.prepare("SELECT * FROM print_orders WHERE id=?1 AND year=?2 AND format='folded' AND status='simulated'").bind(orderId,year).first<{id:string;invitation_id:string;year:number;artwork_key:string;default_artwork_key:string;card_count:number;handwrytten_preview_id:string|null}>();
  if(!order)throw new PrintProblem(404,'Simulated folded order not found.');
  if(year!==handwryttenBrandYear)throw new PrintProblem(503,'The back signature for this edition is being prepared.');
  const invite={id:order.invitation_id,edition_year:year};
  const id=order.handwrytten_preview_id||await digest(JSON.stringify([handwryttenPreviewVersion,'saved-order',order.id]));
  async function attach(){
   // Only attach a ready, scoped design; keep the real frozen note/font/address intact.
-  const attached=await env.DB.prepare("UPDATE print_orders SET handwrytten_preview_id=?1,handwrytten_order_json=json_set(handwrytten_order_json,'$.card_id',(SELECT card_id FROM handwrytten_previews WHERE id=?1)) WHERE id=?2 AND year=?3 AND status='simulated' AND allowance_reset_at IS NULL RETURNING id").bind(id,orderId,year).first();
-  if(!attached)throw new PrintProblem(409,'This simulated order was reset. Reopen order history.');
+  const attached=await env.DB.prepare("UPDATE print_orders SET handwrytten_preview_id=?1,handwrytten_order_json=json_set(handwrytten_order_json,'$.card_id',(SELECT card_id FROM handwrytten_previews WHERE id=?1)) WHERE id=?2 AND year=?3 AND status='simulated' RETURNING id").bind(id,orderId,year).first();
+  if(!attached)throw new PrintProblem(409,'This simulated order changed. Reopen order history.');
  }
  const previous=await env.DB.prepare('SELECT * FROM handwrytten_previews WHERE id=?1').bind(id).first<Proof>();
  if(previous&&(previous.invitation_id!==invite.id||previous.year!==year))throw new PrintProblem(409,'The saved proof does not match this order.');
@@ -60,7 +60,7 @@ export async function prepareSavedOrderProof(env:PrintEnv,year:number,orderId:st
 async function authorizedProof(env:PrintEnv,invite:InvitationAudience,id:string){
  const row=await env.DB.prepare('SELECT * FROM handwrytten_previews WHERE id=?1 AND invitation_id=?2 AND year=?3').bind(id,invite.id,invite.edition_year).first<Proof>();
  if(!row)throw new PrintProblem(404,'Picture preview not found.');
- const ordered=await env.DB.prepare("SELECT id FROM print_orders WHERE handwrytten_preview_id=?1 AND invitation_id=?2 AND year=?3 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')").bind(id,invite.id,invite.edition_year).first();
+ const ordered=await env.DB.prepare("SELECT id FROM print_orders WHERE handwrytten_preview_id=?1 AND invitation_id=?2 AND year=?3 AND status IN ('preparing','simulated','submitted','unknown')").bind(id,invite.id,invite.edition_year).first();
  if(!ordered&&!await keepsakeAccess(env,invite))throw new PrintProblem(403,'Keepsakes are not enabled.');return row;
 }
 export async function handwryttenPreviewStatus(env:PrintEnv,invite:InvitationAudience,id:string){

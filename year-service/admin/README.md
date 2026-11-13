@@ -556,13 +556,16 @@ provider verification/fulfillment must be connected before enabling live orders.
 
 Invitation rows are collapsed by default. More details reveals sharing/link
 controls and print permissions; only one invitation can be expanded at once.
-Postcard and mug allowance resets appear in invitation details once a simulation
-has used the corresponding allowance. Confirmation explicitly warns that the
-simulated order, saved design, and history are deleted; its counter returns to 0.
-Each reset targets the exact current order and cannot affect a newer order or the
-other gift type. Processing/uncertain or real submitted orders cannot be cleared.
-Apply migration 0015 before deploying either Worker. Future real fulfillment
-must preserve old order history and designs across allowance resets.
+Print allowance reset grants one additional print while retaining every previous
+order, saved design, note, address, quote, fulfillment record and proof. It stamps
+`print_orders.allowance_reset_at`; existing triggers release the 0/1 allowance
+marker, so no new boolean or migration is needed. History counts include released
+orders. Reset targets the exact current order and cannot release a newer one on
+retry. Completed simulations and confirmed submitted test orders can be reset;
+processing/uncertain jobs and review jobs with a staged basket item are blocked.
+Reset never cancels or resends an order. Mug reset still deletes only its completed
+simulation and saved artwork, as before. Apply migration 0015 before deploying
+either Worker.
 
 
 ## Google address verification and autocomplete
@@ -771,11 +774,9 @@ and postcard order histories and counters; view their saved proofs before reset.
 
 Migration 0015 adds `mug_orders` and `invites.print_order_count` /
 `invites.mug_order_count`. Atomic order reservations and database triggers keep
-these independent counters at 0 or 1. Reset deletes the completed simulated order
-and its private artwork, releasing that allowance. Test history intentionally
-becomes zero rows. Once fulfillment is connected, change reset semantics to retain
-all prior orders and proofs; never enable this destructive simulation reset for
-real submitted orders. `ORDER_MODE=simulation` is set in both Worker configs;
+these independent allowance markers at 0 or 1. Print reset preserves prior orders
+and proofs by releasing their allowance timestamp; mug reset deletes the completed
+simulated mug order and its private artwork. `ORDER_MODE=simulation` is set in both Worker configs;
 normal same-origin backend requests are used. Fulfillment remains simulated;
 address autocomplete and USPS verification through Google are live. Approved
 verified addresses are saved to the invitation verification contact in People.
