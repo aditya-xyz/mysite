@@ -26,7 +26,7 @@ export function createMugMockups(){
     const caption=document.createElement('figcaption');caption.textContent='Printful mockup · final placement may vary';
     if(prepared){
      const controls=document.createElement('div');controls.className='pb-mockup-views';controls.role='group';controls.ariaLabel='Mug preview angle';
-     for(const [angle,label] of [['front','Front'],['handle-right','Handle on right']]){
+     for(const [angle,label] of [['front','Front view'],['handle-right','Side view']]){
       const button=document.createElement('button');button.type='button';button.className='pb-mockup-view';button.textContent=label;button.ariaPressed=String(record.view===angle);button.disabled=!prepared.has(key(record.design,record.configuration,angle));
       button.onclick=()=>{view=angle;update(element,record.design,record.configuration);element.querySelector(`[aria-pressed="true"]`)?.focus?.({preventScroll:true});};controls.append(button);
      }

@@ -63,7 +63,7 @@ test('saved views default to front, preserve it after backfill, and switch to ha
  const client=createMugMockups();
  try{
   client.configure({prepared:true,styles:[],previews:[preview('front')]});client.update(figure,design,configuration);await settle();
-  assert.equal(client.preparedId(design,configuration),'front');assert.equal(figure.children[1].children[0].textContent,'Front');assert.equal(figure.children[1].children[1].disabled,true);
+  assert.equal(client.preparedId(design,configuration),'front');assert.equal(figure.children[1].children[0].textContent,'Front view');assert.equal(figure.children[1].children[1].textContent,'Side view');assert.equal(figure.children[1].children[1].disabled,true);
   client.configure({prepared:true,styles:[],previews:[preview('front'),preview('handle-right')]});await settle();
   assert.equal(client.preparedId(design,configuration),'front');assert.equal(figure.children[1].children[0].ariaPressed,'true');
   figure.children[1].children[1].onclick();await settle();assert.equal(client.preparedId(design,configuration),'handle-right');assert.equal(figure.children[1].children[1].ariaPressed,'true');
