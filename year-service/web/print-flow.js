@@ -40,7 +40,7 @@ export function createPrintFlow({getData,onChange,onOrdered=()=>{}}){
   }
   function finish(order){
    status={...status,eligible:false,canOrder:false,order,remaining:0};onChange(status);sheet.close();
-   onOrdered(order.testMode?'Test keepsake order queued. No physical mail will be sent.':order.status==='simulated'?'Test keepsake order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your keepsake gift is headed your way 💌':'Your print request is recorded.',!order.testMode&&order.status==='simulated',order);
+   onOrdered(order.testMode?'Test keepsake ordered. No physical mail will be sent.':order.status==='simulated'?'Test keepsake order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your keepsake gift is headed your way 💌':'Your print request is recorded.',!order.testMode&&order.status==='simulated',order);
   }
   submit.onclick=async()=>{
    if(submitting||!delivery.ready)return;submitting=true;submit.disabled=true;if(data.personalized)sheet.querySelector('[data-swap-card]')?.setAttribute('disabled','');message('Saving your order…');
