@@ -1067,7 +1067,8 @@ https://www.handwrytten.com/api-redoc/ .
 ## Printed note greetings and handwriting
 
 New folded orders use Merry Madeline (`hwMadeline`), 13 pt with automatic fitting.
-The personalized and default notes remain shared message bodies. At confirmation,
+The personalized and default notes are complete shared messages, including their
+closing. New orders do not append an automatic signoff or `wishes` field. At confirmation,
 `Dear {invitation addressed to},` and a blank line are prepended to either body.
 If `addressed_to` is empty, the invitation name is used; whitespace in the greeting
 name is normalized. The envelope still uses the mailing contact's name/address
@@ -1080,3 +1081,8 @@ greeting edit. Later edits do not rewrite saved orders or quotes. Admin order
 history labels the font from each saved payload, including older Casual David
 orders. Draft previews illustrate a placeholder greeting; guest previews keep the
 real message hidden. No schema migration or live-order mode change is required.
+
+Admin folded-card proofs are larger (up to 1100px modal and 800px inside spread).
+On mobile the inside pages stack at full width so the note stays readable. Draft
+and new-order proofs omit the automatic signature; older saved orders with a
+frozen `wishes` field keep their original signoff in the historical proof.

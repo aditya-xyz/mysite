@@ -114,7 +114,7 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
   if(insideBytes)await env.MEDIA.put(defaultKey,insideBytes,{httpMetadata:{contentType:'image/jpeg'}});
   const snapshot=await env.DB.prepare('SELECT note,authors,recipient_name,address_json FROM print_orders WHERE id=?1').bind(id).first<{note:string;authors:string;recipient_name:string;address_json:string}>();
   const address=JSON.parse(snapshot!.address_json) as MailingAddress,name=snapshot!.recipient_name.trim().split(/\s+/);
-  const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:'United States',message:snapshot!.note,wishes:'With love,\n'+snapshot!.authors}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
+  const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:'United States',message:snapshot!.note}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
   await env.DB.prepare('UPDATE print_orders SET handwrytten_order_json=?1 WHERE id=?2').bind(JSON.stringify(payload),id).run();
   // Deliberately no live fulfillment adapter: only an explicit simulation mode can record an order.
   await env.DB.prepare("UPDATE print_orders SET status='simulated',provider_id=?1,updated_at=unixepoch() WHERE id=?2 AND status='preparing'").bind('local-'+id,id).run();

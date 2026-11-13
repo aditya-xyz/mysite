@@ -254,3 +254,16 @@ dialog h2[tabindex="-1"]:focus{outline:none}
 .print-quote h3{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 16px}
 .print-quote dl{margin:0}.print-quote dl>div{display:flex;justify-content:space-between;gap:20px;margin:8px 0}.print-quote dd{margin:0;font-variant-numeric:tabular-nums}
 .print-quote .print-quote-total{border-top:1px solid var(--line);padding-top:12px;margin-top:12px;font-size:20px;font-weight:700}
+
+/* Give printed-note proofs enough room to read at a comfortable screen size. */
+#modal:has(.fc-preview,.print-note-proof){width:min(1100px,calc(100vw - 32px))}
+#modal .fc-preview{max-width:960px}
+#modal .fc-surface{max-width:400px}
+#modal .fc-spread{max-width:800px}
+#modal .print-note-proof{max-width:500px;margin-inline:auto}
+@media(max-width:600px){
+ #modal:has(.fc-preview,.print-note-proof){padding:44px 16px 20px}
+ #modal .fc-spread{flex-direction:column;max-width:400px;gap:12px}
+ #modal .fc-spread>.fc-page{width:100%;flex:0 0 auto;aspect-ratio:4.25/5.5}
+ #modal .fc-spread>.fc-page:first-child{border-right:0}
+}

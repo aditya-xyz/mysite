@@ -15,7 +15,7 @@ export function drawPostcardBack(canvas,{note,authors,recipientName,address}){
  [recipientName,...addressLines(address)].forEach((line,i)=>{let size=34;ctx.font=`${size}px system-ui`;while(ctx.measureText(line).width>690&&size>14)ctx.font=`${--size}px system-ui`;ctx.fillText(line,990,510+i*56);});
 }
 
-export function drawFoldedNote(canvas,{note='',authors=''}){
+export function drawFoldedNote(canvas,{note='',authors='',includeSignoff=true}){
  canvas.width=850;canvas.height=1100;const ctx=canvas.getContext('2d');
  ctx.fillStyle='#fffaf0';ctx.fillRect(0,0,850,1100);ctx.fillStyle='#244637';
  let size=44,lines=[];
@@ -28,8 +28,9 @@ export function drawFoldedNote(canvas,{note='',authors=''}){
   }return result;
  };
  do{ctx.font=`${size}px Caveat, Georgia, serif`;lines=wrap();if(lines.length*size*1.4<760)break;size--;}while(size>20);
- const height=lines.length*size*1.4+125,y=Math.max(100,(1100-height)/2);
+ const height=lines.length*size*1.4+(includeSignoff?125:0),y=Math.max(100,(1100-height)/2);
  lines.forEach((line,i)=>ctx.fillText(line,100,y+i*size*1.4));
+ if(!includeSignoff)return;
  ctx.font='38px Caveat, Georgia, serif';ctx.fillText('With love,',100,y+lines.length*size*1.4+40);
  let signatureSize=38;while(ctx.measureText(authors).width>650&&signatureSize>16)ctx.font=`${--signatureSize}px Caveat, Georgia, serif`;
  ctx.fillText(authors,100,y+lines.length*size*1.4+90);

@@ -159,6 +159,15 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
     assert.ok(!JSON.stringify(await status()).includes('Dear Bliss & Vatsi'),'Guest previews keep the printed note a surprise');
    }
   });
+  await t.test('complete messages keep their own closing with no automatic signature for either note type',async()=>{
+   const complete='A complete message.\n\nCheers,\nThe pack';
+   for(const personalized of [true,false]){
+    await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,photos:personalized?photos:[],printNote:complete,defaultPrintNote:complete})).run();
+    const response=await guest('print/orders',await order(personalized?['one','two','three']:[]));assert.equal(response.status,200);
+    const row=await db.prepare('SELECT * FROM print_orders').first<any>(),payload=JSON.parse(row.handwrytten_order_json);
+    assert.equal(payload.addresses[0].message,greeted(complete));assert.equal(payload.addresses[0].wishes,undefined);assert.equal(payload.addresses[0].message.split('Cheers,').length,2);assert.ok(!payload.addresses[0].message.includes('With love,'));
+   }
+  });
   await t.test('an invitation greeting edit invalidates a pending order confirmation',async()=>{
    await reset();const form=await order();await db.prepare("UPDATE invites SET addressed_to='New household',version=version+1 WHERE id='invite'").run();
    assert.equal((await guest('print/orders',form)).status,409);assert.equal((await db.prepare('SELECT count(*) n FROM print_orders').first<any>()).n,0);
@@ -288,7 +297,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    const result=await admin(route,{card_id:999,records:900,note:'Tampered'});assert.equal(result.status,200,await result.clone().text());const data=await result.json() as any;
    assert.equal(data.quote.amounts.total,486);assert.equal(data.quote.amounts.tax,29);assert.equal(data.quote.amounts.postage,82);assert.equal(data.quote.submitted,false);
    const row=await db.prepare('SELECT * FROM print_orders WHERE id=?1').bind(receipt.id).first<any>();assert.equal(row.status,'simulated');assert.deepEqual(JSON.parse(row.handwrytten_quote_json),data.quote);
-   const call=vendorCalls.filter(c=>c.path.endsWith('/outbound/process')).at(-1)!;assert.equal(call.body.card_id,JSON.parse(row.handwrytten_order_json).card_id);assert.equal(call.body.message,greeted(published.printNote)+'\n\nWith love,\n'+published.authors);assert.equal(call.body.records,1);assert.equal(call.body.return_address_id,17);
+   const call=vendorCalls.filter(c=>c.path.endsWith('/outbound/process')).at(-1)!;assert.equal(call.body.card_id,JSON.parse(row.handwrytten_order_json).card_id);assert.equal(call.body.message,greeted(published.printNote));assert.equal(call.body.records,1);assert.equal(call.body.return_address_id,17);
    assert.equal((await (await admin('editions/2026/print-orders')).json() as any).orders[0].handwrytten_quote_json,row.handwrytten_quote_json);
    const guestStatus=await (await proofGuest('print/status')).json() as any;assert.ok(!JSON.stringify(guestStatus).includes('amounts'));assert.ok(!JSON.stringify(guestStatus).includes(published.printNote));
    const creates=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length;assert.equal((await admin(route,{})).status,200);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length,creates,'Refreshing a quote reuses the proof');
