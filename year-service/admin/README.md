@@ -1006,7 +1006,7 @@ orders that have vendor proofs. The old guest preview-generation POST returns 41
 authenticated reads of existing proofs remain compatible with older clients.
 
 Simulated confirmation saves the arranged artwork, real note, authors, address,
-and print font settings (`hwDavid`, size 13, automatic fitting) immediately. The
+and print font settings (`hwMadeline`, Merry Madeline, size 13, automatic fitting) immediately. The
 stored `handwrytten_order_json.card_id` starts as null. No provider call is made on
 the guest order path, and this payload is never submitted.
 
@@ -1063,3 +1063,20 @@ payment even though it is not captured, so this integration never submits one.
 
 Official references: https://www.handwrytten.com/api/preview-order/ and
 https://www.handwrytten.com/api-redoc/ .
+
+## Printed note greetings and handwriting
+
+New folded orders use Merry Madeline (`hwMadeline`), 13 pt with automatic fitting.
+The personalized and default notes remain shared message bodies. At confirmation,
+`Dear {invitation addressed to},` and a blank line are prepended to either body.
+If `addressed_to` is empty, the invitation name is used; whitespace in the greeting
+name is normalized. The envelope still uses the mailing contact's name/address
+(the contact whose phone verifies the invitation), so a household greeting does
+not overwrite a deliverable recipient name.
+
+The composed note and font settings are frozen in the existing order fields and
+provider payload. Invitation-version checks reject stale confirmations after a
+greeting edit. Later edits do not rewrite saved orders or quotes. Admin order
+history labels the font from each saved payload, including older Casual David
+orders. Draft previews illustrate a placeholder greeting; guest previews keep the
+real message hidden. No schema migration or live-order mode change is required.

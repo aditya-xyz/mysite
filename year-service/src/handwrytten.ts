@@ -33,7 +33,7 @@ export async function prepareHandwryttenCard(env:HandwryttenEnv,artwork:File,nam
 }
 
 
-export const handwryttenPrintFont={font:'hwDavid',font_size:13,auto_font_size:true} as const;
+export const handwryttenPrintFont={font:'hwMadeline',font_size:13,auto_font_size:true} as const;
 // Only prepares an immutable design. No message, address, basket or payment is sent.
 export async function prepareHandwryttenFoldedCard(env:HandwryttenEnv,input:{front:File;inside?:File;back:File;backId?:number;cardId?:number;name:string;onBack:(id:number)=>Promise<void>;onCard:(id:number)=>Promise<void>}){
  const status=await handwryttenStatus(env);
