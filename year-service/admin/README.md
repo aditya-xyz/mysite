@@ -1018,3 +1018,10 @@ reduced-motion preferences. Preview requests are limited to 60 per household/hou
 The folded cover uses 90% sizing to keep the full 4:5 artwork and all four candy-cane
 edges inside Handwrytten's A2 cover area. Preview cache version v2 invalidates the
 old cropped fit for new designs. Saved orders retain their original immutable proof.
+
+Default keepsake artwork uses the greeting and signature in
+`scripts/keepsake-default-copy.mjs` (Angela & Aditya). Re-render all three private
+border variants with that copy included in the revision digest before publishing.
+The publisher checks the manifest copy against this shared configuration. Publish
+new immutable R2 keys, then switch the `keepsake_defaults` revision; never overwrite
+saved order proofs or an existing artwork revision.

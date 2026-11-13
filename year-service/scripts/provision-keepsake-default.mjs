@@ -1,9 +1,11 @@
 // Owner-only provisioning: pre-rendered approved defaults remain in ignored .private/ and private R2.
 import {readFile,writeFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
+import {defaultKeepsakeCopy} from './keepsake-default-copy.mjs';
 const year=Number(process.argv[2]||2026),remote=process.argv.includes('--remote'),mode=remote?'--remote':'--local';
 if(!Number.isInteger(year)||year<2000||year>2200)throw Error('Choose a valid scrapbook year.');
 const base=new URL('../.private/keepsake-defaults/',import.meta.url),manifest=JSON.parse(await readFile(new URL('manifest.json',base),'utf8'));
+if(manifest.copy?.greeting!==defaultKeepsakeCopy.greeting||manifest.copy?.signature!==defaultKeepsakeCopy.signature)throw Error('Re-render the default keepsake with the current greeting and signature before publishing.');
 if(!/^[a-f0-9]{32,64}$/.test(manifest.revision))throw Error('Use an immutable default revision.');
 function wrangler(args){const result=spawnSync(process.execPath,['node_modules/wrangler/bin/wrangler.js',...args],{encoding:'utf8'});if(result.status!==0)throw Error('Private default provisioning failed; provider output suppressed.');}
 for(const frame of ['moss','classic','santa']){
