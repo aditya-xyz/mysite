@@ -727,9 +727,9 @@ disable this integration before then; token expiry does not unpublish an edition
 
 The catalog discovers every Printful MUG product and every in-stock US size/color
 combination. Price is the only owner filter: enamel remains eligible with
-“Not dishwasher safe · hand wash only” shown in details/customization. The current
-recommended default is Color Inside, Dark Blue, 15 oz (variant22373), with Clean
-caption font. Classic11oz remains the historical fallback for legacy receipts.
+“Not dishwasher safe · hand wash only” shown in customization. The current
+recommended default is Enamel, White, 12 oz, with Clean caption font. The main
+details modal says “not dishwasher safe. good thing i lick all my bowls.” Classic11oz remains the historical fallback for legacy receipts.
 Each variant must fit $25 minus its conservative shipping reserve and a $4 tax
 reserve. Shipping reserves use the highest STANDARD rate measured across mainland
 US/Alaska/Hawaii, plus the $0.40 holiday surcharge and a $0.50 buffer, rounded up

@@ -4,7 +4,7 @@ import {printfulCatalog,printfulApi,printfulEnabled,type MugStyle,type MugVarian
 import {digest,now,token} from './security.ts';
 import type {InvitationAudience} from './invitations.ts';
 // @ts-expect-error Shared font identifiers only; artwork is prepared by the authenticated owner.
-import {mugFonts} from '../web/mug-options.js';
+import {mugFonts,pixelMugOptions} from '../web/mug-options.js';
 const LAYOUT=1,SIDE=1200,MAX_IMAGE=3*1024*1024;
 interface Source {id:string;year:number;design_id:string;cutout_version:string;caption:string;font:string;ink:string;artwork_key:string}
 interface Target extends MugVariant {style:string;imageId:string}
@@ -60,7 +60,7 @@ export async function syncPreparedMugs(env:PrintEnv,year:number){
   const covered=new Set(activeJobs.results.flatMap(j=>(JSON.parse(j.variants_json) as Target[]).map(v=>v.imageId)));
   const statements:D1PreparedStatement[]=[];
   // Preferred mug/font goes first; a single task includes all colors sharing a print area.
-  const styles=[...catalog.styles].sort((a,b)=>a.id==='color-inside'?-1:b.id==='color-inside'?1:0);
+  const styles=[...catalog.styles].sort((a,b)=>a.id===pixelMugOptions().style?-1:b.id===pixelMugOptions().style?1:0);
   for(const font of mugFonts)for(const style of styles)for(const design of designs){
    const plan=plans.find(p=>p.design_id===design.id&&p.font===font.id&&p.ink===inkFor(style.id));if(!plan||!sources.has(plan.id))continue;
    const groups=new Map<string,Target[]>();
@@ -103,7 +103,7 @@ export async function preparedMugSource(env:PrintEnv,capability:string){
  const image=row&&await env.MEDIA.get(row.artwork_key);if(!image)throw new PrintProblem(404,'Preview artwork not found.');return new Response(image.body,{headers:{'Content-Type':'image/png'}});
 }
 export async function startPreparedJob(env:PrintEnv){
- const job=await env.DB.prepare("SELECT * FROM mug_preview_jobs WHERE status='queued' AND next_check_at<=?1 ORDER BY priority,created_at,id LIMIT 1").bind(now()).first<Job>();if(!job)return false;
+ const job=await env.DB.prepare("SELECT * FROM mug_preview_jobs WHERE status='queued' AND next_check_at<=?1 ORDER BY (json_extract(variants_json,'$[0].style')=?2) DESC,priority,created_at,id LIMIT 1").bind(now(),pixelMugOptions().style).first<Job>();if(!job)return false;
  const lease=await env.DB.prepare("INSERT INTO rate_limits(key,count,expires_at) VALUES('printful-mockup-lease',1,?1) ON CONFLICT(key) DO UPDATE SET expires_at=excluded.expires_at WHERE expires_at<=?2 RETURNING key").bind(now()+31,now()).first();if(!lease)return false;
  const capability=token(),locked=await env.DB.prepare("UPDATE mug_preview_jobs SET status='starting',source_token=?1,source_expires_at=?2,attempts=attempts+1,updated_at=?3 WHERE id=?4 AND status='queued' RETURNING id").bind(capability,now()+1800,now(),job.id).first();if(!locked)return false;
  try{
@@ -115,7 +115,7 @@ export async function startPreparedJob(env:PrintEnv){
 }
 async function failJob(env:PrintEnv,job:Job,retryAfter=60){if(job.result_key)await env.MEDIA.delete(job.result_key);await env.DB.prepare("UPDATE mug_preview_jobs SET status=CASE WHEN attempts>=5 THEN 'failed' ELSE 'queued' END,source_expires_at=0,source_token=NULL,task_key=NULL,result_key=NULL,next_check_at=?1,updated_at=?2 WHERE id=?3").bind(now()+Math.max(31,retryAfter),now(),job.id).run();}
 export async function finishPreparedJobs(env:PrintEnv){
- const jobs=await env.DB.prepare("SELECT * FROM mug_preview_jobs WHERE status IN ('pending','copying') AND next_check_at<=?1 ORDER BY priority,created_at,id LIMIT 2").bind(now()).all<Job>();let budget=6;const years=new Set<number>();
+ const jobs=await env.DB.prepare("SELECT * FROM mug_preview_jobs WHERE status IN ('pending','copying') AND next_check_at<=?1 ORDER BY (json_extract(variants_json,'$[0].style')=?2) DESC,priority,created_at,id LIMIT 2").bind(now(),pixelMugOptions().style).all<Job>();let budget=6;const years=new Set<number>();
  for(const job of jobs.results){
   if(budget<=0)break;
   const locked=await env.DB.prepare('UPDATE mug_preview_jobs SET next_check_at=?1 WHERE id=?2 AND next_check_at<=?3 RETURNING id').bind(now()+60,job.id,now()).first();if(!locked)continue;
