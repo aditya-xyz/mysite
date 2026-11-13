@@ -14,13 +14,14 @@ function fittedText(ctx,text,x,y,maxWidth,size,font){
 export function mountKeepsake(journal,section){
   const photos=personalPhotos(journal.photos);
   if(!section||!journal.keepsake?.enabled)return {destroy(){}};
+  let frame='moss';
   const fixed=journal.keepsake.mode==='default',defaultSrc=()=>journal.keepsake.defaultSrc+frame;
-  const entry=document.createElement('div');entry.className='ks-entry';
-  entry.innerHTML='<div><p class="kicker">this one’s going on the fridge.</p></div><button class="button" type="button">Make a keepsake</button>';
+  const entry=document.createElement('div');entry.className='pb-keepsake-content';section.classList.add('ks-entry');
+  entry.innerHTML=`<figure class="pb-keepsake-art pb-present-art"><img src="${esc(defaultSrc())}" width="1200" height="1500" loading="lazy" decoding="async" alt="A keepsake from our little pack to yours"></figure><div class="pb-present-copy"><h3 id="pb-keepsake-title">for your fridge.</h3><p>${fixed?'a little piece of our year, from our pack to yours.<br>pick a border. i handled the rest.':'three favorite photos, made for your fridge.<br>plus a little something from our pack.'}</p><button class="button" type="button">Make a keepsake</button><p class="pb-gift-allowance">${fixed?'one complimentary keepsake':'your keepsake + our pack’s pick'} for ${esc(journal.name)}</p></div>`;
   section.append(entry);
   const launch=entry.querySelector('button'),modal=document.createElement('dialog');
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
-  let assembleNext=false,chosen=[],crops=new Map(),frame='moss',step='pick',file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
+  let assembleNext=false,chosen=[],crops=new Map(),step='pick',file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
   const images=new Map(),urls=new Set();let cardImages=[],editorCleanup=null,previewFrame=0,orderToast=null,toastTimer=null;
   const printFlow=createPrintFlow({getData:()=>({file,defaultSrc:defaultSrc(),cardCount:fixed?1:2,recipe:{mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:()=>{if(modal.open&&step==='edit')updateExport();},onOrdered:(message,simulated)=>{if(modal.open){showOrderToast(message,simulated);modal.querySelector('[data-share],[data-save]')?.focus();}}});
   const currentPhotos=()=>chosen.map(id=>photos.find(p=>p.id===id));

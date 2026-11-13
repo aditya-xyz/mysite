@@ -230,3 +230,43 @@ header .theme-toggle{min-width:44px;min-height:44px}
 
 /* Enlarge the actual mug within the existing preview space; surrounding layout stays put. */
 .pb-order-review .pb-printful-mockup,.pb-mug-customizer .pb-printful-mockup{transform:scale(1.25);transform-origin:center}
+
+/* Both physical gifts share one place and the same visual weight. */
+.pb-presents{margin:64px 0 56px}
+.pb-presents-heading{margin-bottom:28px}
+.pb-presents-heading .pb-eyebrow{margin:0 0 10px}
+.pb-presents-heading h2{font-size:clamp(36px,4vw,54px);line-height:1.08;letter-spacing:-.025em;color:var(--accent);margin:0}
+.pb-presents-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.pb-presents-grid:has(>.pb-present-card:only-child){grid-template-columns:minmax(0,1fr);max-width:620px;margin-inline:auto}
+.pb-presents .pb-present-card{min-width:0;margin:0;padding:32px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pb-radius);display:flex;flex-direction:column;align-items:stretch;gap:28px}
+.pb-presents .pb-keepsake-content{display:contents}
+.pb-presents .pb-present-art{height:340px;max-width:none;width:100%;margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;flex:none}
+.pb-keepsake-art img{display:block;height:100%;max-width:100%;width:auto;object-fit:contain;rotate:-3deg;box-shadow:0 8px 18px #20392f18}
+.pb-presents .pb-mugshot-stack{width:250px;max-width:calc(100% - 28px);height:280px;aspect-ratio:auto}
+.pb-presents .pb-stack-hint{margin:20px 0 0}
+.pb-presents .pb-gift-sticker{right:calc(50% - 160px);bottom:44px;width:90px;height:90px}
+.pb-presents .pb-present-copy{display:flex;flex:1;flex-direction:column;align-items:flex-start;min-width:0}
+.pb-presents .pb-present-copy h3{font-size:30px;line-height:1.15;letter-spacing:-.02em;font-weight:700;color:var(--accent);margin:0 0 16px}
+.pb-presents .pb-present-card .pb-present-copy>p{display:block;color:var(--ink);font-size:16px;line-height:1.5;margin:0 0 24px}
+.pb-presents .pb-present-copy .button{margin:0;margin-top:auto;min-height:48px;font-size:16px;padding:13px 20px;border-radius:28px;white-space:normal}
+.pb-presents .pb-present-card .pb-present-copy .pb-gift-allowance{font-size:14px;line-height:1.5;color:var(--muted);margin:16px 0 0}
+.pb-presents-budget{font-size:14px;line-height:1.5;color:var(--muted);margin:22px 0 0;text-align:center}
+@media(max-width:760px){
+ .pb-presents{margin:44px 0}
+ .pb-presents-grid{grid-template-columns:1fr;gap:24px}
+ .pb-presents .pb-present-card{padding:28px 24px;gap:24px}
+ .pb-presents .pb-present-art{height:280px}
+ .pb-presents .pb-mugshot-stack{width:210px;height:235px}
+ .pb-presents .pb-gift-sticker{right:calc(50% - 130px);bottom:36px;width:78px;height:78px;font-size:11px}
+ .pb-presents .pb-present-copy h3{font-size:28px}
+ .pb-presents .pb-present-copy .button{width:100%;justify-content:center}
+}
+
+@media(max-width:760px){
+ .pb-presents .pb-present-copy{display:contents}
+ .pb-presents .pb-present-copy h3{order:-1;margin:0}
+ .pb-presents .pb-present-art{order:0}
+ .pb-presents .pb-present-card .pb-present-copy>p{order:1;margin:0}
+ .pb-presents .pb-present-copy .button{order:2;margin:0}
+ .pb-presents .pb-present-card .pb-present-copy .pb-gift-allowance{order:3;margin:0}
+}

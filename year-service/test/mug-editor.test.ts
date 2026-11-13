@@ -46,3 +46,12 @@ test('households with an existing mug order get the view-gift button on first re
  journal.gift.hasOrder=false;
  assert.match(giftMarkup(journal),/data-open-gift>pick your mugshot<\/button>/);
 });
+
+
+test('the shared gift section preserves independent keepsake and mug visibility',()=>{
+ const journal:any={name:'Household',keepsake:{enabled:true},gift:{enabled:true,designs:Array.from({length:4},(_,i)=>({id:'mug-'+i,src:'/api/mugs/mug-'+i}))}};
+ let html=giftMarkup(journal);assert.match(html,/keepsake-section/);assert.match(html,/data-open-gift/);assert.match(html,/one of each per household/);
+ journal.gift.enabled=false;html=giftMarkup(journal);assert.match(html,/keepsake-section/);assert.doesNotMatch(html,/data-open-gift/);
+ journal.gift.enabled=true;journal.keepsake.enabled=false;html=giftMarkup(journal);assert.doesNotMatch(html,/keepsake-section/);assert.match(html,/data-open-gift/);
+ journal.gift.enabled=false;assert.equal(giftMarkup(journal),'');
+});
