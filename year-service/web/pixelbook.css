@@ -227,3 +227,6 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-gift-price dd{font-weight:600}.pb-gift-zero{font-size:20px;font-weight:700}
 .pb-mug-summary{margin-top:28px;display:grid;gap:8px}
 .pb-order-review .pb-mug-summary>p{margin:0}
+
+/* Enlarge the actual mug within the existing preview space; surrounding layout stays put. */
+.pb-order-review .pb-printful-mockup,.pb-mug-customizer .pb-printful-mockup{transform:scale(1.25);transform-origin:center}
