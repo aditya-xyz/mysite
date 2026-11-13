@@ -1,9 +1,10 @@
 import {imageDimensions} from './image-dimensions.ts';
 import {PrintProblem} from './printing.ts';
-export interface HandwryttenEnv {HANDWRYTTEN_API_KEY?:string}
-// Deliberately excludes order submission, basket changes, payments and test-mode toggles.
+export interface HandwryttenEnv {HANDWRYTTEN_API_KEY?:string;PRINT_ORDER_MODE?:string}
+// Submission and basket mutations are reachable only through the Test Mode gate below.
+// Test-mode toggles and live payment adapters are never enabled.
 // /outbound/process is the documented pricing preview, not /outbound/addToBasket.
-const allowed=new Set(['/checkauth/auth','/design/dimensions','/basket/count','/cards/uploadCustomLogo','/cards/createCustomCard','/cards/view','/fonts/list','/profile/listAddresses','/outbound/process']);
+const allowed=new Set(['/checkauth/auth','/design/dimensions','/basket/count','/cards/uploadCustomLogo','/cards/createCustomCard','/cards/view','/fonts/list','/profile/listAddresses','/outbound/process','/countries/list','/basket/allNew','/orders/placeBasket','/basket/send','/basket/remove','/orders/details']);
 async function api(env:HandwryttenEnv,path:string,body?:Record<string,unknown>|FormData){
  if(!env.HANDWRYTTEN_API_KEY)throw new PrintProblem(503,'Handwrytten is not connected.');
  if(!allowed.has(path.split('?')[0]))throw new PrintProblem(400,'Only Handwrytten diagnostics and card preparation are enabled.');
@@ -17,7 +18,7 @@ async function api(env:HandwryttenEnv,path:string,body?:Record<string,unknown>|F
 export async function handwryttenStatus(env:HandwryttenEnv){
  if(!env.HANDWRYTTEN_API_KEY)return {connected:false,testMode:false,ordering:'simulation',submissionEnabled:false};
  const auth=await api(env,'/checkauth/auth'),formats=await api(env,'/design/dimensions');
- return {connected:true,testMode:Number(auth.test_mode)===1,ordering:'simulation',submissionEnabled:false,formats:(formats.dimensions||[]).map((d:any)=>({id:d.id,orientation:d.orientation,width:d.open_width,height:d.open_height,format:d.format}))};
+ return {connected:true,testMode:Number(auth.test_mode)===1,ordering:env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':'simulation',submissionEnabled:env.PRINT_ORDER_MODE==='handwrytten_test'&&Number(auth.test_mode)===1,formats:(formats.dimensions||[]).map((d:any)=>({id:d.id,orientation:d.orientation,width:d.open_width,height:d.open_height,format:d.format}))};
 }
 // This creates a reusable card design only. Call only with explicitly approved artwork.
 export async function prepareHandwryttenCard(env:HandwryttenEnv,artwork:File,name:string){
@@ -93,3 +94,26 @@ export async function handwryttenCheckoutQuote(env:HandwryttenEnv,input:{cardId:
  if(amounts.card+amounts.postage+amounts.shipping+amounts.inserts+amounts.bundles!==amounts.subtotal||amounts.subtotal+amounts.tax!==amounts.total)throw new PrintProblem(502,'Handwrytten returned inconsistent totals. Refresh the quote before proceeding.');
  return {currency:'USD',quantity:1,amounts,quotedAt:Math.floor(Date.now()/1000),sender:{id:Number(sender.id),name:String(sender.name||[sender.first_name,sender.last_name].filter(Boolean).join(' ')),line1:String(sender.address1||''),city:String(sender.city||''),state:String(sender.state||''),postalCode:String(sender.zip||'')},source:'handwrytten-pricing-preview',submitted:false};
 }
+
+export async function requireHandwryttenTestMode(env:HandwryttenEnv){
+ if(env.PRINT_ORDER_MODE!=='handwrytten_test')throw new PrintProblem(503,'Automatic Handwrytten test ordering is disabled.');
+ if(Number((await api(env,'/checkauth/auth')).test_mode)!==1)throw new PrintProblem(409,'Handwrytten Test Mode must be enabled. Nothing was submitted.');
+}
+export async function handwryttenBasket(env:HandwryttenEnv){return api(env,'/basket/allNew');}
+export async function handwryttenTestMutation(env:HandwryttenEnv,path:'/orders/placeBasket'|'/basket/send'|'/basket/remove',body:Record<string,unknown>){
+ await requireHandwryttenTestMode(env);
+ return api(env,path,body);
+}
+export async function handwryttenSender(env:HandwryttenEnv){
+ const response=await api(env,'/profile/listAddresses'),list=Array.isArray(response.addresses)?response.addresses:[];
+ const enforced=Number(response.enforced_return_address_id),sender=enforced>0?list.find((a:any)=>Number(a.id)===enforced):(list.find((a:any)=>[true,1,'1'].includes(a.default))||(list.length===1?list[0]:null));
+ if(!sender||!Number.isSafeInteger(Number(sender.id))||Number(sender.id)<=0||Number(sender.country_id)!==1)throw new PrintProblem(409,'Choose a US return address in Handwrytten.');
+ return {id:Number(sender.id),name:String(sender.name||''),line1:String(sender.address1||''),line2:String(sender.address2||''),city:String(sender.city||''),state:String(sender.state||''),postalCode:String(sender.zip||'')};
+}
+export async function handwryttenCountry(env:HandwryttenEnv,code:string){
+ const response=await api(env,'/countries/list'),country=response.countries?.find((c:any)=>c.ups_code===code);
+ if(!country||!Number.isSafeInteger(Number(country.id))||!country.name)throw new PrintProblem(409,'Handwrytten does not support this destination.');
+ return {id:Number(country.id),name:String(country.name)};
+}
+
+export async function handwryttenTestOrder(env:HandwryttenEnv,id:number){return (await api(env,'/orders/details?id='+id)).order;}

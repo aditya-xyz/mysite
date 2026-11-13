@@ -11,6 +11,7 @@
   "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },
   "vars": {
     "ORDER_MODE": "simulation",
+    "PRINT_ORDER_MODE": "handwrytten_test",
     "HANDWRYTTEN_PREVIEWS_ENABLED": "true",
     "PRINTFUL_ENABLED": "true", "PRINTFUL_STORE_ID": "19057580",
     "ADDRESS_VERIFICATION_PROVIDER": "google", "GOOGLE_PLACES_ENABLED": "true",

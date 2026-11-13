@@ -33,24 +33,24 @@ export async function reserveGoogleRequest(env:AddressEnv,provider:'google'|'goo
  .bind(day,month,budget.daily,budget.monthly,provider).first();
  if(!reserved)throw new PrintProblem(429,'Address verification has reached its daily or monthly limit. Try later; your contact is unchanged.');
 }
-export function googleMailingAddress(response:unknown):MailingAddress {
+export function googleMailingAddress(response:unknown,expectedCountry:MailingAddress['country']='US'):MailingAddress {
  const result=(response as any)?.result,v=result?.verdict,usps=result?.uspsData,p=result?.address?.postalAddress;
- if(!v||v.addressComplete!==true||!['PREMISE','SUB_PREMISE'].includes(v.validationGranularity)||v.hasUnconfirmedComponents===true||['FIX','CONFIRM_ADD_SUBPREMISES'].includes(v.possibleNextAction)||usps?.dpvConfirmation!=='Y'||usps?.dpvVacant==='Y'||usps?.dpvNoStat==='Y')throw new PrintProblem(422,usps?.dpvConfirmation==='D'||usps?.dpvConfirmation==='S'?'Check the apartment or unit number before verifying this address.':'Google could not confirm a complete, deliverable US address. Check the address and try again.');
- if(!p||p.regionCode!=='US'||!Array.isArray(p.addressLines)||p.addressLines.length<1||p.addressLines.length>2)throw new PrintProblem(422,'Google did not return a supported US mailing address.');
- try{return mailingAddress({line1:p.addressLines[0],line2:p.addressLines[1]||'',city:p.locality,state:p.administrativeArea,postalCode:p.postalCode,country:p.regionCode});}
- catch{throw new PrintProblem(422,'Google did not return a complete US mailing address.');}
+ if(!v||v.addressComplete!==true||!['PREMISE','SUB_PREMISE'].includes(v.validationGranularity)||v.hasUnconfirmedComponents===true||['FIX','CONFIRM_ADD_SUBPREMISES'].includes(v.possibleNextAction)||(expectedCountry==='US'&&(usps?.dpvConfirmation!=='Y'||usps?.dpvVacant==='Y'||usps?.dpvNoStat==='Y')))throw new PrintProblem(422,usps?.dpvConfirmation==='D'||usps?.dpvConfirmation==='S'?'Check the apartment or unit number before verifying this address.':'Google could not confirm a complete, deliverable address. Check the address and try again.');
+ if(!p||p.regionCode!==expectedCountry||!Array.isArray(p.addressLines)||p.addressLines.length<1||p.addressLines.length>(expectedCountry==='US'?2:6))throw new PrintProblem(422,'Google did not return a supported mailing address.');
+ try{return mailingAddress({line1:p.addressLines[0],line2:p.addressLines.slice(1).join(', '),city:p.locality,state:p.administrativeArea,postalCode:p.postalCode,country:p.regionCode});}
+ catch{throw new PrintProblem(422,'Google did not return a complete mailing address.');}
 }
 async function verifyGoogle(env:AddressEnv,address:MailingAddress){
  await reserveGoogleRequest(env);
  let response:Response;
  try{response=await fetch('https://addressvalidation.googleapis.com/v1:validateAddress',{
   method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':env.GOOGLE_ADDRESS_VALIDATION_API_KEY!},
-  body:JSON.stringify({address:{regionCode:'US',administrativeArea:address.state,locality:address.city,postalCode:address.postalCode,addressLines:[address.line1,address.line2].filter(Boolean)},enableUspsCass:true}),signal:AbortSignal.timeout(10000)
+  body:JSON.stringify({address:{regionCode:address.country,administrativeArea:address.state,locality:address.city,postalCode:address.postalCode,addressLines:[address.line1,address.line2].filter(Boolean)},enableUspsCass:address.country==='US'}),signal:AbortSignal.timeout(10000)
  });}catch{throw new PrintProblem(503,'Google address verification is unavailable. Your contact is unchanged; try again later.');}
  // Never echo upstream bodies: they may include credentials, addresses, or quota details.
  if(!response.ok)throw new PrintProblem(response.status===429?429:503,response.status===429?'Google address verification quota was reached. Your contact is unchanged.':'Google address verification is unavailable or needs configuration. Your contact is unchanged.');
  let result:unknown;try{result=await response.json();}catch{throw new PrintProblem(503,'Google returned an unreadable verification result. Your contact is unchanged.');}
- return googleMailingAddress(result);
+ return googleMailingAddress(result,address.country);
 }
 async function persistAddress(env:AddressEnv,id:string,version:number,address:MailingAddress,verification?:{provider:string;at:number}){
  const encoded=JSON.stringify(address);

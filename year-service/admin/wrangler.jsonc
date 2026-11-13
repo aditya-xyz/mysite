@@ -10,6 +10,7 @@
   "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },
   "vars": {
     "ORDER_MODE": "simulation",
+    "PRINT_ORDER_MODE": "handwrytten_test",
     "HANDWRYTTEN_PREVIEWS_ENABLED": "true",
     "ADMIN_EMAIL": "aditya.patil.gverse@gmail.com",
     "ACCESS_TEAM_DOMAIN": "https://billowing-truth-eac1.cloudflareaccess.com",

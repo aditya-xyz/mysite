@@ -5,18 +5,21 @@ import {digest,now,token} from './security.ts';
 import {invitationAudience,invitationName,type InvitationAudience} from './invitations.ts';
 import {visiblePhotos,type Published,type Draft} from './edition.ts';
 import {imageDimensions} from './image-dimensions.ts';
-export interface PrintEnv {DB:D1Database;MEDIA:R2Bucket;PRINT_PROVIDER?:string;ORDER_MODE?:string;PRINTFUL_ENABLED?:string;PRINTFUL_API_TOKEN?:string;PRINTFUL_STORE_ID?:string;HANDWRYTTEN_API_KEY?:string;HANDWRYTTEN_PREVIEWS_ENABLED?:string}
-export interface MailingAddress {line1:string;line2:string;city:string;state:string;postalCode:string;country:'US'}
+export interface PrintEnv {DB:D1Database;MEDIA:R2Bucket;PRINT_PROVIDER?:string;ORDER_MODE?:string;PRINTFUL_ENABLED?:string;PRINTFUL_API_TOKEN?:string;PRINTFUL_STORE_ID?:string;PRINT_ORDER_MODE?:string;HANDWRYTTEN_API_KEY?:string;HANDWRYTTEN_PREVIEWS_ENABLED?:string}
+export interface MailingAddress {line1:string;line2:string;city:string;state:string;postalCode:string;country:'US'|'IN'|'NL'}
 export class PrintProblem extends Error {status:number;retryAfter?:number;constructor(status:number,message:string,retryAfter?:number){super(message);this.status=status;this.retryAfter=retryAfter;}}
 export const localPrintProvider=(request:Request,env:PrintEnv)=>env.PRINT_PROVIDER==='local_mock'&&new URL(request.url).protocol==='http:'&&['localhost','127.0.0.1','guest.preview','admin.preview','guest.test','admin.test'].includes(new URL(request.url).hostname);
 export const simulatedOrders=(request:Request,env:PrintEnv)=>env.ORDER_MODE==='simulation'||localPrintProvider(request,env);
 export function mailingAddress(value:unknown):MailingAddress {
- if(!value||typeof value!=='object')throw new PrintProblem(400,'Enter a US mailing address.');
+ if(!value||typeof value!=='object')throw new PrintProblem(400,'Enter a mailing address.');
  const a=value as Record<string,unknown>,out:Record<string,string>={};
  for(const key of ['line1','line2','city','state','postalCode','country']){
   const v=a[key]??(key==='line2'?'':'');if(typeof v!=='string'||v.length>120||/[\r\n\x00-\x1f]/.test(v))throw new PrintProblem(400,'Check the mailing address.');out[key]=v.trim();
  }
- if(out.country!=='US'||!out.line1||!out.city||! /^[A-Z]{2}$/.test(out.state)||!/^\d{5}(-\d{4})?$/.test(out.postalCode))throw new PrintProblem(400,'Use a US address, two-letter state, and ZIP code.');
+ if(!['US','IN','NL'].includes(out.country)||!out.line1||!out.city)throw new PrintProblem(400,'Use a complete address in the United States, India or the Netherlands.');
+ if(out.country==='US'&&(!/^[A-Z]{2}$/.test(out.state)||!/^\d{5}(-\d{4})?$/.test(out.postalCode)))throw new PrintProblem(400,'Use a US address, two-letter state, and ZIP code.');
+ if(out.country==='IN'&&(!out.state||!/^\d{6}$/.test(out.postalCode)))throw new PrintProblem(400,'Include the Indian state and six-digit PIN code.');
+ if(out.country==='NL'){out.postalCode=out.postalCode.toUpperCase().replace(/\s+/g,'');if(!/^[1-9]\d{3}[A-Z]{2}$/.test(out.postalCode))throw new PrintProblem(400,'Use a Dutch postcode such as 1234 AB.');out.postalCode=out.postalCode.slice(0,4)+' '+out.postalCode.slice(4);}
  return out as unknown as MailingAddress;
 }
 export const personalCount=(draft:Draft,ids:string[])=>new Set(draft.photos.filter(p=>!p.hidden&&p.recipients.length&&p.recipients.some(id=>ids.includes(id))).map(p=>p.id)).size;
@@ -33,7 +36,7 @@ export const foldedPreviewNote='a little note is hiding here. i’d tell you wha
 export const printedGreeting=(invite:Pick<InvitationAudience,'addressed_to'|'name'>)=>`Dear ${(invitationName(invite).trim()||invite.name.trim()||'friend').replace(/\s+/g,' ')},\n\n`;
 const guestFoldedPreview=(backText:string)=>({note:foldedPreviewNote,authors:'Pixel',backText});
 export const foldedBackText=(year:number)=>`pixelbook ’${String(year).slice(-2)}`;
-export interface PrintOrderProof {id:string;status:string;created_at:number;card_count:number;format?:string;back_text?:string|null;note?:string;authors?:string;handwrytten_preview_id?:string|null;recipe_json?:string}
+export interface PrintOrderProof {id:string;status:string;created_at:number;card_count:number;format?:string;back_text?:string|null;note?:string;authors?:string;handwrytten_preview_id?:string|null;recipe_json?:string;fulfillment_state?:string|null;fulfillment_error?:string|null}
 export async function printContext(request:Request,env:PrintEnv,invite:InvitationAudience){
  const i=await env.DB.prepare('SELECT * FROM invites WHERE id=?1 AND revoked_at IS NULL AND expires_at>?2').bind(invite.id,now()).first<InvitationAudience&{version:number}>();
  if(!i)throw new PrintProblem(401,'This invitation is no longer available.');
@@ -42,8 +45,8 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  const published:Published|null=edition?.published_json?JSON.parse(edition.published_json):null;
  const photos=published?visiblePhotos(published,i.id,await invitationAudience(env.DB,i)).filter(p=>p.recipients.length):[];
  const defaults=edition?.is_active&&edition.allow_print_orders&&i.allow_print?await keepsakeDefault(env,i.edition_year):null;
- const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
- const mode=simulatedOrders(request,env)?'local_mock':'disabled';
+ const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json,(SELECT state FROM print_fulfillment f WHERE f.order_id=print_orders.id) AS fulfillment_state FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
+ const mode=env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':simulatedOrders(request,env)?'local_mock':'disabled';
  let reason='';
  if(existing)reason='Your complimentary print has already been ordered.';
  else if(!edition?.is_active)reason='This scrapbook is no longer active.';
@@ -51,11 +54,11 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  else if(!(photos.length>=3?published?.printNote:published?.defaultPrintNote?.trim()||published?.printNote)?.trim())reason='The folded card note is not published yet.';
  else if(!i.allow_print)reason='Printing is not enabled for this invitation.';
  else if(!defaults)reason='The default keepsake is being prepared.';
- else if(!addressVerificationCurrent(person)||!person?.mailing_address)reason='The mailing contact needs a verified US address.';
+ else if(!addressVerificationCurrent(person)||!person?.mailing_address)reason='The mailing contact needs a verified mailing address.';
  else if(i.print_address_key!==person.address_verification_key)reason='The mailing address changed. Ask us to re-enable printing.';
  else if(mode==='disabled')reason='The print provider is not configured. No orders can be placed.';
  const confirmationKey=await digest(JSON.stringify(['folded-a2-portrait-v1',i.id,i.version,edition?.published_version,person?.version,person?.mailing_address,published?.printNote,published?.defaultPrintNote]));
- const needsAddress=!!reason&&['The mailing contact needs a verified US address.','The mailing address changed. Ask us to re-enable printing.'].includes(reason)&&mode!=='disabled';
+ const needsAddress=!!reason&&['The mailing contact needs a verified mailing address.','The mailing address changed. Ask us to re-enable printing.'].includes(reason)&&mode!=='disabled';
  return {i,edition,person,published,photos,existing,mode,reason,confirmationKey,needsAddress,defaults};
 }
 export async function printStatus(request:Request,env:PrintEnv,invite:InvitationAudience){
@@ -114,22 +117,23 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
   if(insideBytes)await env.MEDIA.put(defaultKey,insideBytes,{httpMetadata:{contentType:'image/jpeg'}});
   const snapshot=await env.DB.prepare('SELECT note,authors,recipient_name,address_json FROM print_orders WHERE id=?1').bind(id).first<{note:string;authors:string;recipient_name:string;address_json:string}>();
   const address=JSON.parse(snapshot!.address_json) as MailingAddress,name=snapshot!.recipient_name.trim().split(/\s+/);
-  const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:'United States',message:snapshot!.note}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
+  const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:({US:'United States',IN:'India',NL:'Netherlands'})[address.country],message:snapshot!.note}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
   await env.DB.prepare('UPDATE print_orders SET handwrytten_order_json=?1 WHERE id=?2').bind(JSON.stringify(payload),id).run();
-  // Deliberately no live fulfillment adapter: only an explicit simulation mode can record an order.
+  if(env.PRINT_ORDER_MODE==='handwrytten_test')await env.DB.prepare("INSERT INTO print_fulfillment(order_id,state) VALUES(?1,'pending')").bind(id).run();
+  // Live mailing is never enabled; the separate worker requires vendor Test Mode.
   await env.DB.prepare("UPDATE print_orders SET status='simulated',provider_id=?1,updated_at=unixepoch() WHERE id=?2 AND status='preparing'").bind('local-'+id,id).run();
  }catch{
   // No provider submission happened, so this is a definite failure and releases the allowance.
   await env.DB.prepare("UPDATE print_orders SET status='failed',updated_at=unixepoch() WHERE id=?1 AND status='preparing'").bind(id).run();
   await env.MEDIA.delete([key,defaultKey]).catch(()=>{});throw new PrintProblem(503,'The local order could not be saved. Retry with a new request.');
  }
- return {order:printOrderView({id,status:'simulated',created_at:now(),card_count:personalized?2:1,recipe_json:JSON.stringify(recipe),format:'folded',back_text:foldedBackText(c.i.edition_year),note:(personalized?c.published!.printNote:c.published!.defaultPrintNote?.trim()||c.published!.printNote)||'',authors:c.published!.authors}),reused:false};
+ return {order:printOrderView({id,status:'simulated',created_at:now(),card_count:personalized?2:1,recipe_json:JSON.stringify(recipe),format:'folded',back_text:foldedBackText(c.i.edition_year),fulfillment_state:env.PRINT_ORDER_MODE==='handwrytten_test'?'pending':undefined,note:(personalized?c.published!.printNote:c.published!.defaultPrintNote?.trim()||c.published!.printNote)||'',authors:c.published!.authors}),reused:false};
 }
 
 export function printOrderView(order:PrintOrderProof){
  const recipe=order.recipe_json?JSON.parse(order.recipe_json):{};
  const frontDesign=order.card_count===2&&recipe.frontDesign!=='default'?'personal':'default';
- return {id:order.id,status:order.status,created_at:order.created_at,cardCount:order.format==='folded'?1:order.card_count,format:order.format||'legacy',personalized:order.card_count===2,frontDesign,...(order.format==='folded'?{preview:guestFoldedPreview(order.back_text||''),defaultSrc:order.card_count===2?`/api/print/orders/${order.id}/default-artwork`:null}:{}),artworkSrc:`/api/print/orders/${order.id}/artwork`};
+ return {id:order.id,status:order.status,...(order.fulfillment_state?{fulfillment:order.fulfillment_state,testMode:true}:{}),created_at:order.created_at,cardCount:order.format==='folded'?1:order.card_count,format:order.format||'legacy',personalized:order.card_count===2,frontDesign,...(order.format==='folded'?{preview:guestFoldedPreview(order.back_text||''),defaultSrc:order.card_count===2?`/api/print/orders/${order.id}/default-artwork`:null}:{}),artworkSrc:`/api/print/orders/${order.id}/artwork`};
 }
 export async function printOrderArtwork(env:PrintEnv,invite:InvitationAudience,id:string,inside=false){
  const order=await env.DB.prepare("SELECT artwork_key,default_artwork_key FROM print_orders WHERE id=?1 AND invitation_id=?2 AND year=?3 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')").bind(id,invite.id,invite.edition_year).first<{artwork_key:string;default_artwork_key:string|null}>();

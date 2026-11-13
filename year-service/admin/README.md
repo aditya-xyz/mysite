@@ -995,8 +995,8 @@ paragraph and view caption and scales the card to the available viewport height.
 Apply `0027_handwrytten_previews.sql` before deploying either Worker. Enable
 `HANDWRYTTEN_PREVIEWS_ENABLED=true` and provision the existing API credential to
 both server Workers with `node scripts/provision.mjs handwrytten-secret`.
-`ORDER_MODE=simulation` remains required; no vendor order/basket/payment endpoint
-is enabled. The API allowlist only adds card details and handwriting-font reads.
+`ORDER_MODE=simulation` remains for local gift simulations; the separate
+`PRINT_ORDER_MODE=handwrytten_test` flag enables the gated test adapter described below. The API allowlist only adds card details and handwriting-font reads.
 
 Guest Front/Inside/Back previews render locally, using A2 portrait proportions,
 a 90% cover inset, the matching inside-left artwork inset, the enlarged placeholder
@@ -1008,7 +1008,8 @@ authenticated reads of existing proofs remain compatible with older clients.
 Simulated confirmation saves the arranged artwork, real note, authors, address,
 and print font settings (`hwMadeline`, Merry Madeline, size 13, automatic fitting) immediately. The
 stored `handwrytten_order_json.card_id` starts as null. No provider call is made on
-the guest order path, and this payload is never submitted.
+the synchronous guest order path. The automatic test worker may later submit it
+when explicitly enabled, as described below.
 
 In admin order history, **Prepare Handwrytten proof** calls the authenticated,
 year-scoped `POST /api/editions/:year/print-orders/:id/prepare-proof` for a saved
@@ -1021,7 +1022,8 @@ locally; it is not a vendor handwriting proof.
 Proofs are copied to private R2. Cached ready proofs are reused; failed renders
 retry the same vendor card ID. A ready proof attaches to the saved order and fills
 only its stored payload's card ID, preserving the original note/font/address.
-Test Mode is required and vendor order/basket/payment endpoints stay disabled.
+Proof preparation requires Test Mode and does not submit orders. The separate
+automatic test worker owns the gated checkout/submission calls.
 Existing saved vendor proofs remain available in admin. No schema migration is
 needed. Prepare a new back asset before enabling another edition year.
 
@@ -1058,7 +1060,8 @@ A failed refresh never overwrites a previous valid quote. Guest APIs omit it.
 This is the provider's domestic pricing preview, documented under Prospecting,
 not a submitted checkout. Final checkout pricing may change. Test Mode is required;
 `/outbound/addToBasket`, order submission, basket mutations and payment endpoints
-remain excluded from the API allowlist. A Test Mode submission can authorize a
+are unavailable to this quote-only route; automatic test fulfillment uses a
+separate Test Mode gate. A Test Mode submission can authorize a
 payment even though it is not captured, so this integration never submits one.
 
 Official references: https://www.handwrytten.com/api/preview-order/ and
@@ -1086,3 +1089,52 @@ Admin folded-card proofs are larger (up to 1100px modal and 800px inside spread)
 On mobile the inside pages stack at full width so the note stays readable. Draft
 and new-order proofs omit the automatic signature; older saved orders with a
 frozen `wishes` field keep their original signoff in the historical proof.
+
+## Automatic Handwrytten Test Mode fulfillment
+
+Apply `0029_handwrytten_fulfillment.sql` before deploying either Worker. Keep
+`ORDER_MODE=simulation` for the other gift flows and set
+`PRINT_ORDER_MODE=handwrytten_test` in guest/admin Workers. Only newly confirmed
+print orders get a `print_fulfillment` job; existing local simulations are never
+backfilled or submitted. Confirmation stores the immutable artwork/message and
+returns promptly. `waitUntil` starts fulfillment; the existing minute cron retries
+safe preparation failures (up to three attempts).
+
+The worker serializes the shared vendor basket through a D1 lease. It requires
+account Test Mode before mutations, checks that the basket is empty, prepares the
+saved folded design, and stages exactly one household with its destination country
+ID and selected return-address ID on every address row. It reads `/basket/allNew`
+for actual destination postage, shipping, tax, funding breakdown and total.
+Missing/inconsistent fields, wrong country/quantity or unrelated items stop the
+flow. The hard limit is **1000 USD cents including postage and tax**. An over-limit
+draft is removed by its verified basket-item ID and held for review; unrelated
+items are never removed or sent. Do not use the account basket manually while
+automatic jobs are staging; vendor basket APIs have no atomic item-version token.
+The worker checks basket identity again immediately before sending and passes the
+exact `price_structure` to reject changed checkout pricing.
+
+`/basket/send` is called with `test_mode:1` after a fresh account Test Mode check.
+The known parent order is then read through `/orders/details`; acceptance requires
+matching ID/reference, quantity one, `status=test`, `test_mode=1`, and a payment
+amount within the cap. An unusual/lost response is reconciled with this read,
+never by repeating the submit. A non-idempotent call is durably marked before it
+starts; a unique lease token fences stale preparation workers before staging; uncertain staging/submission stops automatic retries and holds the account
+for review. Do not clear a hold or requeue an uncertain job without checking its
+known Handwrytten order ID/basket first. Test Mode may authorize payment but does
+not capture it or fulfill mail. No live-order path is enabled.
+
+Addresses now support US, India (`IN`) and Netherlands (`NL`). Country-aware
+Google suggestions/validation use the selected region; USPS DPV/CASS remains
+required for US addresses only. PIN/postcode validation is country-specific.
+Google currently labels India validation as preview; it may fail addresses it
+cannot confirm. Incomplete/unconfirmed addresses never become verified silently.
+The account sender remains the approved US return address.
+
+Admin history shows fulfillment state, errors, vendor reference and the actual
+saved checkout quote. Guest picture previews remain local. A no-cost international
+pricing smoke check found 375 cents card + 185 postage + 29 tax = 589 cents for both
+India and Netherlands; one synthetic US Test Mode order was accepted for 486 cents
+with Merry Madeline, 13 pt, automatic fitting. These were checks, not fixed prices.
+Handwrytten's prospecting `/outbound/process` can return domestic postage for other
+country strings, so its older domestic estimates are never used as the automatic
+submission limit check.

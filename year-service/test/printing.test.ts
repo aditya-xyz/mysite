@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {generateKeyPair,exportJWK,SignJWT} from 'jose';
 import {digest} from '../src/security.ts';
-import {personalCount,localPrintProvider,printOrderView,foldedPreviewNote} from '../src/printing.ts';
+import {personalCount,localPrintProvider,printOrderView,foldedPreviewNote,createPrintOrder} from '../src/printing.ts';
 test('local print ordering is gated, atomic, private, and preserves submitted snapshots',async t=>{
  const {privateKey,publicKey}=await generateKeyPair('RS256',{extractable:true});
  const issuer='https://print-test.cloudflareaccess.com',jwk={...await exportJWK(publicKey),kid:'print',alg:'RS256',use:'sig'};
@@ -47,6 +47,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await db.batch((await readFile('migrations/0026_folded_cards.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0027_handwrytten_previews.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.exec(await readFile('migrations/0028_handwrytten_quotes.sql','utf8'));
+  await db.batch((await readFile('migrations/0029_handwrytten_fulfillment.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   const expires=Math.floor(Date.now()/1000)+86400,session='c'.repeat(64);
   await db.prepare("INSERT INTO people(id,name,phone) VALUES('contact','Test Recipient','+15555550100'),('partner','Test Partner',NULL)").run();
   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('invite','contact',?1,'Test Recipient','+15555550100',?2,?3)").bind(await digest('a'.repeat(64)),expires,JSON.stringify(['contact','partner'])).run();
@@ -117,7 +118,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   });
   await t.test('each eligibility requirement is enforced on the server',async()=>{
    await reset();const eligible=await status();assert.equal(eligible.eligible,true);for(const privateField of ['note','address','recipientName','authors'])assert.equal(privateField in eligible,false);
-   for(const [sql,reason] of [["UPDATE editions SET allow_print_orders=0 WHERE year=2026",'turned off'],["UPDATE people SET address_verified=0 WHERE id='contact'",'verified US'],["UPDATE people SET address_verification_key='new-address-key' WHERE id='contact'",'changed']] as const){await reset();await db.prepare(sql).run();assert.match((await status()).reason,new RegExp(reason));assert.equal((await guest('print/orders',await order())).status,409);}
+   for(const [sql,reason] of [["UPDATE editions SET allow_print_orders=0 WHERE year=2026",'turned off'],["UPDATE people SET address_verified=0 WHERE id='contact'",'verified mailing'],["UPDATE people SET address_verification_key='new-address-key' WHERE id='contact'",'changed']] as const){await reset();await db.prepare(sql).run();assert.match((await status()).reason,new RegExp(reason));assert.equal((await guest('print/orders',await order())).status,409);}
    for(const extra of [{printNote:''}]){await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,...extra})).run();assert.equal((await status()).eligible,false);}
   });
   await t.test('draft saves clear ineligible permission without changing the published snapshot',async()=>{
@@ -219,6 +220,16 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    assert.equal((await admin('editions/2026/print-orders/'+result.order.id+'/default-artwork')).status,200);
    assert.equal((await admin('editions/2026/invitations/invite/reset-print-allowance',{orderId:result.order.id,confirm:true})).status,200);
    assert.equal(await bucket.head(row.artwork_key),null);assert.equal(await bucket.head(row.default_artwork_key),null);
+  });
+  await t.test('automatic test mode enqueues only newly confirmed orders and keeps the reservation idempotent',async()=>{
+   await reset();const before=vendorCalls.length,form=await order(),encoded=new Request('http://guest.test/api/print/orders',{method:'POST',body:form}),bytes=await encoded.arrayBuffer();
+   const req=()=>new Request(encoded.url,{method:'POST',headers:{'Content-Type':encoded.headers.get('Content-Type')!,'Content-Length':String(bytes.byteLength)},body:bytes});
+   const env={DB:db as any,MEDIA:bucket as any,ORDER_MODE:'simulation',PRINT_ORDER_MODE:'handwrytten_test'};
+   const invite=await db.prepare("SELECT * FROM invites WHERE id='invite'").first<any>();
+   const first=await createPrintOrder(req(),env,invite);assert.equal(first.order.fulfillment,'pending');assert.equal(first.order.testMode,true);
+   const again=await createPrintOrder(req(),env,invite);assert.equal(again.reused,true);assert.equal(again.order.id,first.order.id);
+   assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment').first<any>()).n,1);assert.equal(vendorCalls.length,before,'Guest confirmation saves first; fulfillment runs separately');
+   await reset();await guest('print/orders',await order());assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment').first<any>()).n,0,'Old local simulations are never automatically backfilled');
   });
   await t.test('only folded cards can be created and every surface is frozen with one physical card',async()=>{
    await reset();const invalid=await order(),recipe=JSON.parse(invalid.get('recipe') as string);recipe.format='flat';invalid.set('recipe',JSON.stringify(recipe));

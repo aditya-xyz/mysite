@@ -1,3 +1,4 @@
+import {tickPrintFulfillment} from './handwrytten-fulfillment.ts';
 import {handwryttenPreviewStatus,handwryttenPreviewImage} from './handwrytten-previews.ts';
 import {keepsakeManifest,keepsakeDefaultImage} from './keepsake-defaults.ts';
 import {preparedMugCatalog,preparedMugImage,preparedMugSource,tickPreparedMugs} from './prepared-mugs.ts';
@@ -104,7 +105,7 @@ async function twilio(env: Env, resource: string, params: Record<string, string>
   return data;
 }
 
-async function route(request: Request, env: Env) {
+async function route(request: Request, env: Env, ctx:ExecutionContext) {
   const url = new URL(request.url), path = url.pathname;
   if (request.method === "POST" && !sameOrigin(request)) throw new Failure(403, "Please use this site's invitation page.");
   if (path.startsWith("/api/") && request.method === "POST") {
@@ -227,7 +228,7 @@ async function route(request: Request, env: Env) {
   const pictureProof=/^\/api\/print\/previews\/([a-f0-9]{64})(?:\/(front|inside|back))?$/.exec(path);
   if(pictureProof&&request.method==='GET'){const invite=await authenticated(request,env);return pictureProof[2]?handwryttenPreviewImage(env,invite,pictureProof[1],pictureProof[2]):json(await handwryttenPreviewStatus(env,invite,pictureProof[1]));}
   if(path==='/api/print/status'&&request.method==='GET')return json(await printStatus(request,env,await authenticated(request,env)));
-  if(path==='/api/print/orders'&&request.method==='POST'){const invite=await authenticated(request,env);await limited(env,'print-claim:'+invite.id,20,600);return json(await createPrintOrder(request,env,invite));}
+  if(path==='/api/print/orders'&&request.method==='POST'){const invite=await authenticated(request,env);await limited(env,'print-claim:'+invite.id,20,600);const result=await createPrintOrder(request,env,invite);if(env.PRINT_ORDER_MODE==='handwrytten_test'&&!result.reused)ctx.waitUntil(tickPrintFulfillment(env,result.order.id));return json(result);}
   const theme=/^\/api\/theme\/(welcome|gift|closing)$/.exec(path);
   if(theme&&request.method==='GET'){
     const invite=await authenticated(request,env);
@@ -302,9 +303,9 @@ async function route(request: Request, env: Env) {
 }
 
 export default {
-  async fetch(request: Request, env: Env) {
+  async fetch(request: Request, env: Env, ctx:ExecutionContext) {
     let response: Response;
-    try { response = await route(request, env); }
+    try { response = await route(request, env, ctx); }
     catch (error) { response = error instanceof PrintProblem ? json({error:error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{})},error.status,error.retryAfter?{'Retry-After':String(error.retryAfter)}:undefined) : error instanceof Failure ? json({ error: error.message,...(error.code?{code:error.code}:{}),...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store, private");
@@ -326,6 +327,7 @@ export default {
       env.DB.prepare("DELETE FROM rate_limits WHERE expires_at<=?1").bind(now())
     ]);
     }
+    await tickPrintFulfillment(env);
     await tickPreparedMugs(env,_event.cron==='23 9 * * *');
   }
 };

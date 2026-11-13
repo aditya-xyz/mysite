@@ -14,12 +14,13 @@ export function bindAddressAutocomplete({form,person,requestApi,simulated}){
   const selection=suggestions[index];if(!selection)return;
   clearTimeout(timer);controller?.abort();controller=new AbortController();const stamp=++revision;hide();status.textContent='Filling address…';
   try{
-   const result=await requestApi(`contacts/${person.id}/address/place`,{version:person.version,placeId:selection.placeId,sessionToken},controller.signal);
+   const result=await requestApi(`contacts/${person.id}/address/place`,{version:person.version,placeId:selection.placeId,sessionToken,...(form.elements.country?{country:form.elements.country.value}:{})},controller.signal);
    if(disposed||stamp!==revision)return;
    for(const key of ['line1','line2','city','state','postalCode'])form.elements[key].value=result.address[key]||'';
    sessionToken=crypto.randomUUID();status.textContent='Address filled. Add a unit if needed, then verify.';form.elements.line2.focus();
   }catch(error){if(!disposed&&stamp===revision&&error.name!=='AbortError')status.textContent='Suggestions unavailable. Enter the address manually.';}
  }
+ form.elements.country?.addEventListener('change',()=>{clearTimeout(timer);controller?.abort();revision++;sessionToken=crypto.randomUUID();hide();status.textContent='';});
  input.addEventListener('input',()=>{
   clearTimeout(timer);controller?.abort();const stamp=++revision;hide();status.textContent='';
   if(input.value.trim().length<3)return;
@@ -27,7 +28,7 @@ export function bindAddressAutocomplete({form,person,requestApi,simulated}){
    if(disposed||form.querySelector('fieldset').disabled)return;
    controller=new AbortController();
    try{
-    const result=await requestApi(`contacts/${person.id}/address/autocomplete`,{version:person.version,input:input.value,sessionToken},controller.signal);
+    const result=await requestApi(`contacts/${person.id}/address/autocomplete`,{version:person.version,input:input.value,sessionToken,...(form.elements.country?{country:form.elements.country.value}:{})},controller.signal);
     if(disposed||stamp!==revision)return;
     suggestions=result.suggestions;list.replaceChildren();
     suggestions.forEach((s,i)=>{const option=document.createElement('button');option.type='button';option.id='address-option-'+i;option.setAttribute('role','option');option.setAttribute('aria-selected','false');option.tabIndex=-1;option.textContent=s.text;option.onpointerdown=e=>e.preventDefault();option.onclick=()=>choose(i);list.append(option);});

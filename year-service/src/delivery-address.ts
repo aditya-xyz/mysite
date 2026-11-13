@@ -23,7 +23,7 @@ export async function deliveryState(request:Request,env:AddressEnv,invite:Invita
 export async function confirmDelivery(request:Request,env:AddressEnv,invite:InvitationAudience,version:unknown){
  const person=await deliveryContact(env,invite),state=await deliveryState(request,env,invite);
  if(!Number.isInteger(version)||version!==person.version)throw new PrintProblem(409,'The saved address changed. Reopen the address step.');
- if(!state.verified||!state.address)throw new PrintProblem(409,'Verify and save your US mailing address first.');
+ if(!state.verified||!state.address)throw new PrintProblem(409,'Verify and save your mailing address first.');
  // Accepting the current verified address renews this invitation's address binding,
  // without granting print permission or changing anybody else's invitation.
  const result=await env.DB.prepare(`UPDATE invites SET print_address_key=CASE WHEN allow_print=1 THEN ?1 ELSE print_address_key END
