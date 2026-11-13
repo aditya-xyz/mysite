@@ -1,6 +1,7 @@
+import {loadingPaw} from './loading.js';
 import {pixelMugOptions,mugConfiguration} from './mug-options.js';
 import {esc,assetPath} from './pixelbook.js';
-export function mugLoadingPreview(){return '<figure class="pb-mug-preview pb-live-preview"><div class="pb-mockup-wait"><span class="pb-preview-spinner" aria-hidden="true"></span><span role="status" data-mockup-status>Preparing your mug preview…</span></div><figcaption>Printful mockup · final placement may vary</figcaption></figure>';}
+export function mugLoadingPreview(){return `<figure class="pb-mug-preview pb-live-preview"><div class="pb-mockup-wait">${loadingPaw()}<span role="status" data-mockup-status>Preparing your mug preview…</span></div><figcaption>Printful mockup · final placement may vary</figcaption></figure>`;}
 // One deterministic print layout for review and receipt. This is an illustration,
 // not a provider proof: no mockup request, generated lettering, or external assets.
 export function mugPreview(design,configuration){

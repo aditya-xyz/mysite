@@ -1,5 +1,4 @@
 import {handwryttenPrintFont} from './handwrytten.ts';
-import {matchingHandwryttenPreview,handwryttenPictureView,handwryttenPreviewVersion} from './handwrytten-previews.ts';
 import {keepsakeDefault} from './keepsake-defaults.ts';
 import {addressVerificationCurrent,type AddressState} from './address-state.ts';
 import {digest,now,token} from './security.ts';
@@ -60,7 +59,7 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
 }
 export async function printStatus(request:Request,env:PrintEnv,invite:InvitationAudience){
  const c=await printContext(request,env,invite);
- return {eligible:!c.reason,canOrder:!c.reason||c.needsAddress,needsAddress:c.needsAddress,contentVersion:c.edition?.published_version,reason:c.reason,mode:c.mode,order:c.existing?printOrderView(c.existing):null,remaining:c.existing?0:1,cardCount:1,format:'folded',picturePreviewVersion:handwryttenPreviewVersion,picturePreviews:env.HANDWRYTTEN_PREVIEWS_ENABLED==='true'?'handwrytten':'local',preview:guestFoldedPreview(foldedBackText(c.i.edition_year)),defaultRevision:c.defaults?.revision,
+ return {eligible:!c.reason,canOrder:!c.reason||c.needsAddress,needsAddress:c.needsAddress,contentVersion:c.edition?.published_version,reason:c.reason,mode:c.mode,order:c.existing?printOrderView(c.existing):null,remaining:c.existing?0:1,cardCount:1,format:'folded',picturePreviews:'local',preview:guestFoldedPreview(foldedBackText(c.i.edition_year)),defaultRevision:c.defaults?.revision,
   ...(!c.reason?{confirmationKey:c.confirmationKey,addressVersion:c.person?.version}: {})};
 }
 export async function readPrintArtwork(request:Request,env:PrintEnv,c:Awaited<ReturnType<typeof printContext>>){
@@ -93,9 +92,9 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  const c=await printContext(request,env,invite);
  if(c.existing)return {order:printOrderView(c.existing),reused:true};
  if(c.reason)throw new PrintProblem(409,c.reason);
- const {recipe,personalized,bytes,frontBytes,insideBytes}=await readPrintArtwork(request,env,c);
+ const {recipe,personalized,frontBytes,insideBytes}=await readPrintArtwork(request,env,c);
  if(!/^[a-zA-Z0-9-]{16,80}$/.test(recipe.requestKey)||recipe.confirmationKey!==c.confirmationKey||recipe.addressVersion!==c.person?.version)throw new PrintProblem(409,'The address or scrapbook changed. Reopen the order confirmation.');
- const proof=env.HANDWRYTTEN_PREVIEWS_ENABLED==='true'?await matchingHandwryttenPreview(env,c,recipe,bytes):null;
+ // Vendor proofs are prepared from this frozen order in admin, never on the guest path.
  const id='print-'+token().slice(0,24),key=`${c.i.edition_year}/print-orders/${id}/front.jpg`,defaultKey=personalized?`${c.i.edition_year}/print-orders/${id}/default.jpg`:key;
  // The reservation and all mutable eligibility checks share one database statement.
  const inserted=await env.DB.prepare(`INSERT INTO print_orders(id,invitation_id,year,request_key,status,address_json,recipient_name,note,authors,recipe_json,artwork_key,published_version,default_artwork_key,default_revision,card_count,default_note,format,back_text,handwrytten_preview_id)
@@ -106,7 +105,7 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  AND i.allow_print=1 AND i.print_address_key=p.address_verification_key
  AND EXISTS(SELECT 1 FROM keepsake_defaults k WHERE k.year=e.year AND k.revision=?12)
  AND NOT EXISTS(SELECT 1 FROM print_orders WHERE invitation_id=i.id AND year=e.year AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')) ON CONFLICT DO NOTHING RETURNING id`)
- .bind(id,recipe.requestKey,JSON.stringify({...recipe,layout:'a2-portrait-v1'}),key,c.i.id,c.i.version,now(),c.edition!.published_version,c.person!.id,c.person!.version,defaultKey,c.defaults!.revision,personalized?2:1,foldedBackText(c.i.edition_year),proof?.id||null).first();
+ .bind(id,recipe.requestKey,JSON.stringify({...recipe,layout:'a2-portrait-v1'}),key,c.i.id,c.i.version,now(),c.edition!.published_version,c.person!.id,c.person!.version,defaultKey,c.defaults!.revision,personalized?2:1,foldedBackText(c.i.edition_year),null).first();
  if(!inserted){const fresh=await printStatus(request,env,invite);if(fresh.order)return {order:fresh.order,reused:true};throw new PrintProblem(409,'The print settings changed, or this request was already attempted. Reopen the order confirmation.');}
  try{
   await env.MEDIA.put(key,frontBytes,{httpMetadata:{contentType:'image/jpeg'}});
@@ -114,7 +113,7 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
   if(insideBytes)await env.MEDIA.put(defaultKey,insideBytes,{httpMetadata:{contentType:'image/jpeg'}});
   const snapshot=await env.DB.prepare('SELECT note,authors,recipient_name,address_json FROM print_orders WHERE id=?1').bind(id).first<{note:string;authors:string;recipient_name:string;address_json:string}>();
   const address=JSON.parse(snapshot!.address_json) as MailingAddress,name=snapshot!.recipient_name.trim().split(/\s+/);
-  const payload={card_id:proof?.card_id??null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:'United States',message:snapshot!.note,wishes:'With love,\n'+snapshot!.authors}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
+  const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:'United States',message:snapshot!.note,wishes:'With love,\n'+snapshot!.authors}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
   await env.DB.prepare('UPDATE print_orders SET handwrytten_order_json=?1 WHERE id=?2').bind(JSON.stringify(payload),id).run();
   // Deliberately no live fulfillment adapter: only an explicit simulation mode can record an order.
   await env.DB.prepare("UPDATE print_orders SET status='simulated',provider_id=?1,updated_at=unixepoch() WHERE id=?2 AND status='preparing'").bind('local-'+id,id).run();
@@ -123,13 +122,13 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
   await env.DB.prepare("UPDATE print_orders SET status='failed',updated_at=unixepoch() WHERE id=?1 AND status='preparing'").bind(id).run();
   await env.MEDIA.delete([key,defaultKey]).catch(()=>{});throw new PrintProblem(503,'The local order could not be saved. Retry with a new request.');
  }
- return {order:printOrderView({id,status:'simulated',created_at:now(),card_count:personalized?2:1,recipe_json:JSON.stringify(recipe),handwrytten_preview_id:proof?.id,format:'folded',back_text:foldedBackText(c.i.edition_year),note:(personalized?c.published!.printNote:c.published!.defaultPrintNote?.trim()||c.published!.printNote)||'',authors:c.published!.authors}),reused:false};
+ return {order:printOrderView({id,status:'simulated',created_at:now(),card_count:personalized?2:1,recipe_json:JSON.stringify(recipe),format:'folded',back_text:foldedBackText(c.i.edition_year),note:(personalized?c.published!.printNote:c.published!.defaultPrintNote?.trim()||c.published!.printNote)||'',authors:c.published!.authors}),reused:false};
 }
 
 export function printOrderView(order:PrintOrderProof){
  const recipe=order.recipe_json?JSON.parse(order.recipe_json):{};
  const frontDesign=order.card_count===2&&recipe.frontDesign!=='default'?'personal':'default';
- return {id:order.id,status:order.status,created_at:order.created_at,cardCount:order.format==='folded'?1:order.card_count,format:order.format||'legacy',personalized:order.card_count===2,frontDesign,...(order.handwrytten_preview_id?{pictures:handwryttenPictureView(order.handwrytten_preview_id)}:{}),...(order.format==='folded'?{preview:guestFoldedPreview(order.back_text||''),defaultSrc:order.card_count===2?`/api/print/orders/${order.id}/default-artwork`:null}:{}),artworkSrc:`/api/print/orders/${order.id}/artwork`};
+ return {id:order.id,status:order.status,created_at:order.created_at,cardCount:order.format==='folded'?1:order.card_count,format:order.format||'legacy',personalized:order.card_count===2,frontDesign,...(order.format==='folded'?{preview:guestFoldedPreview(order.back_text||''),defaultSrc:order.card_count===2?`/api/print/orders/${order.id}/default-artwork`:null}:{}),artworkSrc:`/api/print/orders/${order.id}/artwork`};
 }
 export async function printOrderArtwork(env:PrintEnv,invite:InvitationAudience,id:string,inside=false){
  const order=await env.DB.prepare("SELECT artwork_key,default_artwork_key FROM print_orders WHERE id=?1 AND invitation_id=?2 AND year=?3 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')").bind(id,invite.id,invite.edition_year).first<{artwork_key:string;default_artwork_key:string|null}>();

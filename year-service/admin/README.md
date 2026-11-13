@@ -969,8 +969,9 @@ There is one note per folded card. Front/Inside/Back previews are available in
 checkout, admin order history, and the default-only view-only receipt.
 
 Recipients with both designs can use **Swap pictures** in checkout to exchange
-the front and inside-left artwork. Each placement gets its own matching vendor
-proof; confirmation waits for that proof. `recipe_json.frontDesign` freezes the
+the front and inside-left artwork. Local previews update immediately for each
+placement. Admin can prepare a vendor proof from the saved order after confirmation.
+`recipe_json.frontDesign` freezes the
 choice (`personal` or `default`), so no schema migration is needed. Historical
 orders without this field retain their original placement. The legacy
 `default_artwork_key` column holds the inside-left image for folded orders, even
@@ -997,37 +998,37 @@ both server Workers with `node scripts/provision.mjs handwrytten-secret`.
 `ORDER_MODE=simulation` remains required; no vendor order/basket/payment endpoint
 is enabled. The API allowlist only adds card details and handwriting-font reads.
 
-Checkout prepares an A2 portrait design in Handwrytten Test Mode, with the exact
-front artwork, optional second artwork inside left, blank writing space inside
-right, and the 2026 Pixelbook logo on the back. The back asset is edition-specific;
-prepare a new brand asset before enabling this for another year. Design names
-contain an opaque digest, never recipient names. No real note or address is sent
-for preview generation. Browser credentials remain server-only.
+Guest Front/Inside/Back previews render locally, using A2 portrait proportions,
+a 90% cover inset, the matching inside-left artwork inset, the enlarged placeholder
+note, and the Pixelbook back signature. Swapping pictures and changing borders do
+not call Handwrytten. Guest receipts also use saved local artwork, including older
+orders that have vendor proofs. The old guest preview-generation POST returns 410;
+authenticated reads of existing proofs remain compatible with older clients.
 
-The app copies vendor front/inside/back proofs to private R2 and serves them via
-household-authenticated URLs. Cache keys include invitation, year, default revision,
-frame, selection, crops, artwork bytes, picture placement and layout version. Confirmation requires a
-ready matching proof; loading failures offer retry and never silently substitute
-local artwork. Render retries reuse the saved vendor card ID. The note remains a
-large local placeholder, independently of the API picture-page geometry.
+Simulated confirmation saves the arranged artwork, real note, authors, address,
+and print font settings (`hwDavid`, size 13, automatic fitting) immediately. The
+stored `handwrytten_order_json.card_id` starts as null. No provider call is made on
+the guest order path, and this payload is never submitted.
 
-New simulated orders freeze a separate `handwrytten_order_json` using the ready
-card ID, real published note, authors/signoff, verified recipient address and
-`hwDavid` (Casual David), size 13, automatic fitting. No UI preview font or message
-is used. This payload is stored only; it is never transmitted to Handwrytten. It
-uses the account default return address when real submission is implemented.
-Historical orders retain their original artwork and proof format.
+In admin order history, **Prepare Handwrytten proof** calls the authenticated,
+year-scoped `POST /api/editions/:year/print-orders/:id/prepare-proof` for a saved
+simulated folded order. It uses immutable saved front/inside-left files, never the
+current defaults or current scrapbook. The design has blank writing space inside
+right and the 2026 back asset. Design names use opaque digests. No real note or
+address is sent for picture proof generation. The admin note remains illustrated
+locally; it is not a vendor handwriting proof.
 
-Guest editors now start proof preparation after one second without a finished
-artwork change. Checkout shares the same pending request or immediately reuses its
-decoded images. Crop gestures, unfinished photo selection and editor cleanup cancel
-scheduled work; late results are kept separate by exact file/recipe snapshot. A
-blinking paw fills the picture-preview area while waiting, with a static paw for
-reduced-motion preferences. Preview requests are limited to 60 per household/hour.
+Proofs are copied to private R2. Cached ready proofs are reused; failed renders
+retry the same vendor card ID. A ready proof attaches to the saved order and fills
+only its stored payload's card ID, preserving the original note/font/address.
+Test Mode is required and vendor order/basket/payment endpoints stay disabled.
+Existing saved vendor proofs remain available in admin. No schema migration is
+needed. Prepare a new back asset before enabling another edition year.
 
-The folded cover uses 90% sizing to keep the full 4:5 artwork and all four candy-cane
-edges inside Handwrytten's A2 cover area. Preview cache version v3 binds the chosen
-picture placement. Saved orders retain their original immutable proof.
+The blinking paw is shared through `web/loading.js` and `web/loading.css`, used for
+the initial scrapbook opening state, mug mockup loading and admin proof preparation.
+Reduced-motion preferences disable
+the blink. Guest card previews have no provider-loading animation to wait for.
 
 Default keepsake artwork uses the greeting and signature in
 `scripts/keepsake-default-copy.mjs` (Angela & Aditya). Re-render all three private

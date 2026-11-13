@@ -27,7 +27,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
  };
  const common={modules:true,compatibilityDate:'2026-08-06',d1Databases:{DB:'print-test'},r2Buckets:{MEDIA:'print-test'},outboundService:outbound};
  const mf=new Miniflare(convertV4MiniflareOptions({workers:[
-  {...common,name:'admin',routes:['admin.test/*'],scriptPath:'.wrangler/admin-test-bundle/index.js',bindings:{ADMIN_EMAIL:'owner@example.com',ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'print',JOURNAL_ORIGIN:'http://guest.test',PRINT_PROVIDER:'local_mock'}},
+  {...common,name:'admin',routes:['admin.test/*'],scriptPath:'.wrangler/admin-test-bundle/index.js',bindings:{ADMIN_EMAIL:'owner@example.com',ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'print',JOURNAL_ORIGIN:'http://guest.test',PRINT_PROVIDER:'local_mock',HANDWRYTTEN_PREVIEWS_ENABLED:'true',HANDWRYTTEN_API_KEY:'synthetic-key'}},
   {...common,name:'proof-guest',routes:['proof.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{ORDER_MODE:'simulation',HANDWRYTTEN_PREVIEWS_ENABLED:'true',HANDWRYTTEN_API_KEY:'synthetic-key',SMS_ENABLED:'false'}},
   {...common,name:'guest',routes:['guest.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{PRINT_PROVIDER:'local_mock',SMS_ENABLED:'false'}}
  ]}));
@@ -206,78 +206,59 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    await bucket.put('default-moss.jpg',new Uint8Array([...defaultJPEG,4]));
    assert.equal(printOrderView({...row,format:'legacy'}).cardCount,2,'Historical two-card orders keep their original meaning');
   });
-  await t.test('Handwrytten proofs are cached, household-scoped, and bind the simulated order to the exact artwork',async()=>{
+  await t.test('guest previews and orders never wait for Handwrytten; admin proofs use frozen artwork and payloads',async()=>{
    await reset();const before=vendorCalls.length;
-   assert.equal((await proofGuest('print/previews',await order(),'' )).status,401);assert.equal(vendorCalls.length,before);
-   const invalid=await order(['one','two','shared']);assert.equal((await proofGuest('print/previews',invalid)).status,403);assert.equal(vendorCalls.length,before);
-   const first=await proofGuest('print/previews',await order());assert.equal(first.status,200,await first.clone().text());const result=await first.json() as any;
-   assert.equal(result.status,'ready');assert.equal(result.pictures.provider,'handwrytten');
-   const count=vendorCalls.length;assert.equal((await proofGuest('print/previews',await order())).status,200);assert.equal(vendorCalls.length,count,'Identical previews reuse the immutable cached design');
-   assert.equal((await proofGuest(result.pictures.frontSrc.slice(5))).status,200);
-   assert.equal((await proofGuest(result.pictures.frontSrc.slice(5),undefined,'' )).status,401);
-   const foreign='f'.repeat(64);await db.prepare("INSERT INTO people(id,name) VALUES('foreign-person','Other')").run();await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('foreign-proof','foreign-person','foreign-hash','Other','+15555550999',?1,'[\"partner\"]')").bind(expires).run();
-   await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?1,'foreign-proof',?2)").bind(await digest(foreign),expires).run();
-   assert.equal((await proofGuest(result.pictures.frontSrc.slice(5),undefined,foreign)).status,404);
-   assert.equal((await proofGuest('print/orders',await order())).status,409,'An unseen or different proof cannot be ordered');
-   const tampered=await order(),bad=JSON.parse(tampered.get('recipe') as string);bad.previewId=result.pictures.id;bad.frame='santa';tampered.set('recipe',JSON.stringify(bad));
-   assert.equal((await proofGuest('print/orders',tampered)).status,409);
-   const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.previewId=result.pictures.id;recipe.note='wrong preview note';recipe.font='preview-font';recipe.font_size=80;form.set('recipe',JSON.stringify(recipe));
-   const placed=await proofGuest('print/orders',form);assert.equal(placed.status,200,await placed.clone().text());
-   const orderResult=(await placed.json() as any).order;assert.equal(orderResult.pictures.id,result.pictures.id);assert.equal(orderResult.status,'simulated');assert.equal(vendorCalls.length,count,'Order simulation makes no vendor requests');
-   const row=await db.prepare('SELECT * FROM print_orders').first<any>(),payload=JSON.parse(row.handwrytten_order_json);
-   assert.equal(payload.card_id,701);assert.equal(payload.addresses[0].message,published.printNote);assert.equal(payload.addresses[0].wishes,'With love,\n'+published.authors);assert.equal(payload.font,'hwDavid');assert.equal(payload.font_size,13);assert.equal(payload.auto_font_size,true);
-   assert.ok(!JSON.stringify(payload).includes('wrong preview note'));assert.equal(orderResult.preview.note,foldedPreviewNote);assert.ok(!JSON.stringify(orderResult).includes(published.printNote));
-   assert.equal((await admin('editions/2026/print-orders/'+orderResult.id+'/vendor-inside')).status,200);
+   assert.equal((await (await proofGuest('print/status')).json() as any).picturePreviews,'local');
+   assert.equal((await proofGuest('print/previews',await order(),'')).status,401);
+   assert.equal((await proofGuest('print/previews',await order())).status,410);
+   const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.previewId='untrusted';recipe.note='wrong preview note';recipe.font_size=80;form.set('recipe',JSON.stringify(recipe));
+   const response=await proofGuest('print/orders',form);assert.equal(response.status,200,await response.clone().text());const receipt=(await response.json() as any).order;
+   assert.equal(receipt.pictures,undefined);assert.equal(receipt.status,'simulated');assert.equal(vendorCalls.length,before);
+   const saved=await db.prepare('SELECT * FROM print_orders').first<any>(),originalPayload=JSON.parse(saved.handwrytten_order_json);assert.equal(originalPayload.card_id,null);assert.equal(originalPayload.font_size,13);assert.equal(originalPayload.addresses[0].message,published.printNote);
+   // Publishing different art/note after ordering must never change this proof.
+   await bucket.put('default-moss.jpg',new Uint8Array([...defaultJPEG,99]));
+   await db.prepare("UPDATE editions SET published_json=json_set(published_json,'$.printNote','Changed later'),allow_print_orders=0 WHERE year=2026").run();
+   const route='editions/2026/print-orders/'+receipt.id+'/prepare-proof';
+   assert.equal((await admin(route,{},false)).status,401);assert.equal(vendorCalls.length,before);
+   const first=await admin(route,{});assert.equal(first.status,200,await first.clone().text());const proof=await first.json() as any;assert.equal(proof.status,'ready');
+   const uploads=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo'));
+   assert.deepEqual(uploads.filter(c=>c.body.type==='cover').at(-1)!.body.bytes,[...defaultJPEG]);assert.deepEqual(uploads.filter(c=>c.body.type==='logo').at(-1)!.body.bytes,[...defaultJPEG,4]);
+   const count=vendorCalls.length;assert.equal((await admin(route,{})).status,200);assert.equal(vendorCalls.length,count,'Saved proof is reused');
+   const row=await db.prepare('SELECT * FROM print_orders').first<any>(),payload=JSON.parse(row.handwrytten_order_json);assert.equal(row.handwrytten_preview_id,proof.id);assert.ok(payload.card_id);const {card_id,...rest}=payload,{card_id:oldCard,...oldRest}=originalPayload;assert.deepEqual(rest,oldRest,'Proof attachment preserves real note, font and address');
+   assert.equal((await admin('editions/2026/print-orders/'+receipt.id+'/vendor-inside')).status,200);assert.equal((await admin('editions/2025/print-orders/'+receipt.id+'/prepare-proof',{})).status,404);
+   assert.equal((await (await proofGuest('print/status')).json() as any).order.pictures,undefined,'Guest receipts remain local after admin proof generation');
    for(const call of vendorCalls){assert.ok(!/\/(orders|basket|payments)\//.test(call.path));if(call.path.endsWith('/createCustomCard'))assert.ok(!JSON.stringify(call.body).includes(published.printNote));}
-   await db.prepare("UPDATE invites SET allow_print=0 WHERE id='invite'").run();assert.equal((await proofGuest(result.pictures.frontSrc.slice(5))).status,200,'Saved ordered proofs survive permission changes');
-   await db.prepare('DELETE FROM print_orders').run();assert.equal((await proofGuest(result.pictures.frontSrc.slice(5))).status,403);
+   await bucket.put('default-moss.jpg',new Uint8Array([...defaultJPEG,4]));
   });
-  await t.test('default previews use the server artwork, leave inside left blank, and require Handwrytten Test Mode',async()=>{
+  await t.test('default admin proofs use saved server artwork, blank inside left and require Test Mode',async()=>{
    await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,photos:[],defaultPrintNote:'The real default note 🐾'})).run();
-   hwMode=0;const before=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')).length;
-   assert.equal((await proofGuest('print/previews',await order([]))).status,409);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')).length,before);
-   hwMode=1;const response=await proofGuest('print/previews',await order([]));assert.equal(response.status,200,await response.clone().text());const result=await response.json() as any;
-   const cover=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='cover').at(-1)!;assert.deepEqual(cover.body.bytes,[...defaultJPEG,4]);
-   const card=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).at(-1)!.body;assert.equal(card.cover_size_percent,90,'Inset the cover to protect all four border edges');assert.equal(card.main_type,'text');assert.equal(card.main_text,'');assert.equal(card.main_logo_id,undefined);
-   const form=await order([]),recipe=JSON.parse(form.get('recipe') as string);recipe.previewId=result.pictures.id;form.set('recipe',JSON.stringify(recipe));
-   const placed=await proofGuest('print/orders',form);assert.equal(placed.status,200);const payload=JSON.parse((await db.prepare('SELECT handwrytten_order_json FROM print_orders').first<any>()).handwrytten_order_json);assert.equal(payload.addresses[0].message,'The real default note 🐾');
-   const manifest=(await (await proofGuest('journal')).json() as any).keepsake;assert.equal(manifest.order.pictures.id,result.pictures.id);assert.equal(manifest.order.preview.note,foldedPreviewNote);
+   hwMode=0;const before=vendorCalls.length,response=await proofGuest('print/orders',await order([]));assert.equal(response.status,200);assert.equal(vendorCalls.length,before,'Vendor unavailability does not block simulated orders');const receipt=(await response.json() as any).order;
+   const route='editions/2026/print-orders/'+receipt.id+'/prepare-proof';assert.equal((await admin(route,{})).status,409);
+   assert.equal(vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')).length,vendorCalls.slice(0,before).filter(c=>c.path.endsWith('/uploadCustomLogo')).length);
+   hwMode=1;const proof=await admin(route,{});assert.equal(proof.status,200,await proof.clone().text());
+   const card=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).at(-1)!.body;assert.equal(card.cover_size_percent,90);assert.equal(card.main_type,'text');assert.equal(card.main_text,'');assert.equal(card.main_logo_id,undefined);
+   const payload=JSON.parse((await db.prepare('SELECT handwrytten_order_json FROM print_orders').first<any>()).handwrytten_order_json);assert.equal(payload.addresses[0].message,'The real default note 🐾');assert.equal(payload.font_size,13);
+   const manifest=(await (await proofGuest('journal')).json() as any).keepsake;assert.equal(manifest.order.pictures,undefined);assert.equal(manifest.order.preview.note,foldedPreviewNote);
   });
-  await t.test('failed proof retrieval retries the same design and never fetches an arbitrary URL',async()=>{
-   await reset();const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.frame='classic';form.set('recipe',JSON.stringify(recipe));
+  await t.test('failed admin proof retrieval retries the same design and never fetches an arbitrary URL',async()=>{
+   await reset();const response=await proofGuest('print/orders',await order()),receipt=(await response.json() as any).order,route='editions/2026/print-orders/'+receipt.id+'/prepare-proof';
    hwBadURL=true;const creates=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length;
-   assert.equal((await proofGuest('print/previews',form)).status,502);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length,creates+1);
-   hwBadURL=false;const retry=await order(),r=JSON.parse(retry.get('recipe') as string);r.frame='classic';retry.set('recipe',JSON.stringify(r));
-   assert.equal((await proofGuest('print/previews',retry)).status,200);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length,creates+1,'Render retries never create another design');
+   assert.equal((await admin(route,{})).status,502);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length,creates+1);
+   assert.equal((await db.prepare('SELECT handwrytten_preview_id FROM print_orders').first<any>()).handwrytten_preview_id,null);
+   hwBadURL=false;assert.equal((await admin(route,{})).status,200);assert.equal(vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).length,creates+1,'Retries never create another design');
   });
-  await t.test('swapped picture placement regenerates the proof and is frozen with the simulated order',async()=>{
-   await reset();
-   const original=await proofGuest('print/previews',await order());assert.equal(original.status,200);const originalProof=(await original.json() as any).pictures;
-   const swapForm=await order(),swapRecipe=JSON.parse(swapForm.get('recipe') as string);swapRecipe.frontDesign='default';swapForm.set('recipe',JSON.stringify(swapRecipe));
-   const flipped=await proofGuest('print/previews',swapForm);assert.equal(flipped.status,200,await flipped.clone().text());const flippedProof=(await flipped.json() as any).pictures;
-   assert.notEqual(flippedProof.id,originalProof.id,'Different placement must have a different immutable vendor design');
-   const cover=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='cover').at(-1)!;
-   const inside=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='logo').at(-1)!;
-   assert.deepEqual(cover.body.bytes,[...defaultJPEG,4],'The default artwork is physically uploaded as the cover');assert.deepEqual(inside.body.bytes,[...defaultJPEG],'The personal artwork is uploaded inside left');
-   const request=await order(),recipe=JSON.parse(request.get('recipe') as string);recipe.frontDesign='default';recipe.previewId=originalProof.id;request.set('recipe',JSON.stringify(recipe));
-   assert.equal((await proofGuest('print/orders',request)).status,409,'An unswapped proof cannot confirm a swapped order');
-   const correct=await order(),r=JSON.parse(correct.get('recipe') as string);r.frontDesign='default';r.previewId=flippedProof.id;correct.set('recipe',JSON.stringify(r));
-   const placed=await proofGuest('print/orders',correct);assert.equal(placed.status,200,await placed.clone().text());const receipt=(await placed.json() as any).order;
-   assert.equal(receipt.frontDesign,'default');assert.equal(receipt.personalized,true);assert.equal(receipt.cardCount,1);assert.equal(receipt.pictures.id,flippedProof.id);assert.equal(receipt.status,'simulated');
-   const row=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(JSON.parse(row.recipe_json).frontDesign,'default');
-   assert.deepEqual(new Uint8Array(await (await bucket.get(row.artwork_key))!.arrayBuffer()),new Uint8Array([...defaultJPEG,4]));
-   assert.deepEqual(new Uint8Array(await (await bucket.get(row.default_artwork_key))!.arrayBuffer()),defaultJPEG);
-   assert.deepEqual(new Uint8Array(await (await proofGuest(receipt.artworkSrc.slice(5))).arrayBuffer()),new Uint8Array([...defaultJPEG,4]));
-   const payload=JSON.parse(row.handwrytten_order_json),vendor=await db.prepare('SELECT card_id FROM handwrytten_previews WHERE id=?1').bind(flippedProof.id).first<any>();
-   assert.equal(payload.card_id,vendor.card_id);assert.equal(payload.addresses[0].message,published.printNote,'Swapping artwork does not switch the personalized note');assert.equal(payload.font_size,13);
-   await db.prepare("UPDATE editions SET published_json=json_set(published_json,'$.printNote','Changed later') WHERE year=2026").run();
-   assert.equal((await status()).order.frontDesign,'default');
-   const history=(await (await admin('editions/2026/print-orders')).json() as any).orders[0];assert.equal(JSON.parse(history.recipe_json).frontDesign,'default');assert.equal(history.note,published.printNote);
+  await t.test('swapped local placement is frozen and used by the later admin proof',async()=>{
+   await reset();const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.frontDesign='default';form.set('recipe',JSON.stringify(recipe));
+   const before=vendorCalls.length,response=await proofGuest('print/orders',form);assert.equal(response.status,200);const receipt=(await response.json() as any).order;assert.equal(vendorCalls.length,before);assert.equal(receipt.frontDesign,'default');
+   const proof=await admin('editions/2026/print-orders/'+receipt.id+'/prepare-proof',{});assert.equal(proof.status,200,await proof.clone().text());
+   const cover=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='cover').at(-1)!,inside=vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')&&c.body.type==='logo').at(-1)!;
+   assert.deepEqual(cover.body.bytes,[...defaultJPEG,4]);assert.deepEqual(inside.body.bytes,[...defaultJPEG]);
+   const row=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(JSON.parse(row.recipe_json).frontDesign,'default');assert.equal(JSON.parse(row.handwrytten_order_json).addresses[0].message,published.printNote);
   });
   await t.test('default-only guests cannot request a personal cover and invalid placement is rejected',async()=>{
    await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,photos:[]})).run();
    const before=vendorCalls.length,form=await order([]),recipe=JSON.parse(form.get('recipe') as string);recipe.frontDesign='personal';form.set('recipe',JSON.stringify(recipe));
-   assert.equal((await proofGuest('print/previews',form)).status,403);assert.equal(vendorCalls.length,before);
+   assert.equal((await proofGuest('print/orders',form)).status,403);assert.equal(vendorCalls.length,before);
    const invalid=await order([]),bad=JSON.parse(invalid.get('recipe') as string);bad.frontDesign='inside-right';invalid.set('recipe',JSON.stringify(bad));assert.equal((await guest('print/orders',invalid)).status,400);
    const invalidOrder=await order([]),wrong=JSON.parse(invalidOrder.get('recipe') as string);wrong.frontDesign='personal';invalidOrder.set('recipe',JSON.stringify(wrong));assert.equal((await guest('print/orders',invalidOrder)).status,403);
    assert.equal((await db.prepare('SELECT count(*) n FROM print_orders').first<any>()).n,0);

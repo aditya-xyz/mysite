@@ -4,8 +4,8 @@
 .fc-preview .fc-views button[aria-pressed=true]{background:#2e5745;color:#fff9ec;border-color:#2e5745}
 .fc-surface{display:flex;max-width:225px;margin:auto;filter:drop-shadow(0 4px 7px #14251b18)}
 .fc-surface[hidden]{display:none}
-.fc-page{box-sizing:border-box;aspect-ratio:4.25/5.5;background:#fffaf0;min-width:0;width:100%;overflow:hidden}
-.fc-art{display:flex;align-items:center;justify-content:center;padding:3%}
+.fc-page{box-sizing:border-box;aspect-ratio:4.25/5.5;background:#fff;min-width:0;width:100%;overflow:hidden}
+.fc-art{display:flex;align-items:center;justify-content:center;padding:5%}
 .fc-art img{display:block;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
 .fc-spread{max-width:450px;container-type:inline-size}
 .fc-spread>.fc-page{width:50%;flex:0 0 50%}
@@ -42,3 +42,7 @@
  .fc-preview .fc-views .fc-swap{width:44px;flex:0 0 44px;padding:10px}
  .fc-swap span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 }
+
+/* Match the vendor picture-page insets without fetching a vendor render. */
+.fc-spread .fc-art:not(.fc-vendor-inside){padding:0}
+.fc-spread .fc-art:not(.fc-vendor-inside) img{width:78%}

@@ -1,0 +1,5 @@
+.loading-paw{display:inline-block;width:44px;height:44px;flex:none;vertical-align:middle;animation:paw-blink 1.3s ease-in-out infinite}
+@keyframes paw-blink{0%,100%{opacity:1}50%{opacity:.25}}
+@media(prefers-reduced-motion:reduce){.loading-paw{animation:none}}
+.scrapbook-loading{display:flex;min-height:40svh;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--ink,#244637);text-align:center}
+.scrapbook-loading p{margin:0}

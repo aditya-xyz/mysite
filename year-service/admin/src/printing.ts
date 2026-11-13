@@ -1,3 +1,4 @@
+import {prepareSavedOrderProof} from '../../src/handwrytten-previews.ts';
 import {handwryttenStatus} from '../../src/handwrytten.ts';
 import {resetSimulatedOrder} from './simulated-order-reset.ts';
 import {simulatedOrders,PrintProblem,type PrintEnv} from '../../src/printing.ts';
@@ -19,6 +20,8 @@ export async function printAdminRoute(request:Request,env:PrintEnv,path:string,y
   const counts=await env.DB.prepare("SELECT i.id AS invitation_id,i.print_order_count AS count,i.print_order_count AS used,o.id AS active_order_id,o.status FROM invites i LEFT JOIN print_orders o ON o.invitation_id=i.id AND o.year=i.edition_year AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') WHERE i.edition_year=?1").bind(year).all();
   return Response.json({orders:rows.results,counts:counts.results});
  }
+ const prepare=/^\/api\/print-orders\/([a-z0-9-]+)\/prepare-proof$/.exec(path);
+ if(prepare&&request.method==='POST')return Response.json(await prepareSavedOrderProof(env,year,prepare[1]));
  const proof=/^\/api\/print-orders\/([a-z0-9-]+)\/(artwork|default-artwork|vendor-front|vendor-inside|vendor-back)$/.exec(path);
  if(proof&&request.method==='GET'){
   const row=await env.DB.prepare('SELECT o.artwork_key,o.default_artwork_key,p.front_key,p.inside_key,p.back_key FROM print_orders o LEFT JOIN handwrytten_previews p ON p.id=o.handwrytten_preview_id AND p.invitation_id=o.invitation_id AND p.year=o.year WHERE o.id=?1 AND o.year=?2').bind(proof[1],year).first<{artwork_key:string;default_artwork_key:string|null;front_key:string|null;inside_key:string|null;back_key:string|null}>();

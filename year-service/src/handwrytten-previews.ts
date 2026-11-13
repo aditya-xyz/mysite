@@ -1,4 +1,4 @@
-import {PrintProblem,printContext,readPrintArtwork,type PrintEnv} from './printing.ts';
+import {PrintProblem,type PrintEnv} from './printing.ts';
 import {keepsakeAccess} from './keepsake-defaults.ts';
 import {prepareHandwryttenFoldedCard} from './handwrytten.ts';
 import {handwryttenBrandPNG,handwryttenBrandYear} from './handwrytten-brand.ts';
@@ -7,23 +7,25 @@ import type {InvitationAudience} from './invitations.ts';
 export const handwryttenPreviewVersion='handwrytten-folded-v3-placement';
 interface Proof {id:string;invitation_id:string;year:number;status:string;card_id:number|null;front_key:string|null;inside_key:string|null;back_key:string|null;updated_at:number}
 export function handwryttenPictureView(id:string){return {provider:'handwrytten',id,frontSrc:`/api/print/previews/${id}/front`,insideSrc:`/api/print/previews/${id}/inside`,backSrc:`/api/print/previews/${id}/back`};}
-async function proofId(c:Awaited<ReturnType<typeof printContext>>,recipe:any,bytes:Uint8Array){
- const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer)),b=>b.toString(16).padStart(2,'0')).join('');
- return digest(JSON.stringify([handwryttenPreviewVersion,c.i.id,c.i.edition_year,c.defaults!.revision,recipe.mode,recipe.frontDesign,recipe.frame,recipe.photoIds,recipe.photoIds.map((id:string)=>recipe.crops[id]),hash]));
-}
-export async function matchingHandwryttenPreview(env:PrintEnv,c:Awaited<ReturnType<typeof printContext>>,recipe:any,bytes:Uint8Array){
- const id=await proofId(c,recipe,bytes);
- const row=recipe.previewId===id?await env.DB.prepare("SELECT * FROM handwrytten_previews WHERE id=?1 AND invitation_id=?2 AND year=?3 AND status='ready'").bind(id,c.i.id,c.i.edition_year).first<Proof>():null;
- if(!row?.card_id)throw new PrintProblem(409,'Wait for the matching Handwrytten picture previews before confirming.');return row;
-}
-export async function createHandwryttenPreview(request:Request,env:PrintEnv,invite:InvitationAudience){
+// Admin proofs always read immutable order artwork rather than current editor/defaults.
+export async function prepareSavedOrderProof(env:PrintEnv,year:number,orderId:string){
  if(env.HANDWRYTTEN_PREVIEWS_ENABLED!=='true')throw new PrintProblem(503,'Handwrytten previews are not enabled.');
- const c=await printContext(request,env,invite);
- if(c.reason&&!c.needsAddress)throw new PrintProblem(409,c.reason);
- if(c.i.edition_year!==handwryttenBrandYear)throw new PrintProblem(503,'The back signature for this edition is being prepared.');
- const {recipe,bytes,frontBytes,insideBytes}=await readPrintArtwork(request,env,c),id=await proofId(c,recipe,bytes);
+ const order=await env.DB.prepare("SELECT * FROM print_orders WHERE id=?1 AND year=?2 AND format='folded' AND status='simulated' AND allowance_reset_at IS NULL").bind(orderId,year).first<{id:string;invitation_id:string;year:number;artwork_key:string;default_artwork_key:string;card_count:number;handwrytten_preview_id:string|null}>();
+ if(!order)throw new PrintProblem(404,'Simulated folded order not found.');
+ if(year!==handwryttenBrandYear)throw new PrintProblem(503,'The back signature for this edition is being prepared.');
+ const invite={id:order.invitation_id,edition_year:year};
+ const id=order.handwrytten_preview_id||await digest(JSON.stringify([handwryttenPreviewVersion,'saved-order',order.id]));
+ async function attach(){
+  // Only attach a ready, scoped design; keep the real frozen note/font/address intact.
+  const attached=await env.DB.prepare("UPDATE print_orders SET handwrytten_preview_id=?1,handwrytten_order_json=json_set(handwrytten_order_json,'$.card_id',(SELECT card_id FROM handwrytten_previews WHERE id=?1)) WHERE id=?2 AND year=?3 AND status='simulated' AND allowance_reset_at IS NULL RETURNING id").bind(id,orderId,year).first();
+  if(!attached)throw new PrintProblem(409,'This simulated order was reset. Reopen order history.');
+ }
  const previous=await env.DB.prepare('SELECT * FROM handwrytten_previews WHERE id=?1').bind(id).first<Proof>();
- if(previous?.status==='ready')return {status:'ready',pictures:handwryttenPictureView(id)};
+ if(previous&&(previous.invitation_id!==invite.id||previous.year!==year))throw new PrintProblem(409,'The saved proof does not match this order.');
+ if(previous?.status==='ready'){await attach();return {status:'ready',id};}
+ const front=await env.MEDIA.get(order.artwork_key),inside=order.card_count===2?await env.MEDIA.get(order.default_artwork_key):null;
+ if(!front||(order.card_count===2&&!inside))throw new PrintProblem(404,'Saved artwork not found.');
+ const frontBytes=await front.arrayBuffer(),insideBytes=inside?await inside.arrayBuffer():null;
  const row=await env.DB.prepare(`INSERT INTO handwrytten_previews(id,invitation_id,year,status) VALUES(?1,?2,?3,'preparing')
  ON CONFLICT(id) DO UPDATE SET status='preparing',updated_at=?4 WHERE status='failed' OR (status='preparing' AND updated_at<?5) RETURNING *`).bind(id,invite.id,invite.edition_year,now(),now()-300).first<Proof>();
  if(!row)return {status:'preparing',id};
@@ -52,7 +54,7 @@ export async function createHandwryttenPreview(request:Request,env:PrintEnv,invi
    await env.MEDIA.put(keys[side],image,{httpMetadata:{contentType:png?'image/png':'image/jpeg'}});
   }
   await env.DB.prepare("UPDATE handwrytten_previews SET status='ready',front_key=?1,inside_key=?2,back_key=?3,updated_at=?4 WHERE id=?5").bind(keys.front,keys.inside,keys.back,now(),id).run();
-  return {status:'ready',pictures:handwryttenPictureView(id)};
+  await attach();return {status:'ready',id};
  }catch(error){await env.DB.prepare("UPDATE handwrytten_previews SET status='failed',updated_at=?1 WHERE id=?2").bind(now(),id).run();throw error instanceof PrintProblem?error:new PrintProblem(503,'The print preview could not be prepared. Please try again.');}
 }
 async function authorizedProof(env:PrintEnv,invite:InvitationAudience,id:string){

@@ -169,11 +169,3 @@ html:has(#keepsake[open]){overflow:hidden}
  .ks-print-dialog .delivery-panel h3{font-size:16px}
  .ks-print-dialog .delivery-note{font-size:12px;margin:6px 0}
 }
-
-.ks-print-loading{display:grid;place-items:center;position:relative;width:min(225px,100%);aspect-ratio:4.25/5.5;margin:8px auto 12px;color:var(--ink)}
-.ks-preview-paw{width:54px;height:54px;animation:ks-paw-blink 1.3s ease-in-out infinite}
-.ks-loading-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-@keyframes ks-paw-blink{0%,100%{opacity:1}50%{opacity:.25}}
-@media(max-width:600px){.ks-print-loading{width:clamp(93px,calc((100dvh - 480px)*.772727),190px)}}
-@media(max-width:600px) and (max-height:650px){.ks-print-loading{width:clamp(77px,calc((100dvh - 480px)*.772727),190px)}}
-@media(prefers-reduced-motion:reduce){.ks-preview-paw{animation:none}}
