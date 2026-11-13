@@ -827,3 +827,47 @@ Signed-in mug/address POST actions use a separate authenticated network budget
 budget. Invalid sessions retain the login limit. Existing household/address and
 Printful estimate limits remain in force. Rate-limit responses include the
 remaining wait via Retry-After and a user-readable retry time.
+
+## Fixed and paired keepsake gifts
+
+The keepsake section requires both the invitation’s immediate `allow_print`
+permission and the scrapbook’s `allow_print_orders` switch. Photo count controls
+its experience:0–2 authorized visible personal photos gets the fixed default with
+border controls only;3+ keeps the personal photo editor and includes the default
+as a second card in the same border. Shared/hidden photos do not count. These are
+one household gift and one allowance, with one address confirmation.
+
+Approved default templates are private R2 JPEGs referenced by the per-year
+`keepsake_defaults` record. They use the fixed landscape/top, dogs/bottom-left,
+family/bottom-right arrangement and “from our little pack to yours” footer.
+The guest default route checks both permissions and current template revision;
+it exposes neither originals nor a photo editor. Default orders use server-owned
+artwork even if a client uploads a substitute. Personal orders pin both proofs
+and the chosen border/default revision; later template edits do not change them.
+Owner history shows both cards, and resetting a simulated gift clears both proofs.
+
+Apply0023 before deployment. `node scripts/provision-keepsake-default.mjs 2026
+--remote` uploads only the three approved pre-rendered JPEGs and manifest from
+ignored `.private/keepsake-defaults/`; it never changes permissions or publishes
+a draft. The current renderer/input originals also remain private and untracked.
+All print orders remain local simulations; no provider order or payment occurs.
+
+## Handwrytten test connection
+
+An owner-approved API key lives only in ignored `.dev.vars` and the admin Worker’s
+encrypted `HANDWRYTTEN_API_KEY` secret. Install with
+`node scripts/provision.mjs handwrytten-secret`. The owner’s Print settings show
+connection and account Test Mode status. No key is delivered to guest/admin JS.
+The server client allows diagnostics and custom-card preparation only; there is
+no order, basket mutation, payment or mode-toggle endpoint in its allowlist.
+Card preparation requires confirmed account Test Mode and print-size image data.
+Guest checkout never calls Handwrytten, including simulated guest confirmations.
+
+Live synthetic-artwork testing verified account Test Mode, supported5×7 portrait
+flat cards and upload/create-design APIs. No private photographs, addresses,
+orders or payment authorizations were used. The documented image-quality call
+rejected both documented JSON and multipart input, so print dimensions are
+validated locally. Two distinct cards in one envelope remains unconfirmed with
+the provider; a successful design API call does not establish packaging support.
+The existing1200×1500 digital keepsakes also need approved padding/formatting for
+5×7 production artwork before any future physical fulfillment.

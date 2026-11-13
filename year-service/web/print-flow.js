@@ -9,21 +9,21 @@ export function createPrintFlow({getData,onChange,onOrdered=()=>{}}){
  async function open(){
   if(dialog||opening)return;opening=true;await refresh();opening=false;if(closed||!(status?.eligible||status?.canOrder))return;
   const data=getData();if(!data.file)return;
-  const snapshot=structuredClone(status);let delivery;let requestKey=crypto.randomUUID(),submitting=false;
+  const snapshot=structuredClone(status);const proofUrl=URL.createObjectURL(data.file);let delivery;let requestKey=crypto.randomUUID(),submitting=false;
   dialog=document.createElement('dialog');dialog.className='ks-print-dialog';dialog.setAttribute('aria-labelledby','print-title');
-  dialog.innerHTML=`<div class="ks-top"><h2 id="print-title" tabindex="-1">Mail this keepsake?</h2><button class="ks-icon" data-close-print aria-label="Close order confirmation"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="ks-print-body">${['local_mock','simulation'].includes(snapshot.mode)?'<p class="ks-simulation">Orders are simulated · no physical mail or charges</p>':''}<p class="ks-description">We’ll send you a complimentary postcard of this keepsake. One little memento, on us.</p><div data-delivery-address></div><p class="ks-status" role="status" aria-live="polite"></p></div><div class="ks-bottom"><button class="ks-secondary" data-cancel-print>Not yet</button><button class="ks-primary" data-submit-print>${['local_mock','simulation'].includes(snapshot.mode)?'Confirm test print order':'Yes, mail it'}</button></div>`;
+  dialog.innerHTML=`<div class="ks-top"><h2 id="print-title" tabindex="-1">Mail this keepsake?</h2><button class="ks-icon" data-close-print aria-label="Close order confirmation"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="ks-print-body">${['local_mock','simulation'].includes(snapshot.mode)?'<p class="ks-simulation">Orders are simulated · no physical mail or charges</p>':''}<p class="ks-description">${data.cardCount===2?'We’ll send your personalized keepsake plus Pixel’s pick, both in your chosen border.':'We’ll send Pixel’s pick in your chosen border. A little gift, on us.'}</p><div class="ks-order-proofs"><figure><img src="${proofUrl}" alt="Your chosen keepsake"><figcaption>${data.cardCount===2?'Your keepsake':'Pixel’s pick'}</figcaption></figure>${data.cardCount===2?`<figure><img src="${data.defaultSrc}" alt="Pixel’s pick in the matching border"><figcaption>Also included · Pixel’s pick</figcaption></figure>`:''}</div><div data-delivery-address></div><p class="ks-status" role="status" aria-live="polite"></p></div><div class="ks-bottom"><button class="ks-secondary" data-cancel-print>Not yet</button><button class="ks-primary" data-submit-print>${['local_mock','simulation'].includes(snapshot.mode)?'Confirm test print order':'Yes, mail it'}</button></div>`;
   const sheet=dialog;document.body.append(dialog);
   const message=text=>{sheet.querySelector('.ks-status').textContent=text;};
   const submit=dialog.querySelector('[data-submit-print]');
   function renderAddress(){if(!sheet.isConnected)return;const region=sheet.querySelector('[data-delivery-address]');region.innerHTML=delivery.markup();delivery.bind(region);submit.disabled=submitting||!delivery.ready;}
   delivery=createDeliveryAddress(renderAddress);renderAddress();
-  function release(){delivery.destroy();sheet.remove();if(dialog===sheet)dialog=null;}
+  function release(){URL.revokeObjectURL(proofUrl);delivery.destroy();sheet.remove();if(dialog===sheet)dialog=null;}
   dialog.addEventListener('close',release,{once:true});
   dialog.querySelector('[data-close-print]').onclick=()=>sheet.close();
   dialog.querySelector('[data-cancel-print]').onclick=()=>sheet.close();
   function finish(order){
    status={...status,eligible:false,canOrder:false,order,remaining:0};onChange();sheet.close();
-   onOrdered(order.status==='simulated'?'Test postcard order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—a little postcard is headed your way 💌':'Your print request is recorded.',order.status==='simulated');
+   onOrdered(order.status==='simulated'?'Test keepsake order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your keepsake gift is headed your way 💌':'Your print request is recorded.',order.status==='simulated');
   }
   submit.onclick=async()=>{
    if(submitting||!delivery.ready)return;submitting=true;submit.disabled=true;message('Saving your order…');

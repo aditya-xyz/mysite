@@ -46,6 +46,11 @@ if(action==='seed') {
   const result=spawnSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','secret','bulk'],{input:JSON.stringify({PRINTFUL_API_TOKEN:vars.PRINTFUL_API_TOKEN}),encoding:'utf8'});
   if(result.status!==0)throw new Error('Installing the Printful Worker secret failed. Sensitive output suppressed.');
   console.log('Installed the server-only Printful secret. Actual ordering remains simulated.');
+} else if(action==='handwrytten-secret') {
+  if(!vars.HANDWRYTTEN_API_KEY)throw new Error('Missing HANDWRYTTEN_API_KEY in .dev.vars.');
+  const result=spawnSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','secret','bulk','--config','admin/wrangler.jsonc'],{input:JSON.stringify({HANDWRYTTEN_API_KEY:vars.HANDWRYTTEN_API_KEY}),encoding:'utf8'});
+  if(result.status!==0)throw new Error('Installing the Handwrytten Worker secret failed. Sensitive output suppressed.');
+  console.log('Installed owner-only Handwrytten secret. All ordering remains simulated.');
 } else if(action==='invitation') {
   const base=process.argv[3];if(!base?.startsWith('https://')) throw new Error('Supply the HTTPS pilot URL.');
   const invite=JSON.parse(await readFile(new URL('angela.json',privateDir),'utf8'));
@@ -57,4 +62,4 @@ if(action==='seed') {
 } else if(action==='revoke') {
   const sql=new URL('revoke.sql',privateDir);await writeFile(sql,"UPDATE invites SET revoked_at=unixepoch() WHERE id='angela'; DELETE FROM sessions WHERE invite_id='angela';",{mode:0o600});
   wrangler(['d1','execute','DB',mode,'--file',sql.pathname]);console.log('Angela’s invitation and sessions revoked.');
-} else throw new Error('Use seed, secrets, printful-secret, invitation <https-url>, or revoke.');
+} else throw new Error('Use seed, secrets, printful-secret, handwrytten-secret, invitation <https-url>, or revoke.');

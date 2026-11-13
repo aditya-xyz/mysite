@@ -13,7 +13,8 @@ function fittedText(ctx,text,x,y,maxWidth,size,font){
 }
 export function mountKeepsake(journal,section){
   const photos=personalPhotos(journal.photos);
-  if(!section||photos.length<3)return {destroy(){}};
+  if(!section||!journal.keepsake?.enabled)return {destroy(){}};
+  const fixed=journal.keepsake.mode==='default',defaultSrc=()=>journal.keepsake.defaultSrc+frame;
   const entry=document.createElement('div');entry.className='ks-entry';
   entry.innerHTML='<div><p class="kicker">this one’s going on the fridge.</p></div><button class="button" type="button">Make a keepsake</button>';
   section.append(entry);
@@ -21,7 +22,7 @@ export function mountKeepsake(journal,section){
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
   let assembleNext=false,chosen=[],crops=new Map(),frame='moss',step='pick',file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
   const images=new Map(),urls=new Set();let cardImages=[],editorCleanup=null,previewFrame=0,orderToast=null,toastTimer=null;
-  const printFlow=createPrintFlow({getData:()=>({file,recipe:{photoIds:[...chosen],crops:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:()=>{if(modal.open&&step==='edit')updateExport();},onOrdered:(message,simulated)=>{if(modal.open){showOrderToast(message,simulated);modal.querySelector('[data-share],[data-save]')?.focus();}}});
+  const printFlow=createPrintFlow({getData:()=>({file,defaultSrc:defaultSrc(),cardCount:fixed?1:2,recipe:{mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:()=>{if(modal.open&&step==='edit')updateExport();},onOrdered:(message,simulated)=>{if(modal.open){showOrderToast(message,simulated);modal.querySelector('[data-share],[data-save]')?.focus();}}});
   const currentPhotos=()=>chosen.map(id=>photos.find(p=>p.id===id));
   const setStatus=text=>{const status=modal.querySelector('.ks-status');if(status)status.textContent=text;};
   function clearOrderToast(){clearTimeout(toastTimer);toastTimer=null;orderToast?.remove();orderToast=null;}
@@ -65,13 +66,13 @@ export function mountKeepsake(journal,section){
   }
   function pickMarkup(){return `<p class="ks-description">Choose three from the photos picked for you.</p><div class="ks-picks">${photos.map(p=>{const n=chosen.indexOf(p.id);return `<button class="ks-pick" data-pick="${esc(p.id)}" aria-label="${esc(p.caption||p.alt)}" aria-pressed="${n>=0}"><img src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async"><span class="ks-badge" ${n<0?'hidden':''}>${n+1}</span></button>`;}).join('')}</div>`;}
   function frameMarkup(){return `<div class="ks-paper-tabs" role="group" aria-label="Frame style">${[['moss','Moss'],['classic','Classic'],['santa','Candy cane']].map(([value,label])=>`<button class="ks-frame" data-frame="${value}" aria-pressed="${frame===value}"><span class="ks-swatch ${value}" aria-hidden="true"></span><span>${label}</span></button>`).join('')}</div>`;}
-  function editorMarkup(){return `<div class="ks-editor-stage"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five keepsake: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Photo ${i+1}: drag vertically to reframe, drag onto another photo to swap" aria-describedby="ks-direct-help"></button>`).join('')}</div></div><p id="ks-direct-help" class="ks-crop-hint">Drag up or down to reframe. Drop onto another photo to swap.<br><span>Keyboard: Space to swap, arrows to choose, Space to confirm.</span></p><span class="ks-editor-announcement" role="status" aria-live="polite"></span></div>`;}
+  function editorMarkup(){if(fixed)return `<div class="ks-default-editor"><p class="ks-description">Pixel picked these for you. Choose your border.</p><div class="ks-preview-wrap"><img class="ks-default-image" data-default-image src="${esc(defaultSrc())}" alt="Pixel’s fixed keepsake: family photo above, dogs on the lower left and family on the lower right"></div></div>`;return `<div class="ks-editor-stage"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five keepsake: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Photo ${i+1}: drag vertically to reframe, drag onto another photo to swap" aria-describedby="ks-direct-help"></button>`).join('')}</div></div><p id="ks-direct-help" class="ks-crop-hint">Drag up or down to reframe. Drop onto another photo to swap.<br><span>Keyboard: Space to swap, arrows to choose, Space to confirm.</span></p><span class="ks-editor-announcement" role="status" aria-live="polite"></span><figure class="ks-extra-default"><figcaption>Also coming with your gift · Pixel’s pick, in your chosen border</figcaption><img data-default-image src="${esc(defaultSrc())}" alt="The matching default keepsake included with your personalized one"></figure></div>`;}
   function render(){
     editorCleanup?.();editorCleanup=null;cancelAnimationFrame(previewFrame);previewFrame=0;cardImages=[];
     revision++;file=null;busy=step==='edit';
     modal.innerHTML=`<div class="ks-shell"><div class="ks-top"><button class="ks-icon" data-back aria-label="${step==='pick'?'Close keepsake':'Back'}">${arrow}</button><h2 id="ks-title" tabindex="-1">${step==='pick'?'Make a little keepsake':'Your keepsake'}</h2><button class="ks-icon" data-close aria-label="Close keepsake">${cross}</button></div><div class="ks-body ${step==='pick'?'ks-select-body':'ks-edit-body'}">${step==='pick'?pickMarkup():editorMarkup()}<p class="ks-status" role="status" aria-live="polite"></p></div><div class="ks-bottom">${actions()}</div></div>`;
     modal.querySelector('[data-close]').onclick=close;
-    modal.querySelector('[data-back]').onclick=()=>{if(step==='pick')close();else{step='pick';render();modal.querySelector('h2').focus();}};
+    modal.querySelector('[data-back]').onclick=()=>{if(step==='pick'||fixed)close();else{step='pick';render();modal.querySelector('h2').focus();}};
     modal.querySelectorAll('[data-pick]').forEach(button=>button.onclick=()=>{
       const id=button.dataset.pick,index=chosen.indexOf(id);
       if(index>=0)chosen.splice(index,1);else if(chosen.length<3){chosen.push(id);if(!crops.has(id))crops.set(id,{x:.5,y:.5,zoom:1});}else{setStatus('Three’s the sweet spot. Deselect one to choose another.');return;}
@@ -85,7 +86,7 @@ export function mountKeepsake(journal,section){
     const share=modal.querySelector('[data-share]');if(share)share.onclick=shareCard;
     printFlow.bind(modal);
     if(step==='edit'){
-      editorCleanup=bindKeepsakeEditor({wrap:modal.querySelector('.ks-preview-wrap'),slots:cardSlots,
+      if(!fixed)editorCleanup=bindKeepsakeEditor({wrap:modal.querySelector('.ks-preview-wrap'),slots:cardSlots,
         getImage:index=>cardImages[index],getCrop:index=>crops.get(chosen[index]),setCrop:(index,crop)=>crops.set(chosen[index],crop),
         canStart:()=>!!file&&!busy&&modal.open&&step==='edit',
         onStart:()=>{file=null;busy=true;updateExport();modal.querySelector('.ks-assembly')?.remove();},
@@ -116,6 +117,12 @@ export function mountKeepsake(journal,section){
   async function paintCard(keepPreview=false){
     const assemble=assembleNext;assembleNext=false;
     const stamp=++revision;file=null;busy=true;updateExport();setStatus('');
+    modal.querySelectorAll('[data-default-image]').forEach(image=>image.src=defaultSrc());
+    if(fixed){
+      try{const response=await fetch(defaultSrc(),{signal:abort.signal});if(!response.ok)throw new Error('Your keepsake could not load. Please try again.');const blob=await response.blob();if(stamp!==revision||!modal.open)return;file=new File([blob],`pixel-picked-${journal.year}.jpg`,{type:'image/jpeg'});busy=false;updateExport();}
+      catch(error){if(error.name==='AbortError'||stamp!==revision)return;busy=false;setStatus(error.message);updateExport();}
+      return;
+    }
     const canvas=modal.querySelector('.ks-preview');if(!canvas)return;
     canvas.parentElement.querySelector('.ks-assembly')?.remove();
     if(!keepPreview)drawKeepsakeFrame(canvas.getContext('2d'),frame);
@@ -144,6 +151,6 @@ export function mountKeepsake(journal,section){
   }
   function download(){if(!file)return;const exported=exportFile(),url=URL.createObjectURL(exported);urls.add(url);const a=document.createElement('a');a.href=url;a.download=exported.name;document.body.append(a);a.click();a.remove();setStatus('Your keepsake is ready. Your browser chooses where it saves.');setTimeout(()=>{URL.revokeObjectURL(url);urls.delete(url);},60000);}
   async function shareCard(){if(!file)return;const exported=exportFile();try{if(navigator.canShare?.({files:[exported]}))await navigator.share({files:[exported],title:'A little keepsake'});else{shareFallback=true;updateExport();setStatus('File sharing isn’t supported in this browser. You can save the image as a file instead.');}}catch(error){if(error.name!=='AbortError'){shareFallback=true;updateExport();setStatus('Sharing couldn’t open. You can save the image as a file instead.');}}}
-  launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();shareFallback=false;step='pick';render();modal.showModal();modal.querySelector('#ks-title').focus({preventScroll:true});printFlow.refresh();};
+  launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();shareFallback=false;step=fixed?'edit':'pick';render();modal.showModal();modal.querySelector('#ks-title').focus({preventScroll:true});printFlow.refresh();};
   return {destroy(){if(modal.open)modal.close();else cleanup();modal.remove();entry.remove();}};
 }

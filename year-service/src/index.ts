@@ -1,3 +1,4 @@
+import {keepsakeManifest,keepsakeDefaultImage} from './keepsake-defaults.ts';
 import {preparedMugCatalog,preparedMugImage,preparedMugSource,tickPreparedMugs} from './prepared-mugs.ts';
 import {deliveryAddressRoute} from './delivery-address.ts';
 import type {AddressEnv} from '../admin/src/address-verification.ts';
@@ -108,7 +109,7 @@ async function route(request: Request, env: Env) {
   if (path.startsWith("/api/") && request.method === "POST") {
     const ip = request.headers.get("CF-Connecting-IP") || "local";
     const hash=await digest(ip);
-    const interaction=['/api/gift/quote','/api/gift/claim','/api/gift/mockup','/api/gift/mockup/lookup'].includes(path)||path.startsWith('/api/delivery-address/');
+    const interaction=['/api/gift/quote','/api/gift/claim','/api/gift/mockup','/api/gift/mockup/lookup','/api/print/orders'].includes(path)||path.startsWith('/api/delivery-address/');
     if(interaction){
       // Verified app activity has its own network budget; it cannot exhaust login protection.
       // Invalid/expired sessions still consume the original unauthenticated limit.
@@ -217,8 +218,10 @@ async function route(request: Request, env: Env) {
   }
   const mugProof=/^\/api\/gift\/orders\/(mug-[a-z0-9]+)\/(artwork|mockup)$/.exec(path);
   if(mugProof&&request.method==='GET')return mugOrderArtwork(env,await authenticated(request,env),mugProof[1],mugProof[2]==='mockup');
+  const defaultKeepsake=/^\/api\/keepsake\/default\/([a-f0-9]{32,64})\/(moss|classic|santa)$/.exec(path);
+  if(defaultKeepsake&&request.method==='GET')return keepsakeDefaultImage(env,await authenticated(request,env),defaultKeepsake[1],defaultKeepsake[2]);
   if(path==='/api/print/status'&&request.method==='GET')return json(await printStatus(request,env,await authenticated(request,env)));
-  if(path==='/api/print/orders'&&request.method==='POST')return json(await createPrintOrder(request,env,await authenticated(request,env)));
+  if(path==='/api/print/orders'&&request.method==='POST'){const invite=await authenticated(request,env);await limited(env,'print-claim:'+invite.id,20,600);return json(await createPrintOrder(request,env,invite));}
   const theme=/^\/api\/theme\/(welcome|gift|closing)$/.exec(path);
   if(theme&&request.method==='GET'){
     const invite=await authenticated(request,env);
@@ -233,6 +236,7 @@ async function route(request: Request, env: Env) {
       const data=clientEdition(edition,i.id,invitationName(i),i.edition_year,await invitationAudience(env.DB,i));
       data.shareSocials=!!i.share_socials;
       Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,i.edition_year)});
+      Object.assign(data,{keepsake:await keepsakeManifest(env,i,data.photos.filter(p=>p.personal).length)});
       const giftStatus=await mugStatus(request,env,i);
       if(!giftStatus.eligible){data.gift.enabled=false;data.gift.designs=[];}
       Object.assign(data.gift,{hasOrder:!!giftStatus.claim,orderingEnabled:giftStatus.eligible&&simulatedOrders(request,env),mode:giftStatus.mode,livePricing:printfulEnabled(env)});

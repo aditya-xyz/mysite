@@ -23,16 +23,21 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
     await db.batch((await readFile('migrations/0015_simulated_mug_orders.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0016_mug_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0017_immediate_print_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0023_keepsake_default_sets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   const expires=Math.floor(Date.now()/1000)+86400,session='c'.repeat(64);
   await db.prepare("INSERT INTO people(id,name,phone) VALUES('contact','Test Recipient','+15555550100'),('partner','Test Partner',NULL)").run();
   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('invite','contact',?1,'Test Recipient','+15555550100',?2,?3)").bind(await digest('a'.repeat(64)),expires,JSON.stringify(['contact','partner'])).run();
   await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?1,'invite',?2)").bind(await digest(session),expires).run();
+  const defaultRevision='d'.repeat(32),defaultJPEG=new Uint8Array([255,216,255,192,0,11,8,5,220,4,176,1,1,17,0,255,217]);
+  await db.prepare('INSERT INTO keepsake_defaults(year,revision,frames_json) VALUES(2026,?1,?2)').bind(defaultRevision,JSON.stringify({moss:'default-moss.jpg',classic:'default-classic.jpg',santa:'default-santa.jpg'})).run();
+  for(const frame of ['moss','classic','santa'])await bucket.put('default-'+frame+'.jpg',new Uint8Array([...defaultJPEG,frame.length]));
   const address={line1:'123 Example Lane',line2:'Unit 2',city:'Portland',state:'OR',postalCode:'97201',country:'US'};
   const photos=[['one',['contact']],['two',['partner']],['three',['contact','partner']],['shared',[]]].map(([id,recipients])=>({id,recipients,caption:id,alt:id,preview_key:id+'.jpg',original_key:null,filename:id+'.jpg',mime:'image/jpeg',width:1200,height:1500}));
   for(const id of ['one','two','three','shared'])await db.prepare('INSERT INTO media_objects(id,year,preview_key,filename,mime,bytes) VALUES(?1,2026,?2,?2,\'image/jpeg\',17)').bind(id,id+'.jpg').run();
   const published={title:'Test',authors:'Test Authors',intro:'Test',note:'Test',sharedTitle:'Test',stories:[],photos,printNote:'A note for everyone.',printInvitations:['invite'],printAddressKeys:{invite:'address-key'}};
   async function reset(){
    await db.prepare('DELETE FROM print_orders').run();
+   await db.prepare("DELETE FROM rate_limits WHERE key LIKE 'print-claim:%'").run();
    await db.prepare("UPDATE people SET mailing_address=?1,address_verified=0 WHERE id='contact'").bind(JSON.stringify(address)).run();
    await db.prepare("UPDATE people SET address_verified=1,address_verifier='local_mock',address_verification_key='address-key' WHERE id='contact'").run();
    await db.prepare("UPDATE editions SET draft_json=?1,published_json=?1,published_version=1,allow_print_orders=1,is_active=1 WHERE year=2026").bind(JSON.stringify(published)).run();
@@ -44,7 +49,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    return mf.dispatchFetch('http://guest.test/api/'+path,{method:data?'POST':'GET',headers:{Origin:options.origin||'http://guest.test',...(options.cookie===false?{}:{Cookie:'__Host-year_session='+session}),...(encoded?{'Content-Type':encoded.headers.get('Content-Type')!,'Content-Length':String(bytes!.byteLength)}:{})},...(bytes?{body:bytes}:{})});
   }
   const status=async()=>await (await guest('print/status')).json() as any;
-  async function order(ids=['one','two','three'],key=crypto.randomUUID(),confirmationKey?:string){const s=await status(),form=new FormData();const jpg=new Uint8Array([255,216,255,192,0,11,8,5,220,4,176,1,1,17,0,255,217]);form.set('artwork',new File([jpg],'keepsake.jpg',{type:'image/jpeg'}));form.set('recipe',JSON.stringify({photoIds:ids,frame:'moss',crops:Object.fromEntries(ids.map(id=>[id,{x:.5,y:.5,zoom:1}])),requestKey:key,confirmationKey:confirmationKey||s.confirmationKey,addressVersion:s.addressVersion}));return form;}
+  async function order(ids=['one','two','three'],key=crypto.randomUUID(),confirmationKey?:string){const s=await status(),form=new FormData();const jpg=new Uint8Array([255,216,255,192,0,11,8,5,220,4,176,1,1,17,0,255,217]);form.set('artwork',new File([jpg],'keepsake.jpg',{type:'image/jpeg'}));form.set('recipe',JSON.stringify({mode:ids.length?'personal':'default',defaultRevision,photoIds:ids,frame:'moss',crops:Object.fromEntries(ids.map(id=>[id,{x:.5,y:.5,zoom:1}])),requestKey:key,confirmationKey:confirmationKey||s.confirmationKey,addressVersion:s.addressVersion}));return form;}
   await t.test('schema defaults off and a couple’s overlapping photo counts only once',async()=>{
    assert.equal((await db.prepare('SELECT allow_print_orders FROM editions WHERE year=2026').first<any>()).allow_print_orders,0);
    assert.equal(personalCount(published as any,['contact','partner']),3);
@@ -84,16 +89,41 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await t.test('each eligibility requirement is enforced on the server',async()=>{
    await reset();const eligible=await status();assert.equal(eligible.eligible,true);for(const privateField of ['note','address','recipientName','authors'])assert.equal(privateField in eligible,false);
    for(const [sql,reason] of [["UPDATE editions SET allow_print_orders=0 WHERE year=2026",'turned off'],["UPDATE people SET address_verified=0 WHERE id='contact'",'verified US'],["UPDATE people SET address_verification_key='new-address-key' WHERE id='contact'",'changed']] as const){await reset();await db.prepare(sql).run();assert.match((await status()).reason,new RegExp(reason));assert.equal((await guest('print/orders',await order())).status,409);}
-   for(const extra of [{printNote:''},{photos:photos.slice(0,2)}]){await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,...extra})).run();assert.equal((await status()).eligible,false);}
+   for(const extra of [{printNote:''}]){await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,...extra})).run();assert.equal((await status()).eligible,false);}
   });
   await t.test('draft saves clear ineligible permission without changing the published snapshot',async()=>{
    await reset();const initial=await (await admin('editions/2026/state')).json() as any;
    const changed={...published,photos:photos.map(p=>p.id==='three'?{...p,hidden:true}:p)};
-   const saved=await admin('editions/2026/draft',{version:initial.version,draft:changed});assert.equal(saved.status,200);const result=await saved.json() as any;assert.deepEqual(result.printInvitations,[]);
+   const saved=await admin('editions/2026/draft',{version:initial.version,draft:changed});assert.equal(saved.status,200);const result=await saved.json() as any;assert.deepEqual(result.printInvitations,['invite']);
    assert.equal((await status()).eligible,true,'Draft changes do not alter the guest publication');
-   assert.equal((await admin('editions/2026/publish',{version:result.version})).status,200);assert.equal((await status()).eligible,false);
+   assert.equal((await admin('editions/2026/publish',{version:result.version})).status,200);assert.equal((await status()).eligible,true,'Under three photos uses the default keepsake');
    const fresh=await (await admin('editions/2026/state')).json() as any;fresh.draft.photos=photos;
-   const restored=await admin('editions/2026/draft',{version:fresh.version,draft:fresh.draft});assert.equal(restored.status,200);assert.deepEqual((await restored.json() as any).printInvitations,[]);
+   const restored=await admin('editions/2026/draft',{version:fresh.version,draft:fresh.draft});assert.equal(restored.status,200);assert.deepEqual((await restored.json() as any).printInvitations,['invite']);
+  });
+  await t.test('both permission gates control default access; under-three photos has a fixed one-card order',async()=>{
+   await reset();const path='keepsake/default/'+defaultRevision+'/moss';
+   assert.equal((await guest(path,undefined,{cookie:false})).status,401);
+   for(const count of [0,1,2]){
+    await reset();await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,photos:photos.slice(0,count)})).run();
+    const journal=await (await guest('journal')).json() as any;assert.equal(journal.keepsake.enabled,true);assert.equal(journal.keepsake.mode,'default');assert.equal(journal.keepsake.cardCount,1);
+    assert.equal((await status()).eligible,true);assert.equal((await guest(path)).status,200);
+    const tampered=await order(['one','two','three']);assert.equal((await guest('print/orders',tampered)).status,403);
+    const response=await guest('print/orders',await order([]));assert.equal(response.status,200,await response.clone().text());
+    const result=await response.json() as any,row=await db.prepare('SELECT * FROM print_orders WHERE id=?1').bind(result.order.id).first<any>();
+    assert.equal(row.card_count,1);assert.equal(row.artwork_key,row.default_artwork_key);assert.deepEqual(new Uint8Array(await (await bucket.get(row.artwork_key))!.arrayBuffer()),new Uint8Array([...defaultJPEG,4]),'Server-owned default replaces any uploaded substitute');
+    assert.equal((await db.prepare("SELECT print_order_count FROM invites WHERE id='invite'").first<any>()).print_order_count,1);
+   }
+   for(const sql of ['UPDATE editions SET allow_print_orders=0 WHERE year=2026',"UPDATE invites SET allow_print=0 WHERE id='invite'"]){await reset();await db.prepare(sql).run();assert.equal((await guest(path)).status,403);const journal=await (await guest('journal')).json() as any;assert.equal(journal.keepsake.enabled,false);assert.equal((await guest('print/orders',await order())).status,409);}
+  });
+  await t.test('personalized orders snapshot two proofs in the same border and reset releases both',async()=>{
+   await reset();const journal=await (await guest('journal')).json() as any;assert.equal(journal.keepsake.mode,'personal');assert.equal(journal.keepsake.cardCount,2);
+   const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.frame='santa';form.set('recipe',JSON.stringify(recipe));
+   const response=await guest('print/orders',form);assert.equal(response.status,200,await response.clone().text());const result=await response.json() as any;
+   const row=await db.prepare('SELECT * FROM print_orders WHERE id=?1').bind(result.order.id).first<any>();assert.equal(row.card_count,2);assert.notEqual(row.artwork_key,row.default_artwork_key);assert.equal(row.default_revision,defaultRevision);
+   assert.deepEqual(new Uint8Array(await (await bucket.get(row.default_artwork_key))!.arrayBuffer()),new Uint8Array([...defaultJPEG,5]));
+   assert.equal((await admin('editions/2026/print-orders/'+result.order.id+'/default-artwork')).status,200);
+   assert.equal((await admin('editions/2026/invitations/invite/reset-print-allowance',{orderId:result.order.id,confirm:true})).status,200);
+   assert.equal(await bucket.head(row.artwork_key),null);assert.equal(await bucket.head(row.default_artwork_key),null);
   });
   await t.test('simulated fulfillment and address verification cannot run over production HTTPS',async()=>{
    await reset();await db.prepare('UPDATE editions SET allow_print_orders=0 WHERE year=2026').run();

@@ -916,3 +916,15 @@ an open browser. The panel shows saved/desired preview counts. Publishing update
 captions prepares new immutable sources. Nightly catalog additions reuse existing
 sources, and only budget-eligible variants are queued. Apply0022 before deployment.
 No Printful secret is needed in admin, and no orders are created by preparation.
+
+Fixed keepsakes now cover invitations with0–2 visible personal photos;3+ receives
+a personalized card plus the fixed default in the same border. Both immediate
+invitation and scrapbook print permissions remain enforced. Default templates
+must be provisioned privately per year (migration0023); no photo-count restriction
+is used to prune permission. History shows both pinned proofs and one allowance.
+
+Print settings also report the owner-only Handwrytten connection and Test Mode.
+The approved key is an encrypted admin Worker secret, installed with
+`node scripts/provision.mjs handwrytten-secret`; never put it into browser assets.
+Only diagnostics and test card-design preparation are implemented. Guest orders
+remain local simulations with no Handwrytten submission or payment requests.
