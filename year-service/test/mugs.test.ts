@@ -45,6 +45,8 @@ test('configured mugs follow draft publication, minimum count, access and deleti
   await db.prepare("UPDATE people SET name='Verified Recipient',mailing_address=?1 WHERE id='contact-mug-invite'").bind(JSON.stringify({line1:'123 Verified Lane',line2:'',city:'Portland',state:'OR',postalCode:'97201',country:'US'})).run();
   await db.prepare("UPDATE people SET address_verified=1,address_verifier='google',address_verified_at=unixepoch(),address_verified_until=unixepoch()+86400,address_verification_key='mug-address' WHERE id='contact-mug-invite'").run();
   await db.prepare("UPDATE invites SET person_id='contact-mug-invite',member_ids='[\"contact-mug-invite\"]' WHERE id='mug-invite'").run();
+  await db.prepare("INSERT INTO people(id,name) VALUES('mug-partner','Partner Fullname')").run();
+  await db.prepare('UPDATE invites SET member_ids=?1 WHERE id=?2').bind(JSON.stringify(['contact-mug-invite','mug-partner']),'mug-invite').run();
   await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?1,'mug-invite',?2)").bind(await digest(raw),expiry).run();
   const jpeg=new Uint8Array([255,216,255,192,0,11,8,0,64,0,64,1,1,17,0,255,217]);
   for(const id of ['gallery','mug-0','mug-1','mug-2','mug-3','mug-4','mug-5']){
@@ -136,7 +138,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    }
    const configuration={style:'color-inside',size:'15oz',color:'blue',font:'handwritten'};
    const results=await Promise.all(Array.from({length:6},async()=>{const response=await sim('gift/claim',{...payload,configuration});assert.equal(response.status,200,await response.clone().text());return (await response.json() as any).claim;}));
-   assert.equal(new Set(results.map(o=>o.id)).size,1);const first=results[0];assert.equal(first.status,'simulated');assert.deepEqual(first.configuration,configuration);assert.deepEqual((await (await sim('gift/status')).json() as any).claim.configuration,configuration);assert.equal(first.address.name,'Verified Recipient');assert.equal(first.address.line1,'123 Verified Lane');assert.equal(first.design.caption,'caption 0');
+   assert.equal(new Set(results.map(o=>o.id)).size,1);const first=results[0];assert.equal(first.status,'simulated');assert.deepEqual(first.configuration,configuration);assert.deepEqual((await (await sim('gift/status')).json() as any).claim.configuration,configuration);assert.equal(first.address.name,'Verified Recipient & Partner Fullname');assert.equal(first.address.line1,'123 Verified Lane');assert.equal(first.design.caption,'caption 0');
    assert.equal((await sim(first.design.src.replace('/api/',''))).headers.get('Content-Type'),'image/png');
    const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders.length,1);assert.deepEqual(JSON.parse(history.orders[0].configuration_json),configuration);assert.equal(history.counts[0].count,1);
    assert.equal((await db.prepare("SELECT mug_order_count,print_order_count FROM invites WHERE id='mug-invite'").first<any>()).mug_order_count,1);

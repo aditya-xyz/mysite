@@ -1,0 +1,5 @@
+import {esc} from './pixelbook.js';
+
+export function codeEntryMarkup(invite){
+  return `<form class="entry pb-code-entry"><figure class="pb-code-photo"><img src="/pixel-code-guard.webp" width="960" height="960" alt="Pixel and a little white dog standing guard on a snowy park bench" fetchpriority="high"></figure><div class="pb-code-content"><p class="kicker">one tiny thing first…</p><h1>not so fast.</h1><p class="pb-code-fetch">go fetch your code first.</p><p class="pb-code-delivery" id="code-delivery">A text is on its way to ${esc(invite.verificationName || invite.name)}’s phone ending in <strong>${esc(invite.phoneHint)}</strong>.</p><label for="code">Six-digit access code</label><input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required aria-describedby="code-delivery code-expiry error"/><p id="error" class="error" role="alert"></p><button class="button" type="submit">Step inside →</button><button class="text-button" id="resend" type="button" disabled>Resend available in 60 seconds</button><p class="hint" id="code-expiry">Your code expires in ten minutes.</p></div></form>`;
+}

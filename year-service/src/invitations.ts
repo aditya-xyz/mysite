@@ -9,3 +9,15 @@ export async function invitationAudience(db:D1Database, invite:InvitationAudienc
     .bind(invite.edition_year,JSON.stringify(members)).all<{id:string}>();
   return [...new Set([invite.id,...members,...aliases.results.map(p=>p.id)])];
 }
+
+async function invitationFullNames(db:D1Database, invite:InvitationAudience):Promise<string[]> {
+  const members=invitationMembers(invite);
+  if(!members.length)return [];
+  const rows=await db.prepare(`SELECT p.name FROM json_each(?1) member JOIN people p ON p.id=member.value ORDER BY CAST(member.key AS INTEGER)`)
+    .bind(JSON.stringify(members)).all<{name:string}>();
+  return rows.results.map(person=>person.name.trim().replace(/\s+/g,' ')).filter(Boolean);
+}
+
+export async function invitationRecipientName(db:D1Database, invite:InvitationAudience, fallback:string):Promise<string> {
+  return (await invitationFullNames(db,invite)).join(' & ') || fallback;
+}

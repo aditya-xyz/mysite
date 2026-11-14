@@ -12,7 +12,7 @@ export function themePhoto(journal,key,alt,className=''){
 export function openingMarkup(journal){
   const note=journal.pixelNote || journal.note || 'i made a scrapbook. dad did the clicking and typing and other thumb-related tasks, but the vision was mine.';
   const noteMarkup=note.split(/\n\s*\n/).filter(part=>part.trim()).map(part=>`<p>${esc(part)}</p>`).join('');
-  return `<section class="pb-cover" aria-labelledby="pb-title"><div class="pb-cover-copy"><h1 id="pb-title">pixelbook<span class="pb-title-period">.</span></h1><p class="pb-cover-note">a few adventures, some questionable decisions,<br class="pb-desktop-break"> and my favorite people. you made the cut.</p></div><figure class="pb-cover-portrait"><div class="pb-cover-art"><span class="pb-ornament-cap" aria-hidden="true"></span><div class="pb-ornament-photo"><img class="pb-santa" src="/pixel-santa.png" alt="Pixel wearing her Santa hat" width="369" height="400" fetchpriority="high"></div><span class="pb-cover-seal">made with love.<br>and no thumbs.</span><span class="pb-spark pb-spark-one" aria-hidden="true">${sparkle}</span><span class="pb-spark pb-spark-two" aria-hidden="true">${sparkle}</span></div><figcaption class="pb-cover-credit">photos by my humans. creative direction and sass by me.</figcaption></figure></section>
+  return `<section class="pb-cover" aria-labelledby="pb-title"><div class="pb-cover-copy"><h1 id="pb-title">pixelbook<span class="pb-title-period">.</span></h1><p class="pb-cover-note">a few adventures, some questionable decisions,<br class="pb-desktop-break"> and my favorite people. you made the cut.</p></div><figure class="pb-cover-portrait"><div class="pb-cover-stage"><div class="pb-cover-art"><span class="pb-ornament-cap" aria-hidden="true"></span><div class="pb-ornament-photo"><img class="pb-santa" src="/pixel-santa.png" alt="Pixel wearing her Santa hat" width="369" height="400" fetchpriority="high"></div><span class="pb-cover-seal">made with love.<br>and no thumbs.</span></div><span class="pb-spark pb-spark-one" aria-hidden="true">${sparkle}</span><span class="pb-spark pb-spark-two" aria-hidden="true">${sparkle}</span></div><figcaption class="pb-cover-credit">photos by my humans. creative direction and sass by me.</figcaption></figure></section>
   <section class="pb-letter" id="pb-letter" aria-labelledby="pb-letter-title"><div class="pb-letter-copy"><p class="pb-eyebrow">a note from your editor</p><p class="pb-letter-greeting">oh, it’s you.<span class="pb-tail-line">my <span class="pb-tail-word">tail</span> knew first.</span></p><h2 id="pb-letter-title"><em class="pb-recipient-hello">hi ${esc(journal.name)}!</em></h2>${noteMarkup}<p class="signoff">love, Pixel</p></div>${themePhoto(journal,'welcome','Pixel tilting her head on a sunny trail','pb-letter-photo')}</section>`;
 }
 export function sectionHeading(number,title,note,id='',pairedTitle=''){
@@ -29,4 +29,10 @@ export function giftMarkup(journal){
 }
 export function footerMarkup(journal){
   return `${themePhoto(journal,'closing','Pixel sleeping against the couch','pb-closing-photo')}<p class="pb-eyebrow">that’s my year. thanks for being in it.</p><p class="footer-closing">same time next year?</p><p class="signoff">love, Pixel</p><span class="pb-footer-wordmark">pixelbook.</span><span class="pb-footer-credits"></span>`;
+}
+
+export function householdOrderNote(addressedTo='',householdSize=0){
+  if(householdSize<2||typeof addressedTo!=='string'||!addressedTo.trim())return '';
+  const reminder=`${addressedTo}, make sure you’re ${householdSize===2?'both':'all'} happy with this pick.`;
+  return `${reminder}\ni’d like to stay everyone’s favorite dog.`;
 }

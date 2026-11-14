@@ -2,7 +2,7 @@ import {addressAdminRoute,addressMode,autocompleteAvailable,type AddressEnv} fro
 import {addressAutocompleteRoute} from '../admin/src/address-autocomplete.ts';
 import {addressVerificationCurrent,type AddressState} from './address-state.ts';
 import {mailingAddress,PrintProblem,type MailingAddress} from './printing.ts';
-import type {InvitationAudience} from './invitations.ts';
+import {invitationRecipientName,type InvitationAudience} from './invitations.ts';
 interface Contact extends AddressState {id:string;name:string;version:number;mailing_address:string|null;address_verification_key:string|null}
 export async function deliveryContact(env:AddressEnv,invite:InvitationAudience){
  const person=invite.person_id?await env.DB.prepare('SELECT id,name,version,mailing_address,address_verified,address_verifier,address_verified_at,address_verified_until,address_verification_key FROM people WHERE id=?1').bind(invite.person_id).first<Contact>():null;
@@ -18,7 +18,7 @@ export async function deliveryState(request:Request,env:AddressEnv,invite:Invita
  const address=verifiedDelivery(person);
  // Test verification is valid only inside the explicit local preview, never production.
  const verified=!!address&&!!person.address_verification_key&&(person.address_verifier==='google'||mode==='local_mock');
- return {verified,recipientName:person.name,version:person.version,address:verified?address:null,mode,autocompleteAvailable:autocompleteAvailable(request,env)};
+ return {verified,recipientName:await invitationRecipientName(env.DB,invite,person.name),version:person.version,address:verified?address:null,mode,autocompleteAvailable:autocompleteAvailable(request,env)};
 }
 export async function confirmDelivery(request:Request,env:AddressEnv,invite:InvitationAudience,version:unknown){
  const person=await deliveryContact(env,invite),state=await deliveryState(request,env,invite);

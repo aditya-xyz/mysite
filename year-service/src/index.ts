@@ -13,7 +13,7 @@ import {printStatus,createPrintOrder,printOrderArtwork,PrintProblem,simulatedOrd
 import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionCookie } from "./security.ts";
 import { reserveDownload,releaseDownload } from "./downloads.ts";
 import { previewDimensions } from "./image-dimensions.ts";
-import { invitationAudience, invitationName, type InvitationAudience } from "./invitations.ts";
+import { invitationAudience, invitationName, invitationMembers, type InvitationAudience } from "./invitations.ts";
 import { publishedEdition, clientEdition, visiblePhotos, publishedMugs } from "./edition.ts";
 
 interface Env extends AddressEnv {
@@ -241,6 +241,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     const edition = await publishedEdition(env.DB,i.edition_year);
     if (edition) {
       const data=clientEdition(edition,i.id,invitationName(i),i.edition_year,await invitationAudience(env.DB,i));
+      Object.assign(data,{householdSize:new Set(invitationMembers(i)).size});
       data.shareSocials=!!i.share_socials;
       Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,i.edition_year)});
       Object.assign(data,{keepsake:await keepsakeManifest(env,i,data.photos.filter(p=>p.personal).length)});
@@ -256,7 +257,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     if (i.edition_year !== 2026) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
     const photos = await env.DB.prepare(`SELECT id,caption,alt,invite_id,preview_key,original_key FROM photos
       WHERE invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?1)) ORDER BY invite_id IS NULL,sort_order,id`).bind(JSON.stringify(await invitationAudience(env.DB,i))).all<Photo>();
-    return json({ year:i.edition_year,name: invitationName(i), verificationName:i.name,shareSocials:!!i.share_socials, photos: await Promise.all(photos.results.map(async p => ({ id: p.id, caption: p.caption, alt: p.alt,...await previewDimensions(env.MEDIA,p.preview_key),
+    return json({ year:i.edition_year,householdSize:new Set(invitationMembers(i)).size,name: invitationName(i), verificationName:i.name,shareSocials:!!i.share_socials, photos: await Promise.all(photos.results.map(async p => ({ id: p.id, caption: p.caption, alt: p.alt,...await previewDimensions(env.MEDIA,p.preview_key),
       personal: p.invite_id !== null, src: `/api/media/${p.id}`,viewerSrc:`/api/media/${p.id}/viewer`, canSave: !!p.invite_id && !!p.original_key }))) });
   }
   const mug=/^\/api\/mugs\/([a-z0-9-]+)$/.exec(path);

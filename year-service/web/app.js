@@ -1,3 +1,4 @@
+import {codeEntryMarkup} from './auth-entry.js';
 import {installFocusModality} from './focus.js';
 installFocusModality();
 import {openingMarkup,sectionHeading,giftMarkup,footerMarkup} from './pixelbook.js';
@@ -73,7 +74,7 @@ async function start() {
   } catch (error) { message(error); }
 }
 function showCode(invite) {
-  app.innerHTML = `<form class="entry"><p class="kicker">one tiny thing first…</p><h1>Just making sure<br>it’s you.</h1><p>A text is on its way to ${escape(invite.verificationName || invite.name)}’s phone ending in ${escape(invite.phoneHint)}.</p><label for="code">Six-digit access code</label><input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required aria-describedby="error"/><p id="error" class="error" role="alert"></p><button class="button" type="submit">Step inside →</button><br><button class="text-button" id="resend" type="button" disabled>Resend available in 60 seconds</button><p class="hint">Your code expires in ten minutes.</p></form>`;
+  app.innerHTML = codeEntryMarkup(invite);
   let remaining = 60;
   const resend = document.querySelector('#resend');
   const timer = setInterval(() => { if (!resend.isConnected) {clearInterval(timer); return;} remaining--; resend.textContent = remaining > 0 ? `Resend available in ${remaining} seconds` : 'Text me a new code'; if (remaining <= 0) {resend.disabled=false; clearInterval(timer);} },1000);

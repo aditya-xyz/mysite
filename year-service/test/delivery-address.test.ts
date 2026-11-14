@@ -4,7 +4,7 @@ import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {digest} from '../src/security.ts';
 
-test('guest delivery uses only the verification contact, reviews USPS verification, and persists canonical addresses',async()=>{
+test('guest delivery names all invitation members while verifying and saving only the contact address',async()=>{
  let validationCalls=0,placesCalls=0;
  const canonical={line1:'123 VERIFIED ST',line2:'',city:'PORTLAND',state:'OR',postalCode:'97201-1234',country:'US'};
  const mf=new Miniflare(convertV4MiniflareOptions({modules:true,scriptPath:'.wrangler/test-bundle/index.js',compatibilityDate:'2026-08-06',d1Databases:{DB:'delivery'},r2Buckets:{MEDIA:'delivery'},bindings:{ORDER_MODE:'simulation',ADDRESS_VERIFICATION_PROVIDER:'google',GOOGLE_ADDRESS_VALIDATION_API_KEY:'test-key',GOOGLE_PLACES_ENABLED:'true',SMS_ENABLED:'false'},outboundService:async(req:Request)=>{
@@ -25,7 +25,7 @@ test('guest delivery uses only the verification contact, reviews USPS verificati
   const api=(action='',data?:unknown,auth=true,origin='https://guest.test')=>mf.dispatchFetch('https://guest.test/api/delivery-address'+(action?'/'+action:''),{method:data===undefined?'GET':'POST',headers:{Origin:origin,...(auth?{Cookie:'__Host-year_session='+raw}:{}),'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});
   assert.equal((await api('',undefined,false)).status,401);
   assert.equal((await api('verify',{},true,'https://evil.test')).status,403);
-  const state=await (await api()).json() as any;assert.equal(state.verified,false);assert.equal(state.address,null);assert.equal(state.recipientName,'Phone Contact');assert.equal(state.mode,'google');
+  const state=await (await api()).json() as any;assert.equal(state.verified,false);assert.equal(state.address,null);assert.equal(state.recipientName,'Phone Contact & Other Person');assert.equal(state.mode,'google');
   const search=await api('autocomplete',{version:state.version,sessionToken:'session-token-123456',input:'123',personId:'other'});assert.equal(search.status,200);assert.equal(placesCalls,1);
   assert.equal((await api('save',{version:state.version,verify:false,address:canonical})).status,400);
   const reviewResponse=await api('verify',{version:state.version,address:{...canonical,line1:'123 verified st'},personId:'other'});assert.equal(reviewResponse.status,200,await reviewResponse.clone().text());

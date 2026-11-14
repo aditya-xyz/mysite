@@ -145,7 +145,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    }
    for(const sql of ['UPDATE editions SET allow_print_orders=0 WHERE year=2026',"UPDATE invites SET allow_print=0 WHERE id='invite'"]){await reset();await db.prepare(sql).run();assert.equal((await guest(path)).status,403);const journal=await (await guest('journal')).json() as any;assert.equal(journal.keepsake.enabled,false);assert.equal((await guest('print/orders',await order())).status,409);}
   });
-  await t.test('both note types greet the invitation household while the envelope keeps the text-verification contact',async()=>{
+  await t.test('both note types greet the invitation household while the envelope names every member',async()=>{
    for(const personalized of [false,true]){
     await reset();await db.prepare("UPDATE invites SET addressed_to='Bliss & Vatsi',version=version+1 WHERE id='invite'").run();
     await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({...published,photos:personalized?photos:[],defaultPrintNote:'A shared default message.'})).run();
@@ -153,7 +153,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
     const response=await guest('print/orders',form);assert.equal(response.status,200,await response.clone().text());
     const row=await db.prepare('SELECT * FROM print_orders').first<any>(),payload=JSON.parse(row.handwrytten_order_json);
     assert.equal(row.note,'Dear Bliss & Vatsi,\n\n'+(personalized?published.printNote:'A shared default message.'));assert.equal(payload.addresses[0].message,row.note);assert.equal(payload.font,'hwMadeline');
-    assert.equal(row.recipient_name,'Test Recipient');assert.equal(payload.addresses[0].to_first_name,'Test');assert.equal(payload.addresses[0].to_last_name,'Recipient');
+    assert.equal(row.recipient_name,'Test Recipient & Test Partner');assert.equal(payload.addresses[0].to_first_name,'Test');assert.equal(payload.addresses[0].to_last_name,'Recipient & Test Partner');
     await db.prepare("UPDATE invites SET addressed_to='Changed household',version=version+1 WHERE id='invite'").run();
     await db.prepare("UPDATE editions SET published_json=json_set(published_json,'$.printNote','Changed body','$.defaultPrintNote','Changed default body') WHERE year=2026").run();
     const history=(await (await admin('editions/2026/print-orders')).json() as any).orders[0];assert.equal(history.note,row.note);assert.deepEqual(JSON.parse(history.handwrytten_order_json),payload,'Greeting, font and envelope remain frozen together');

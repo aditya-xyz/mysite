@@ -6,7 +6,7 @@ import {estimateMug,printfulEnabled,printfulCatalog} from './printful.ts';
 import {PrintProblem,mailingAddress,simulatedOrders,type PrintEnv} from './printing.ts';
 import {publishedMugs,type Published} from './edition.ts';
 import {now,token} from './security.ts';
-import type {InvitationAudience} from './invitations.ts';
+import {invitationRecipientName,type InvitationAudience} from './invitations.ts';
 interface Order {id:string;design_id:string;caption:string;alt:string;artwork_key:string;status:string;recipient_name:string;address_json:string;created_at:number;configuration_json?:string;mockup_key?:string;mockup_id?:string;prepared_preview_id?:string}
 export function mugReceipt(o:Order){return {id:o.id,designId:o.design_id,status:o.status,createdAt:o.created_at,configuration:JSON.parse(o.configuration_json||JSON.stringify(legacyMugOptions())),address:{...JSON.parse(o.address_json),name:o.recipient_name},design:{id:o.design_id,name:'your mugshot',caption:o.caption,alt:o.alt,src:`/api/gift/orders/${o.id}/artwork`,...(o.mockup_key?{mockupSrc:`/api/gift/orders/${o.id}/mockup`}:{})}};}
 export async function mugAllowed(env:PrintEnv,invite:InvitationAudience){
@@ -39,7 +39,7 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
  const configuration=validMugOptions(data.configuration===undefined?pixelMugOptions():data.configuration,catalog?.styles);
  if(!configuration)throw new PrintProblem(400,'Choose an available mug style, size, color and font.');
  const delivery=await confirmDelivery(request,env,invite,data.addressVersion);
- const address=delivery.address,recipientName=delivery.person.name;
+ const address=delivery.address,recipientName=await invitationRecipientName(env.DB,invite,delivery.person.name);
  const mockup=typeof data.mockupId==='string'?await env.DB.prepare("SELECT id FROM mug_mockups WHERE id=?1 AND invitation_id=?2 AND year=?3 AND design_id=?4 AND configuration_json=?5 AND caption=?6 AND cutout_version=?7 AND status IN ('pending','ready')").bind(data.mockupId,invite.id,invite.edition_year,design.id,JSON.stringify(configuration),design.caption,design.cutoutVersion).first<{id:string}>():null;
  const prepared=typeof data.preparedPreviewId==='string'?await env.DB.prepare('SELECT id FROM mug_preview_images WHERE id=?1 AND year=?2 AND design_id=?3 AND cutout_version=?4 AND caption=?5 AND style=?6 AND size=?7 AND color=?8 AND font=?9').bind(data.preparedPreviewId,invite.edition_year,design.id,design.cutoutVersion,design.caption,configuration.style,configuration.size,configuration.color,configuration.font).first<{id:string}>():null;
  const file=await env.MEDIA.get(design.preview_key);if(!file)throw new PrintProblem(409,'The mug artwork is unavailable.');
