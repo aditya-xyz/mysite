@@ -169,3 +169,19 @@ html:has(#keepsake[open]){overflow:hidden}
  .ks-print-dialog .delivery-panel h3{font-size:16px}
  .ks-print-dialog .delivery-note{font-size:12px;margin:6px 0}
 }
+
+/* Reserve the same phone preview height for closed and open card views. */
+@media(max-width:600px){
+ .ks-print-dialog .fc-preview{--fc-mobile-height:clamp(120px,calc(100dvh - 480px),246px);display:grid;grid-template-columns:minmax(0,1fr)}
+ .ks-print-dialog .fc-views{grid-area:1/1}
+ .ks-print-dialog .fc-surface{grid-area:2/1;height:var(--fc-mobile-height);width:calc(var(--fc-mobile-height)*.772727);max-width:100%;min-width:0;align-self:center}
+ .ks-print-dialog .fc-surface[hidden]{display:flex;visibility:hidden;pointer-events:none}
+ .ks-print-dialog .fc-readable.fc-spread{width:100%;max-width:450px;min-width:0;height:auto;min-height:var(--fc-mobile-height);margin:0 auto}
+ .ks-print-dialog .fc-surface>.fc-page{height:100%;aspect-ratio:auto}
+ .ks-print-dialog .fc-readable.fc-spread>.fc-page{height:auto}
+ .ks-print-dialog .fc-spread .fc-art{position:relative}
+ .ks-print-dialog .fc-spread .fc-art img{position:absolute;height:100%}
+}
+@media(max-width:600px) and (max-height:650px){
+ .ks-print-dialog .fc-preview{--fc-mobile-height:clamp(100px,calc(100dvh - 480px),246px)}
+}
