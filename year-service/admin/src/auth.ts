@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
-export interface AuthConfig { ADMIN_EMAIL: string; ACCESS_TEAM_DOMAIN: string; ACCESS_AUD: string }
+export interface AuthConfig { ADMIN_EMAIL: string; ADMIN_EMAILS?: string; ACCESS_TEAM_DOMAIN: string; ACCESS_AUD: string }
 const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 export async function adminIdentity(request: Request, env: AuthConfig) {
   // There is deliberately no development bypass or trust in an unsigned email header.
@@ -17,7 +17,9 @@ export async function adminIdentity(request: Request, env: AuthConfig) {
       issuer: env.ACCESS_TEAM_DOMAIN, audience: env.ACCESS_AUD, algorithms: ["RS256"],
       requiredClaims: ["sub", "email", "exp", "iat"]
     });
-    return typeof payload.email === "string" && payload.email.toLowerCase() === env.ADMIN_EMAIL.toLowerCase()
+    const allowedEmails = [env.ADMIN_EMAIL, ...(env.ADMIN_EMAILS || "").split(",")]
+      .map(email => email.trim().toLowerCase()).filter(Boolean);
+    return typeof payload.email === "string" && allowedEmails.includes(payload.email.toLowerCase())
       ? payload.email : null;
   } catch { return null; }
 }

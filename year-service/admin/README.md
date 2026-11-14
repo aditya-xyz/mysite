@@ -6,20 +6,24 @@ send endpoint. The public Netlify portfolio is unchanged.
 
 ## Access configuration
 
-The owner is `aditya.patil.gverse@gmail.com`. Google is connected to Cloudflare
+The owner is `aditya.patil.gverse@gmail.com`; Angela (`sevnangels@gmail.com`) also
+has full admin access. `ADMIN_EMAIL` retains the owner and `ADMIN_EMAILS` is a
+comma-separated list of additional exact admin emails. Google is connected to Cloudflare
 Access through the team `https://billowing-truth-eac1.cloudflareaccess.com`.
 The Google OAuth secret belongs only in Cloudflare's identity-provider setup;
 it is never needed by this repository or frontend.
 
 Create one Access application with destination Workers > aditya-private-admin >
 production and preview URLs. Use an Allow rule with Include > Emails > the exact
-owner email. Disable Accept all identity providers; select Google only. The
+owner and Angela emails. Keep both emails in the same Include rule so either
+can sign in. Disable Accept all identity providers; select Google only. The
 application is configured for a 6-hour session. Do not protect all Workers: guests use a different
 SMS invitation flow. Copy the application's Audience (AUD) into ACCESS_AUD in
 admin/wrangler.jsonc. The tag and team domain are not secrets.
 
 The Worker independently validates the Access JWT's RS256 signature, issuer,
-audience, subject, expiry, issued-at, and exact email on every request, including
+audience, subject, expiry, issued-at, and membership in the exact-email admin
+allowlist on every request, including
 HTML, JavaScript, stylesheets, and media. Unsigned identity headers are rejected.
 Missing configuration denies everyone. There is no production auth bypass,
 shared admin password, or locally stored browser API key. Preview URLs are off.

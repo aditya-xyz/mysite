@@ -17,7 +17,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
   const mf = new Miniflare(convertV4MiniflareOptions({workers:[{
     name:"admin",routes:["admin.test/*"],modules:true,scriptPath:".wrangler/admin-test-bundle/index.js",compatibilityDate:"2026-08-06",
     d1Databases:{DB:"shared-db"},r2Buckets:{MEDIA:"shared-media"},
-    bindings:{ADMIN_EMAIL:adminEmail,ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:aud,JOURNAL_ORIGIN:"https://journal.test",SOCIAL_JOURNAL_ORIGIN:"https://scrapbook.test",INVITATION_LINK_KEY:"1".repeat(64)},outboundService:outbound
+    bindings:{ADMIN_EMAIL:adminEmail,ADMIN_EMAILS:" editor@example.com, ",ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:aud,JOURNAL_ORIGIN:"https://journal.test",SOCIAL_JOURNAL_ORIGIN:"https://scrapbook.test",INVITATION_LINK_KEY:"1".repeat(64)},outboundService:outbound
   },{
     name:"guest",routes:["journal.test/*","scrapbook.test/*"],modules:true,scriptPath:".wrangler/test-bundle/index.js",compatibilityDate:"2026-08-06",
     d1Databases:{DB:"shared-db"},r2Buckets:{MEDIA:"shared-media"},bindings:{SMS_ENABLED:"false",JOURNAL_ORIGIN:"https://journal.test",SOCIAL_JOURNAL_ORIGIN:"https://scrapbook.test"},outboundService:outbound
@@ -54,9 +54,18 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
     await t.test("all admin pages, assets, and APIs reject unauthenticated or forged identities",async()=>{
       for(const path of ["/","/app.js","/style.css","/api/state","/api/editions","/api/editions/2027/state","/api/media/anything/preview"])assert.equal((await req(path,undefined,undefined,"")).status,401);
       const forged=await mf.dispatchFetch("https://admin.test/api/state",{headers:{"Cf-Access-Authenticated-User-Email":adminEmail}});assert.equal(forged.status,401);
-      for(const jwt of [await signed("other@example.com"),await signed(adminEmail,"other-app"),await signed(adminEmail,aud,"-1m"),await signed(adminEmail,aud,"5m","https://other-team.cloudflareaccess.com"),"forged.jwt.value"])
+      for(const jwt of [await signed("other@example.com"),await signed("editor@example.com.attacker.test"),await signed(""),await signed(adminEmail,"other-app"),await signed("editor@example.com","other-app"),await signed(adminEmail,aud,"-1m"),await signed(adminEmail,aud,"5m","https://other-team.cloudflareaccess.com"),"forged.jwt.value"])
         assert.equal((await req("/api/state",undefined,undefined,jwt)).status,401);
       assert.equal((await req("/api/state")).status,200);
+      assert.equal((await req("/api/state",undefined,undefined,await signed("EDITOR@example.com"))).status,200);
+    });
+    await t.test("additional admins can edit and actions record their own identity",async()=>{
+      const jwt=await signed("editor@example.com");
+      const response=await req("/api/people",{name:"Co-admin test",phone:"+15555550999"},undefined,jwt);
+      assert.equal(response.status,201);
+      const created=await response.json() as {id:string};
+      assert.equal((await db.prepare("SELECT actor FROM admin_events WHERE target=?1 AND action='add-person'").bind(created.id).first<{actor:string}>())?.actor,"editor@example.com");
+      assert.equal((await req("/api/people",{name:"Blocked",phone:"+15555550998"},"https://other.test",jwt)).status,403);
     });
     await t.test("authenticated writes still reject cross-origin requests",async()=>{
       assert.equal((await req("/api/draft",{},"https://other.test")).status,403);
