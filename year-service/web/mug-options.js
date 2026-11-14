@@ -8,7 +8,7 @@ export const mugStyles=[
  {id:'latte',label:'Latte',sizes:['12oz'],colors:['white']},
 ];
 export const mugFonts=[{id:'clean',label:'Clean',family:'Asap, sans-serif'},{id:'serif',label:'Bookish',family:'Georgia, serif'},{id:'handwritten',label:'Handwritten',family:'Caveat, cursive'}];
-export const pixelMugOptions=()=>({style:'enamel',size:'12oz',color:'white',font:'clean'});
+export const pixelMugOptions=()=>({style:'color-inside',size:'15oz',color:'dark blue',font:'clean'});
 export const legacyMugOptions=()=>({style:'classic',size:'11oz',color:'white',font:'clean'});
 export function preferredMugOptions(styles=mugStyles){
  const preferred=pixelMugOptions();

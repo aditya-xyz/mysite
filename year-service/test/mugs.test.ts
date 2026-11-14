@@ -149,7 +149,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const cleared=await (await admin('mug-orders')).json() as any;assert.equal(cleared.orders.length,0);assert.equal(cleared.counts[0].count,0);assert.equal((await (await sim('gift/status')).json() as any).claim,null);
    assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,false);
    assert.equal((await sim(first.design.src.replace('/api/',''))).status,404);assert.equal(await bucket.head(`2026/mug-orders/${first.id}/artwork.png`),null);
-   const second=(await (await sim('gift/claim',{...payload,requestKey:crypto.randomUUID()})).json() as any).claim;assert.notEqual(second.id,first.id);assert.deepEqual(second.configuration,{style:'enamel',size:'12oz',color:'white',font:'clean'});
+   const second=(await (await sim('gift/claim',{...payload,requestKey:crypto.randomUUID()})).json() as any).claim;assert.notEqual(second.id,first.id);assert.deepEqual(second.configuration,{style:'color-inside',size:'15oz',color:'dark blue',font:'clean'});
    assert.equal((await admin(resetPath,{orderId:first.id,confirm:true})).status,409);assert.equal((await (await sim('gift/status')).json() as any).claim.id,second.id);
    assert.equal((await admin(resetPath,{orderId:second.id,confirm:true})).status,200);
   });
