@@ -1,4 +1,4 @@
-import {codeEntryMarkup} from './auth-entry.js';
+import {codeEntryMarkup,invitationEntryMarkup} from './auth-entry.js';
 import {installFocusModality} from './focus.js';
 installFocusModality();
 import {openingMarkup,sectionHeading,giftMarkup,footerMarkup} from './pixelbook.js';
@@ -69,7 +69,7 @@ async function start() {
     const invite = await api('invitation');
     applyBrand(invite.authors,invite.year);
     renderFooter();
-    app.innerHTML = `<section class="entry"><div class="invitation-delivery"><img src="/pixel-santa.png" width="92" height="100" alt="Pixel wearing a Santa hat"><div><p class="handwritten">special delivery. from me.</p><p class="kicker">the Pixelbook annual</p></div></div><h1 class="invitation-greeting">oh good,<br><em>${escape(invite.name)}</em>.</h1><p class="intro">i made you a scrapbook. there are photos, there are memories, and yes, there is a lot of me.</p><p>We’ll send a code to ${escape(invite.verificationName || invite.name)}’s phone ending in <strong>${escape(invite.phoneHint)}</strong>.</p><button class="button" id="send">Text me a code →</button><p class="error" role="alert" id="error"></p><p class="signoff">love, Pixel</p></section>`;
+    app.innerHTML = invitationEntryMarkup(invite);
     document.querySelector('#send').onclick = async e => { e.target.disabled = true; try { await api('send', {}); showCode(invite); } catch (error) { if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;} document.querySelector('#error').textContent = error.message; e.target.disabled = false; } };
   } catch (error) { message(error); }
 }
