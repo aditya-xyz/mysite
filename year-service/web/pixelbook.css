@@ -199,7 +199,10 @@ header .theme-toggle{min-width:44px;min-height:44px}
 
 
 /* Wait for the portrait to decode before playing its one-time spring entrance. */
-.pb-cover-art{transform-origin:50% 60%}
+/* Pivot at the fixed top of the string, like a hanging bauble. */
+.pb-cover-art{transform-origin:50% -68px}
+@keyframes pb-ornament-sway{0%,100%{transform:rotate(1deg)}50%{transform:rotate(5deg)}}
+@media(prefers-reduced-motion:no-preference){.pb-cover-art{animation:pb-ornament-sway 7s ease-in-out -1.75s infinite}}
 .pb-cover-art.pb-hero-awaiting,.pb-cover-portrait:has(.pb-hero-awaiting) .pb-cover-credit{opacity:0}
 @media(prefers-reduced-motion:reduce){.pb-cover-art.pb-hero-awaiting,.pb-cover-portrait:has(.pb-hero-awaiting) .pb-cover-credit{opacity:1}}
 
