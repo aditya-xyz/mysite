@@ -21,10 +21,10 @@ test('shared mug library includes every font, queues only affordable variants an
   if(u.pathname.includes('/printfiles/'))return Response.json({result:{option_groups:['Flat'],options:['Front','Right'],printfiles:[{printfile_id:43,width:2700,height:1050}],variant_printfiles:[1320,22373,17196,11189].map(variant_id=>({variant_id,placements:{default:43}}))}});
   if(u.pathname.includes('/create-task/')){
    if(failed)return new Response('private provider details',{status:503});
-   const body=JSON.parse(String(init.body));assert.ok(!body.variant_ids.includes(16440));assert.equal(new Set(body.variant_ids).size,body.variant_ids.length);assert.ok(body.options.some((o:string)=>/right/i.test(o)));assert.equal(body.files[0].position.width,1050);assert.match(body.files[0].image_url,/^https:\/\/guest.test\/api\/gift\/prepared-source\/[a-f0-9]{64}$/);
+   const body=JSON.parse(String(init.body));assert.ok(!body.variant_ids.includes(16440));assert.equal(new Set(body.variant_ids).size,body.variant_ids.length);assert.ok(body.options.some((o:string)=>/right/i.test(o)));assert.equal(body.files[0].position.width,2700);assert.match(body.files[0].image_url,/^https:\/\/guest.test\/api\/gift\/prepared-source\/[a-f0-9]{64}$/);
    const key='task-'+tasks.size;tasks.set(key,body.variant_ids);return Response.json({result:{task_key:key,status:'pending'}});
   }
-  assert.equal(u.pathname,'/mockup-generator/task');return Response.json({result:{status:'completed',mockups:(tasks.get(u.searchParams.get('task_key')!)||[]).map(id=>({variant_ids:[id],mockup_url:`https://files.cdn.printful.com/${id}-right.png`,extra:[{option:'Front',url:`https://files.cdn.printful.com/${id}-front.png`}]}))}});
+  assert.equal(u.pathname,'/mockup-generator/task');return Response.json({result:{status:'completed',mockups:(tasks.get(u.searchParams.get('task_key')!)||[]).map(id=>({variant_ids:[id],mockup_url:`https://files.cdn.printful.com/${id}-right.png`,extra:[{option:'Left',url:`https://files.cdn.printful.com/${id}-left.png`},{option:'Right',url:`https://files.cdn.printful.com/${id}-right.png`}]}))}});
  });
  try{
   const db=await mf.getD1Database('DB'),bucket=await mf.getR2Bucket('MEDIA');
@@ -34,9 +34,10 @@ test('shared mug library includes every font, queues only affordable variants an
   await db.prepare('UPDATE editions SET is_active=1,published_json=?1 WHERE year=2026').bind(JSON.stringify({mugDesigns:designs,photos:[]})).run();
   const env={DB:db,MEDIA:bucket,PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'prepared-test',JOURNAL_ORIGIN:'https://guest.test'} as unknown as PrintEnv;
   const plans=await preparedMugPlans(env,2026);assert.equal(plans.length,24);assert.deepEqual([...new Set(plans.map(p=>p.font))].sort(),['clean','handwritten','serif']);
-  for(const plan of plans){const response=await preparedMugAdminRoute(new Request('https://admin.test',{method:'POST',headers:{'Content-Type':'image/png'},body:png}),env,'/api/mug-preview-library/sources/'+plan.id,2026);assert.equal(response?.status,200);}
+  for(const plan of plans){new DataView(png.buffer).setUint32(16,plan.renderWidth);new DataView(png.buffer).setUint32(20,Math.round(plan.renderWidth*plan.printHeight/plan.printWidth));const response=await preparedMugAdminRoute(new Request('https://admin.test',{method:'POST',headers:{'Content-Type':'image/png'},body:png}),env,'/api/mug-preview-library/sources/'+plan.id,2026);assert.equal(response?.status,200);}
   await syncPreparedMugs(env,2026);
   assert.equal((await db.prepare('SELECT desired_count FROM mug_preview_sync').first<any>()).desired_count,96);
+  const beforeAdmin=calls.length;assert.equal((await preparedMugPlans({...env,PRINTFUL_ENABLED:undefined,PRINTFUL_API_TOKEN:undefined},2026)).length,24);assert.equal(calls.length,beforeAdmin,'Admin source planning uses the saved supplier catalog without provider credentials');
   const empty=await preparedMugCatalog(env,2026);assert.equal(empty.prepared,true);assert.equal(empty.previews.length,0,'Initial fill stays in saved-only mode with no live-generation fallback');
   failed=true;assert.equal(await startPreparedJob(env),false);failed=false;
   assert.equal((await db.prepare("SELECT count(*) n FROM mug_preview_jobs WHERE status='queued'").first<any>()).n,36);
@@ -51,15 +52,15 @@ test('shared mug library includes every font, queues only affordable variants an
   }
   const manifest=await preparedMugCatalog(env,2026);assert.equal(manifest.prepared,true);assert.equal(manifest.previews.length,96);assert.equal(manifest.styles.reduce((n:number,s:any)=>n+s.variants.length,0),4);
   assert.ok(manifest.previews.every((p:any)=>p.configuration.font&&p.src.startsWith('/api/gift/previews/')));
-  assert.equal(manifest.previews.filter((p:any)=>p.view==='handle-right').length,48);assert.equal(manifest.previews.filter((p:any)=>p.view==='front').length,48);
+  assert.equal(manifest.previews.filter((p:any)=>p.view==='handle-right').length,48);assert.equal(manifest.previews.filter((p:any)=>p.view==='handle-left').length,48);
   const before=calls.length;assert.equal((await preparedMugCatalog(env,2026)).previews.length,96);assert.equal(calls.length,before,'Guest catalog reads never contact Printful');
   await assert.rejects(()=>preparedMugSource(env,pending.source_token),/not found/);
   await syncPreparedMugs(env,2026);assert.equal((await db.prepare("SELECT count(*) n FROM mug_preview_jobs WHERE status='queued'").first<any>()).n,0,'Nightly sync does not regenerate unchanged completed previews');
-  const frontKeys=(await db.prepare("SELECT id,image_key FROM mug_preview_images WHERE view='front' ORDER BY id").all<any>()).results;
+  const frontKeys=(await db.prepare("SELECT id,image_key FROM mug_preview_images WHERE view='handle-left' ORDER BY id").all<any>()).results;
   await db.prepare("DELETE FROM mug_preview_images WHERE view='handle-right'").run();
   await syncPreparedMugs(env,2026);assert.ok((await db.prepare("SELECT count(*) n FROM mug_preview_jobs WHERE status='queued'").first<any>()).n>0,'Existing front-only library queues missing handle views');
-  assert.deepEqual((await db.prepare("SELECT id,image_key FROM mug_preview_images WHERE view='front' ORDER BY id").all<any>()).results,frontKeys,'Existing front proofs keep their IDs and artwork');
-  designs[0].caption='Changed caption';await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({mugDesigns:designs,photos:[]})).run();assert.equal(await preparedMugCatalog(env,2026),null,'Changed captions cannot reuse old prepared proofs');
+  assert.deepEqual((await db.prepare("SELECT id,image_key FROM mug_preview_images WHERE view='handle-left' ORDER BY id").all<any>()).results,frontKeys,'Existing front proofs keep their IDs and artwork');
+  designs[0].caption='Changed caption';await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({mugDesigns:designs,photos:[]})).run();assert.deepEqual((await preparedMugCatalog(env,2026)).previews,[],'Changed captions cannot reuse old prepared proofs or start a guest generation burst');
   assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);assert.ok(!calls.includes('/orders'));
  }finally{mocked.mock.restore();await mf.dispose();}
 });

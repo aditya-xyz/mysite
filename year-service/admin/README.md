@@ -1139,3 +1139,17 @@ with Merry Madeline, 13 pt, automatic fitting. These were checks, not fixed pric
 Handwrytten's prospecting `/outbound/process` can return domestic postage for other
 country strings, so its older domestic estimates are never used as the automatic
 submission limit check.
+
+
+Mug layout v2 uses one full wraparound PNG: the selected cutout and caption at
+one quarter of the printable width, Santa Pixel and “pixelbook ’26” at three
+quarters. Each print area gets its own correctly proportioned 2400px-wide source;
+`web/mug-layout.js` and `web/mug-print.js` define the shared sizing and rendering.
+Previews request Handle left / Handle right. New source and proof IDs prevent
+reuse of the previous one-sided artwork, while historical proofs remain available.
+Migration 0030 preserves all existing preview rows and permits handle-left views.
+New Printful-enabled simulated mug orders freeze `print.png` plus layout version
+2 independently of the cutout used in the picker. Mug allowance reset continues
+to delete its simulated order and both private artwork files. Actual mug ordering
+remains disabled. Admin Prepare previews must prepare the new versioned sources;
+Printful mockups then fill in under the existing background rate limits.

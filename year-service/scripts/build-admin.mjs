@@ -12,3 +12,5 @@ await copyFile('web/fonts/Asap-OFL.txt','admin/web/fonts/Asap-OFL.txt');
 await copyFile('web/folded-card.css','admin/web/folded-card.css');
 
 await copyFile('web/loading.css','admin/web/loading.css');
+
+await copyFile('web/pixel-santa.png','admin/web/pixel-santa.png');

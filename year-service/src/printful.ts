@@ -58,7 +58,7 @@ export async function printfulCatalog(env:PrintEnv,refresh=false){
     const result=await style(env,item);if(!result.variants.length)continue;
     const files=await printfulApi(env,`/mockup-generator/printfiles/${item.productId}`) as {printfiles?:{printfile_id:number;width:number;height:number}[];variant_printfiles?:{variant_id:number;placements:{default:number}}[];option_groups?:string[];options?:string[]};
     result.mockupGroup=['Default','Flat'].find(g=>files.option_groups?.includes(g));
-    result.mockupOptions=files.options?.filter(option=>/^(front|right|handle on right)$/i.test(option))||['Front'];
+    result.mockupOptions=files.options?.filter(option=>/^(front|left|right|handle on left|handle on right)$/i.test(option))||['Front'];
     for(const variant of result.variants){const mapping=files.variant_printfiles?.find(v=>v.variant_id===variant.id);const file=files.printfiles?.find(f=>f.printfile_id===mapping?.placements.default);if(file&&file.width>0&&file.height>0){variant.printWidth=file.width;variant.printHeight=file.height;}}
     styles.push(result);
    }

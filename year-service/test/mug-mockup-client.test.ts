@@ -52,7 +52,7 @@ test('missing saved preview stops the spinner and never competes with the prepar
   client.preload(design,configuration);await settle();assert.equal(figure.children[0].tag,'img');assert.equal(fetch.mock.callCount(),1);
  }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
 });
-test('saved views default to front, preserve it after backfill, and switch to handle-right without generation',async()=>{
+test('saved views default to handle-left and switch to handle-right without generation',async()=>{
  const previousDocument=(globalThis as any).document,previousImage=(globalThis as any).Image,calls:string[]=[];
  const node=(tag:string)=>({tag,children:[] as any[],append(...nodes:any[]){this.children.push(...nodes);}});
  (globalThis as any).document={createElement:node};(globalThis as any).Image=class{src='';async decode(){}};
@@ -62,12 +62,12 @@ test('saved views default to front, preserve it after backfill, and switch to ha
  const preview=(view:string)=>({id:view,view,designId:design.id,caption:design.caption,configuration,src:'/api/gift/previews/'+view});
  const client=createMugMockups();
  try{
-  client.configure({prepared:true,styles:[],previews:[preview('front')]});client.update(figure,design,configuration);await settle();
-  assert.equal(client.preparedId(design,configuration),'front');assert.equal(figure.children[1].children[0].textContent,'Front view');assert.equal(figure.children[1].children[1].textContent,'Side view');assert.equal(figure.children[1].children[1].disabled,true);
-  client.configure({prepared:true,styles:[],previews:[preview('front'),preview('handle-right')]});await settle();
-  assert.equal(client.preparedId(design,configuration),'front');assert.equal(figure.children[1].children[0].ariaPressed,'true');
+  client.configure({prepared:true,styles:[],previews:[preview('handle-left')]});client.update(figure,design,configuration);await settle();
+  assert.equal(client.preparedId(design,configuration),'handle-left');assert.equal(figure.children[1].children[0].textContent,'Handle left');assert.equal(figure.children[1].children[1].textContent,'Handle right');assert.equal(figure.children[1].children[1].disabled,true);
+  client.configure({prepared:true,styles:[],previews:[preview('handle-left'),preview('handle-right')]});await settle();
+  assert.equal(client.preparedId(design,configuration),'handle-left');assert.equal(figure.children[1].children[0].ariaPressed,'true');
   figure.children[1].children[1].onclick();await settle();assert.equal(client.preparedId(design,configuration),'handle-right');assert.equal(figure.children[1].children[1].ariaPressed,'true');
-  figure.children[1].children[0].onclick();await settle();assert.equal(client.preparedId(design,configuration),'front');
-  assert.deepEqual(calls,['/api/gift/previews/front','/api/gift/previews/handle-right'],'Toggling views reuses decoded saved images and never generates a mockup');
+  figure.children[1].children[0].onclick();await settle();assert.equal(client.preparedId(design,configuration),'handle-left');
+  assert.deepEqual(calls,['/api/gift/previews/handle-left','/api/gift/previews/handle-right'],'Toggling views reuses decoded saved images and never generates a mockup');
  }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
 });

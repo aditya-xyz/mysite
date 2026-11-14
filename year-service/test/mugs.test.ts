@@ -165,16 +165,20 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const blocked=await live('claim',{...payload,configuration:{style:'classic',size:'99oz',color:'white',font:'clean'}});assert.equal(blocked.status,400,'Only eligible catalog variants can be claimed');
    assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);
    await db.prepare("INSERT OR REPLACE INTO rate_limits(key,count,expires_at) VALUES('mug-estimate:mug-invite',21,unixepoch()+300)").run();
+   assert.equal((await live('claim',payload)).status,409,'New paired artwork must exist before accepting the reservation');
+   const published=JSON.parse((await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<any>()).published_json),design=published.mugDesigns[0];
+   const sourceId=await digest(JSON.stringify([2,2026,design.id,design.cutoutVersion,design.caption,'clean','dark',2700,1050]));
+   await bucket.put(`2026/prepared-mugs/sources/${sourceId}.png`,'frozen-paired-artwork');
    const beforeClaim=providerCalls.length;providerFailed=true;
    const response=await live('claim',payload);assert.equal(response.status,200,await response.clone().text());providerFailed=false;
    assert.equal(providerCalls.length,beforeClaim,'Claim does not send an address or request a Printful cost estimate');
    const result=await response.json() as any;assert.equal(result.claim.status,'simulated');
-   const row=await db.prepare('SELECT quote_json,status FROM mug_orders').first<any>();assert.equal(row.status,'simulated');assert.equal(row.quote_json,null);
+   const row=await db.prepare('SELECT quote_json,status,print_artwork_key,print_layout_version FROM mug_orders').first<any>();assert.equal(row.status,'simulated');assert.equal(row.quote_json,null);assert.equal(row.print_layout_version,2);assert.equal(await (await bucket.get(row.print_artwork_key))?.text(),'frozen-paired-artwork');
    const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders[0].quote_json,null);
    estimatedTotal=14.24;await db.prepare("DELETE FROM rate_limits WHERE key='mug-estimate:mug-invite'").run();
    const callsBefore=providerCalls.length;assert.equal((await live('claim',payload)).status,200);assert.equal(providerCalls.length,callsBefore,'Idempotent replay needs no new supplier call');
    assert.ok(providerCalls.every(path=>path==='/products'||/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(path)||path==='/orders/estimate-costs'));
-   await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});
+   await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});assert.equal(await bucket.head(row.print_artwork_key),null);
   });
   await t.test('signed-in estimates do not share the login POST budget and retain supplier limits',async()=>{
    const ip='203.0.113.15',hash=await digest(ip),expiry=Math.floor(Date.now()/1000)+300;

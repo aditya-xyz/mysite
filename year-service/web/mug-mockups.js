@@ -1,8 +1,8 @@
 import {renderMugPrint} from './mug-print.js';
 export function createMugMockups(){
- const records=new Map(),timers=new Set(),controllers=new Set(),urls=new Set();let catalog=null,disposed=false;let prepared=null,view='front';const preloadQueue=[];let preloadActive=0;
- const key=(design,options,angle='front')=>JSON.stringify([design.id,design.caption,options.style,options.size,options.color,options.font,angle]);
- const selectedView=(design,options)=>prepared?.has(key(design,options,view))?view:'front';
+ const records=new Map(),timers=new Set(),controllers=new Set(),urls=new Set();let catalog=null,disposed=false;let prepared=null,view='handle-left';const preloadQueue=[];let preloadActive=0;
+ const key=(design,options,angle='handle-left')=>JSON.stringify([design.id,design.caption,options.style,options.size,options.color,options.font,angle]);
+ const selectedView=(design,options)=>prepared?.has(key(design,options,view))?view:'handle-left';
  const savedFor=(design,options)=>prepared?.get(key(design,options,selectedView(design,options)));
  const connected=record=>[...record.elements].some(e=>e.isConnected);
  function later(action,ms){const timer=setTimeout(()=>{timers.delete(timer);if(!disposed)action();},ms);timers.add(timer);}
@@ -22,11 +22,11 @@ export function createMugMockups(){
    if(!element.isConnected){record.elements.delete(element);continue;}
    if(record.imageUrl){
     if(element.dataset.mockupImage===record.imageUrl)continue;
-    const image=document.createElement('img');image.className='pb-printful-mockup';image.src=record.imageUrl;image.alt='Printful preview of your selected photo, caption and mug';
+    const image=document.createElement('img');image.className='pb-printful-mockup';image.src=record.imageUrl;image.alt=record.view==='handle-right'?'Printful preview of Santa Pixel and pixelbook ’26, handle on right':'Printful preview of your selected mugshot and caption, handle on left';
     const caption=document.createElement('figcaption');caption.textContent='Printful mockup · final placement may vary';
     if(prepared){
      const controls=document.createElement('div');controls.className='pb-mockup-views';controls.role='group';controls.ariaLabel='Mug preview angle';
-     for(const [angle,label] of [['front','Front view'],['handle-right','Side view']]){
+     for(const [angle,label] of [['handle-left','Handle left'],['handle-right','Handle right']]){
       const button=document.createElement('button');button.type='button';button.className='pb-mockup-view';button.textContent=label;button.ariaPressed=String(record.view===angle);button.disabled=!prepared.has(key(record.design,record.configuration,angle));
       button.onclick=()=>{view=angle;update(element,record.design,record.configuration);element.querySelector(`[aria-pressed="true"]`)?.focus?.({preventScroll:true});};controls.append(button);
      }
@@ -93,7 +93,7 @@ export function createMugMockups(){
   configure(value){
    const active=[...records.values()].flatMap(r=>[...r.elements].filter(e=>e.isConnected).map(element=>({element,design:r.design,configuration:r.configuration})));
    if(value.prepared&&!prepared){preloadQueue.length=0;urls.forEach(url=>URL.revokeObjectURL(url));urls.clear();records.clear();}
-   catalog=value;prepared=value.prepared?new Map((value.previews||[]).map(p=>[key({id:p.designId,caption:p.caption},p.configuration,p.view||'front'),p])):null;
+   catalog=value;prepared=value.prepared?new Map((value.previews||[]).map(p=>[key({id:p.designId,caption:p.caption},p.configuration,p.view||'handle-left'),p])):null;
    for(const item of active){item.element.dataset.mockupImage='';update(item.element,item.design,item.configuration);}
   },
   available(design,configuration){return !prepared||!!savedFor(design,configuration);},

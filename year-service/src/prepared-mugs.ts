@@ -5,21 +5,25 @@ import {digest,now,token} from './security.ts';
 import type {InvitationAudience} from './invitations.ts';
 // @ts-expect-error Shared font identifiers only; artwork is prepared by the authenticated owner.
 import {mugFonts,pixelMugOptions} from '../web/mug-options.js';
-const LAYOUT=1,SIDE=1200,MAX_IMAGE=3*1024*1024;
+// @ts-expect-error Shared deterministic layout identifiers.
+import {MUG_LAYOUT_VERSION as LAYOUT,MUG_RENDER_WIDTH} from '../web/mug-layout.js';
+const MAX_IMAGE=5*1024*1024;
 interface Source {id:string;year:number;design_id:string;cutout_version:string;caption:string;font:string;ink:string;artwork_key:string}
-interface Target extends MugVariant {style:string;imageId:string;view?:'front'|'handle-right'}
+interface Target extends MugVariant {style:string;imageId:string;view?:'front'|'handle-left'|'handle-right'}
 interface Job {id:string;year:number;source_id:string;product_id:number;print_width:number;print_height:number;mockup_group:string|null;variants_json:string;status:string;task_key:string|null;source_expires_at:number;next_check_at:number;attempts:number;result_key:string|null}
 interface Sync {year:number;catalog_json:string|null;manifest_json:string|null;desired_count:number;ready_count:number;requested:number;synced_at:number}
 interface Catalog {provider:string;currency:string;styles:MugStyle[];maxCents:number;taxReserveCents:number;shippingReserveCents:number}
-interface Image {id:string;year:number;source_id:string;design_id:string;cutout_version:string;caption:string;font:string;style:string;size:string;color:string;variant_id:number;image_key:string;view:'front'|'handle-right'}
+interface Image {id:string;year:number;source_id:string;design_id:string;cutout_version:string;caption:string;font:string;style:string;size:string;color:string;variant_id:number;image_key:string;view:'front'|'handle-left'|'handle-right'}
 const inkFor=(style:string)=>style==='black-glossy'?'light':'dark';
 async function published(env:PrintEnv,year:number){const row=await env.DB.prepare('SELECT published_json FROM editions WHERE year=?1 AND is_active=1').bind(year).first<{published_json:string}>();return row?.published_json?publishedMugs(JSON.parse(row.published_json) as Published):[];}
-async function sourcePlan(year:number,design:PublishedMugDesign,font:string,ink:string){
- const id=await digest(JSON.stringify([LAYOUT,year,design.id,design.cutoutVersion,design.caption,font,ink]));
- return {id,year,design_id:design.id,cutout_version:design.cutoutVersion!,caption:design.caption,font,ink,artwork_key:`${year}/prepared-mugs/sources/${id}.png`,src:`/api/editions/${year}/media/${design.id}/cutout/${design.cutoutVersion}`,alt:design.alt};
+async function sourcePlan(year:number,design:PublishedMugDesign,font:string,ink:string,printWidth:number,printHeight:number){
+ const id=await digest(JSON.stringify([LAYOUT,year,design.id,design.cutoutVersion,design.caption,font,ink,printWidth,printHeight]));
+ return {id,year,printWidth,printHeight,renderWidth:MUG_RENDER_WIDTH,design_id:design.id,cutout_version:design.cutoutVersion!,caption:design.caption,font,ink,artwork_key:`${year}/prepared-mugs/sources/${id}.png`,src:`/api/editions/${year}/media/${design.id}/cutout/${design.cutoutVersion}`,alt:design.alt};
 }
 export async function preparedMugPlans(env:PrintEnv,year:number){
- const plans=[];for(const design of await published(env,year))for(const font of mugFonts)for(const ink of ['dark','light'])plans.push(await sourcePlan(year,design,font.id,ink));return plans;
+ const saved=!printfulEnabled(env)?await env.DB.prepare('SELECT catalog_json FROM mug_preview_sync WHERE year=?1').bind(year).first<{catalog_json:string|null}>():null;
+ const catalog:Catalog=saved?.catalog_json?JSON.parse(saved.catalog_json):await printfulCatalog(env),areas=[...new Map(catalog.styles.flatMap(s=>s.variants).filter(v=>v.printWidth&&v.printHeight).map(v=>[v.printWidth+'x'+v.printHeight,{width:v.printWidth!,height:v.printHeight!}])).values()];
+ const designs=await published(env,year),plans=[];for(const font of mugFonts)for(const design of designs)for(const ink of ['dark','light'])for(const area of areas)plans.push(await sourcePlan(year,design,font.id,ink,area.width,area.height));return plans;
 }
 async function bounded(request:Request|Response,max=MAX_IMAGE){
  if(Number(request.headers.get('Content-Length'))>max)throw new PrintProblem(413,'Preview image is too large.');
@@ -40,7 +44,7 @@ export async function preparedMugAdminRoute(request:Request,env:PrintEnv,path:st
   const plan=(await preparedMugPlans(env,year)).find(p=>p.id===source[1]);if(!plan)throw new PrintProblem(409,'The published mug artwork changed. Reload the preview preparation.');
   if(await env.DB.prepare('SELECT id FROM mug_preview_sources WHERE id=?1').bind(plan.id).first())return Response.json({saved:true,reused:true});
   const bytes=await bounded(request),view=new DataView(bytes.buffer);
-  if(!isPNG(bytes)||view.getUint32(16)!==SIDE||view.getUint32(20)!==SIDE||bytes[24]!==8||bytes[25]!==6)throw new PrintProblem(400,'Use the prepared transparent PNG artwork.');
+  if(!isPNG(bytes)||view.getUint32(16)!==MUG_RENDER_WIDTH||view.getUint32(20)!==Math.round(MUG_RENDER_WIDTH*plan.printHeight/plan.printWidth)||bytes[24]!==8||bytes[25]!==6)throw new PrintProblem(400,'Use the prepared transparent PNG artwork.');
   await env.MEDIA.put(plan.artwork_key,bytes,{httpMetadata:{contentType:'image/png'}});
   await env.DB.prepare('INSERT INTO mug_preview_sources(id,year,design_id,cutout_version,caption,font,ink,artwork_key) VALUES(?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(id) DO NOTHING').bind(plan.id,year,plan.design_id,plan.cutout_version,plan.caption,plan.font,plan.ink,plan.artwork_key).run();
   await requestPreparedSync(env,year);return Response.json({saved:true});
@@ -62,18 +66,18 @@ export async function syncPreparedMugs(env:PrintEnv,year:number){
   // Preferred mug/font goes first; a single task includes all colors sharing a print area.
   const styles=[...catalog.styles].sort((a,b)=>a.id===pixelMugOptions().style?-1:b.id===pixelMugOptions().style?1:0);
   for(const font of mugFonts)for(const style of styles)for(const design of designs){
-   const plan=plans.find(p=>p.design_id===design.id&&p.font===font.id&&p.ink===inkFor(style.id));if(!plan||!sources.has(plan.id))continue;
    const groups=new Map<string,Target[]>();
    const variants=[...style.variants].sort((a,b)=>a.size==='15oz'?-1:b.size==='15oz'?1:0);
    for(const variant of variants){
     if(!variant.printWidth||!variant.printHeight)continue;
-    for(const view of (style.mockupOptions?.some(o=>/^(right|handle on right)$/i.test(o))?['front','handle-right']:['front']) as ('front'|'handle-right')[]){
-    const imageId=await digest(JSON.stringify(view==='front'?[LAYOUT,plan.id,variant.id]:[LAYOUT,plan.id,variant.id,view]));if(ready.has(imageId)||covered.has(imageId))continue;
+    const plan=plans.find(p=>p.design_id===design.id&&p.font===font.id&&p.ink===inkFor(style.id)&&p.printWidth===variant.printWidth&&p.printHeight===variant.printHeight);if(!plan||!sources.has(plan.id))continue;
+    for(const view of (style.mockupOptions?.some(o=>/^(right|handle on right)$/i.test(o))?['handle-left','handle-right']:['handle-left']) as ('front'|'handle-left'|'handle-right')[]){
+    const imageId=await digest(JSON.stringify([LAYOUT,plan.id,variant.id,view]));if(ready.has(imageId)||covered.has(imageId))continue;
     const key=variant.printWidth+'x'+variant.printHeight;const list=groups.get(key)||[];list.push({...variant,style:style.id,imageId,view});groups.set(key,list);
     }
    }
    for(const targets of groups.values()){
-    const first=targets[0],id=await digest(JSON.stringify([2,plan.id,style.productId,targets.map(t=>[t.id,t.view]).sort()]));
+    const first=targets[0],plan=plans.find(p=>p.design_id===design.id&&p.font===font.id&&p.ink===inkFor(style.id)&&p.printWidth===first.printWidth&&p.printHeight===first.printHeight)!,id=await digest(JSON.stringify([2,plan.id,style.productId,targets.map(t=>[t.id,t.view]).sort()]));
     statements.push(env.DB.prepare("INSERT INTO mug_preview_jobs(id,year,source_id,product_id,print_width,print_height,mockup_group,variants_json,priority) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9) ON CONFLICT(id) DO UPDATE SET status=CASE WHEN status='failed' THEN 'queued' ELSE status END,next_check_at=CASE WHEN status='failed' THEN 0 ELSE next_check_at END,attempts=CASE WHEN status='failed' THEN 0 ELSE attempts END").bind(id,year,plan.id,style.productId,first.printWidth!,first.printHeight!,style.mockupGroup||null,JSON.stringify(targets),styles.indexOf(style)*10000+(first.size==='15oz'?0:1000)+mugFonts.indexOf(font)*100+designs.indexOf(design)));
    }
   }
@@ -93,7 +97,14 @@ async function refreshPreparedManifest(env:PrintEnv,year:number){
  await env.DB.prepare('UPDATE mug_preview_sync SET manifest_json=?1,ready_count=?2 WHERE year=?3').bind(manifest?JSON.stringify(manifest):null,images.length,year).run();
 }
 export async function preparedMugCatalog(env:PrintEnv,year:number,includeSavedCatalog=false){
- const sync=await env.DB.prepare('SELECT manifest_json,catalog_json FROM mug_preview_sync WHERE year=?1').bind(year).first<{manifest_json:string|null;catalog_json:string|null}>();const fallback=includeSavedCatalog&&sync?.catalog_json?{...JSON.parse(sync.catalog_json),prepared:true,previews:[]}:null;if(!sync?.manifest_json)return fallback;const manifest=JSON.parse(sync.manifest_json);const designs=await published(env,year),revision=await digest(JSON.stringify([LAYOUT,designs.map(d=>[d.id,d.cutoutVersion,d.caption])]));return revision===manifest.artworkRevision?{...manifest,styles:fallback?.styles||manifest.styles}:fallback;
+ const sync=await env.DB.prepare('SELECT manifest_json,catalog_json FROM mug_preview_sync WHERE year=?1').bind(year).first<{manifest_json:string|null;catalog_json:string|null}>();const fallback=includeSavedCatalog&&sync?.catalog_json?{...JSON.parse(sync.catalog_json),prepared:true,previews:[]}:null;if(!sync?.manifest_json)return fallback;const manifest=JSON.parse(sync.manifest_json);const designs=await published(env,year),revision=await digest(JSON.stringify([LAYOUT,designs.map(d=>[d.id,d.cutoutVersion,d.caption])]));return revision===manifest.artworkRevision?{...manifest,styles:fallback?.styles||manifest.styles}:{...JSON.parse(sync.catalog_json||JSON.stringify(manifest)),prepared:true,previews:[]};
+}
+// Freeze the same full-wrap artwork used by the saved supplier proofs.
+export async function preparedMugPrint(env:PrintEnv,year:number,designId:string,configuration:{style:string;size:string;color:string;font:string}){
+ const catalog=await printfulCatalog(env),variant=catalog.styles.find(s=>s.id===configuration.style)?.variants.find(v=>v.size===configuration.size&&v.color===configuration.color);
+ const plan=variant&&(await preparedMugPlans(env,year)).find(p=>p.design_id===designId&&p.font===configuration.font&&p.ink===inkFor(configuration.style)&&p.printWidth===variant.printWidth&&p.printHeight===variant.printHeight);
+ const file=plan&&await env.MEDIA.get(plan.artwork_key);if(!file)throw new PrintProblem(409,'This mug artwork is still being prepared. Try again shortly.');
+ return {file,sourceId:plan!.id,layoutVersion:LAYOUT};
 }
 export async function preparedMugImage(env:PrintEnv,invite:InvitationAudience,id:string){
  const row=await env.DB.prepare('SELECT * FROM mug_preview_images WHERE id=?1 AND year=?2').bind(id,invite.edition_year).first<Image>();
@@ -109,8 +120,8 @@ export async function startPreparedJob(env:PrintEnv){
  const lease=await env.DB.prepare("INSERT INTO rate_limits(key,count,expires_at) VALUES('printful-mockup-lease',1,?1) ON CONFLICT(key) DO UPDATE SET expires_at=excluded.expires_at WHERE expires_at<=?2 RETURNING key").bind(now()+31,now()).first();if(!lease)return false;
  const capability=token(),locked=await env.DB.prepare("UPDATE mug_preview_jobs SET status='starting',source_token=?1,source_expires_at=?2,attempts=attempts+1,updated_at=?3 WHERE id=?4 AND status='queued' RETURNING id").bind(capability,now()+1800,now(),job.id).first();if(!locked)return false;
  try{
-  const side=Math.min(job.print_width,job.print_height),origin=(env as PrintEnv&{JOURNAL_ORIGIN?:string}).JOURNAL_ORIGIN||'https://aditya-year-2026.aditya-year-service.workers.dev';
-  const result=await printfulApi(env,`/mockup-generator/create-task/${job.product_id}`,{variant_ids:[...new Set((JSON.parse(job.variants_json) as Target[]).map(v=>v.id))],options:['Front',...((JSON.parse(job.variants_json) as Target[]).some(v=>v.view==='handle-right')?[([19,300].includes(job.product_id)?'Handle on Right':'Right')]:[])],format:'png',width:900,...(job.mockup_group?{option_groups:[job.mockup_group]}:{}),files:[{placement:'default',image_url:new URL('/api/gift/prepared-source/'+capability,origin).href,position:{area_width:job.print_width,area_height:job.print_height,width:side,height:side,left:(job.print_width-side)/2,top:(job.print_height-side)/2}}]}) as {task_key?:string};
+  const origin=(env as PrintEnv&{JOURNAL_ORIGIN?:string}).JOURNAL_ORIGIN||'https://aditya-year-2026.aditya-year-service.workers.dev';
+  const result=await printfulApi(env,`/mockup-generator/create-task/${job.product_id}`,{variant_ids:[...new Set((JSON.parse(job.variants_json) as Target[]).map(v=>v.id))],options:[([19,300].includes(job.product_id)?'Handle on Left':'Left'),...((JSON.parse(job.variants_json) as Target[]).some(v=>v.view==='handle-right')?[([19,300].includes(job.product_id)?'Handle on Right':'Right')]:[])],format:'png',width:900,...(job.mockup_group?{option_groups:[job.mockup_group]}:{}),files:[{placement:'default',image_url:new URL('/api/gift/prepared-source/'+capability,origin).href,position:{area_width:job.print_width,area_height:job.print_height,width:job.print_width,height:job.print_height,left:0,top:0}}]}) as {task_key?:string};
   if(!result.task_key)throw new Error('Task unavailable');
   await env.DB.prepare("UPDATE mug_preview_jobs SET status='pending',task_key=?1,next_check_at=?2,updated_at=?3 WHERE id=?4").bind(result.task_key,now()+10,now(),job.id).run();return true;
  }catch(error){await failJob(env,job,error instanceof PrintProblem?error.retryAfter:undefined);return false;}
@@ -137,7 +148,7 @@ export async function finishPreparedJobs(env:PrintEnv){
    for(const target of targets){
     if(saved.has(target.imageId))continue;
     if(budget<=0){remaining++;continue;}
-    const mockup=result.mockups?.find((m:any)=>m.variant_ids?.includes(target.id));const url=target.view==='handle-right'?(mockup?.extra?.find((e:any)=>/^(handle on right|right)$/i.test(e.option))?.url||(/(?:^|[-_])right(?:[-_.]|$)/i.test(new URL(mockup?.mockup_url||'https://invalid.test').pathname)?mockup?.mockup_url:undefined)):mockup?.extra?.find((e:any)=>/^front$/i.test(e.option))?.url||mockup?.mockup_url;
+    const mockup=result.mockups?.find((m:any)=>m.variant_ids?.includes(target.id));const url=target.view==='handle-right'?(mockup?.extra?.find((e:any)=>/^(handle on right|right)$/i.test(e.option))?.url||(/(?:^|[-_])right(?:[-_.]|$)/i.test(new URL(mockup?.mockup_url||'https://invalid.test').pathname)?mockup?.mockup_url:undefined)):mockup?.extra?.find((e:any)=>/^(handle on left|left)$/i.test(e.option))?.url||(/(?:^|[-_])left(?:[-_.]|$)/i.test(new URL(mockup?.mockup_url||'https://invalid.test').pathname)?mockup?.mockup_url:undefined);
     if(typeof url!=='string')throw new Error('Preview unavailable');const parsed=new URL(url);
     if(parsed.protocol!=='https:'||!['printful-upload.s3-accelerate.amazonaws.com','files.cdn.printful.com'].includes(parsed.hostname))throw new Error('Invalid preview host');
     const response=await fetch(url,{redirect:'manual',signal:AbortSignal.timeout(12000)});if(!response.ok||!response.headers.get('Content-Type')?.startsWith('image/png'))throw new Error('Preview unavailable');
