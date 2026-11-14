@@ -172,8 +172,6 @@ header .theme-toggle{min-width:44px;min-height:44px}
 @media(max-width:700px){header{padding:10px 16px;grid-template-columns:44px 1fr 44px;column-gap:8px}header .signature{grid-column:1}header .theme-toggle{grid-column:auto}}
 
 /* A typewriter wink, with no shift in the wordmark's width. */
-.pb-title-period{animation:pb-cursor-blink 1.4s step-end infinite}
-@keyframes pb-cursor-blink{0%,60%,100%{opacity:1}61%,99%{opacity:0}}
 /* The mug picker arrives like a small contact sheet, on phones and desktop. */
 .pb-gift-dialog[open]{animation:pb-mug-dialog-in 340ms cubic-bezier(.2,.75,.3,1) both}
 .pb-gift-dialog[open] .pb-design{animation:pb-mug-print-in 380ms cubic-bezier(.2,.75,.3,1) both}
@@ -183,7 +181,7 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-gift-dialog[open] .pb-design:nth-child(n+5){animation-delay:160ms}
 @keyframes pb-mug-dialog-in{from{opacity:0;translate:0 14px;scale:.985}to{opacity:1;translate:0 0;scale:1}}
 @keyframes pb-mug-print-in{from{opacity:0;translate:0 9px;rotate:-1deg}to{opacity:1;translate:0 0;rotate:0deg}}
-@media(prefers-reduced-motion:reduce){.pb-title-period,.pb-gift-dialog[open],.pb-gift-dialog[open] .pb-design{animation:none}}
+@media(prefers-reduced-motion:reduce){.pb-gift-dialog[open],.pb-gift-dialog[open] .pb-design{animation:none}}
 
 @media(max-width:700px){.pb-gift h2{font-size:38px;margin:8px 0 18px}}
 
