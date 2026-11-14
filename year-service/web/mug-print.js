@@ -7,7 +7,7 @@ export async function renderMugPrint(design,configuration,variant){
  const context=canvas.getContext('2d'),image=variant.sourceImage||new Image();if(!variant.sourceImage){image.src=design.src;await image.decode();}
  const family=mugFonts.find(f=>f.id===configuration.font)?.family||'Asap, sans-serif';
  await document.fonts.load(`600 32px ${family}`);
- const layout=mugPrintLayout(canvas.width,canvas.height),h=layout.panelSize,padding=layout.top+h*.08,caption=String(design.caption||'');
+ const layout=mugPrintLayout(canvas.width,canvas.height,variant),h=layout.panelSize,padding=layout.top+h*.08,caption=String(design.caption||'');
  // One wrap file freezes both sides and is reused for previews and orders.
  const imageHeight=h*(caption?0.7:0.84),imageWidth=h*.8,scale=Math.min(imageWidth/image.naturalWidth,imageHeight/image.naturalHeight);
  const w=image.naturalWidth*scale,ih=image.naturalHeight*scale;

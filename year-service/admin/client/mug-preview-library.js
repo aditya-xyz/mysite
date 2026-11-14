@@ -16,7 +16,7 @@ export function ensureMugLibrarySources(year,progress=()=>{}){
     progress(`Preparing paired artwork ${done+1} of ${library.plans.length}…`);
     let ready=images.get(plan.src);if(!ready){ready=(async()=>{const image=new Image();image.src=plan.src;await image.decode();return image;})();images.set(plan.src,ready);}
     const image=await ready;
-    const png=await renderMugPrint({src:plan.src,caption:plan.caption},{font:plan.font,style:plan.ink==='light'?'black-glossy':'classic'},{printWidth:plan.printWidth,printHeight:plan.printHeight,renderWidth:plan.renderWidth,sourceImage:image});
+    const png=await renderMugPrint({src:plan.src,caption:plan.caption},{font:plan.font,style:plan.ink==='light'?'black-glossy':'classic'},{productId:plan.productId,printWidth:plan.printWidth,printHeight:plan.printHeight,renderWidth:plan.renderWidth,sourceImage:image});
     await request(year,'/sources/'+plan.id,png);done++;
    }
   }));

@@ -69,7 +69,7 @@ export function createMugMockups(){
    if(!record.id){
     const style=catalog.styles.find(s=>s.id===configuration.style),variant=style?.variants.find(v=>v.size===configuration.size&&v.color===configuration.color);
     if(!variant?.printWidth||!variant.printHeight)throw new Error('A preview is unavailable for this mug.');
-    record.blob??=await renderMugPrint(design,configuration,variant);if(!connected(record)){record.started=false;return;}
+    record.blob??=await renderMugPrint(design,configuration,{...variant,productId:style.productId});if(!connected(record)){record.started=false;return;}
     const form=new FormData();form.append('designId',design.id);form.append('configuration',JSON.stringify(configuration));form.append('artwork',record.blob,'mug-print.png');
     const result=await request('',form);await accept(record,result);if(!record.imageUrl)later(()=>run(record,design,configuration),Math.max(0,result.retryAfter??10)*1000);return;
    }

@@ -18,10 +18,10 @@ test('shared mug library includes every font, queues only affordable variants an
    const id=Number(u.pathname.split('/').pop());const variant=(id:number,size:string,color:string,price:string)=>({id,size,color,price,in_stock:true,availability_regions:{US:'United States'}});
    return Response.json({result:{variants:id===19?[variant(1320,'11 oz','White','6.07')]:id===403?[variant(22373,'15 oz','Dark Blue','9.13'),variant(17196,'15 oz','Black','9.13')]:id===407?[variant(11189,'12 oz','White','12.67')]:[variant(16440,'25 oz','White','22.54')]}});
   }
-  if(u.pathname.includes('/printfiles/'))return Response.json({result:{option_groups:['Flat'],options:['Front','Right'],printfiles:[{printfile_id:43,width:2700,height:1050}],variant_printfiles:[1320,22373,17196,11189].map(variant_id=>({variant_id,placements:{default:43}}))}});
+  if(u.pathname.includes('/printfiles/'))return Response.json({result:{option_groups:['Flat'],options:['Front','Left','Right'],printfiles:[{printfile_id:43,width:u.pathname.endsWith('/407')?2400:2700,height:u.pathname.endsWith('/407')?720:u.pathname.endsWith('/403')?1140:1050}],variant_printfiles:[1320,22373,17196,11189].map(variant_id=>({variant_id,placements:{default:43}}))}});
   if(u.pathname.includes('/create-task/')){
    if(failed)return new Response('private provider details',{status:503});
-   const body=JSON.parse(String(init.body));assert.ok(!body.variant_ids.includes(16440));assert.equal(new Set(body.variant_ids).size,body.variant_ids.length);assert.ok(body.options.some((o:string)=>/right/i.test(o)));assert.equal(body.files[0].position.width,2700);assert.match(body.files[0].image_url,/^https:\/\/guest.test\/api\/gift\/prepared-source\/[a-f0-9]{64}$/);
+   const body=JSON.parse(String(init.body));assert.ok(!body.variant_ids.includes(16440));assert.equal(new Set(body.variant_ids).size,body.variant_ids.length);assert.ok(body.options.some((o:string)=>/right/i.test(o)));assert.equal(body.files[0].position.width,body.files[0].position.area_width);assert.match(body.files[0].image_url,/^https:\/\/guest.test\/api\/gift\/prepared-source\/[a-f0-9]{64}$/);
    const key='task-'+tasks.size;tasks.set(key,body.variant_ids);return Response.json({result:{task_key:key,status:'pending'}});
   }
   assert.equal(u.pathname,'/mockup-generator/task');return Response.json({result:{status:'completed',mockups:(tasks.get(u.searchParams.get('task_key')!)||[]).map(id=>({variant_ids:[id],mockup_url:`https://files.cdn.printful.com/${id}-right.png`,extra:[{option:'Left',url:`https://files.cdn.printful.com/${id}-left.png`},{option:'Right',url:`https://files.cdn.printful.com/${id}-right.png`}]}))}});
@@ -33,11 +33,11 @@ test('shared mug library includes every font, queues only affordable variants an
   for(const design of designs)await db.prepare('INSERT INTO media_objects(id,year,preview_key,filename,mime,bytes) VALUES(?1,2026,?2,?3,?4,?5)').bind(design.id,design.preview_key,design.id+'.png','image/png',png.length).run();
   await db.prepare('UPDATE editions SET is_active=1,published_json=?1 WHERE year=2026').bind(JSON.stringify({mugDesigns:designs,photos:[]})).run();
   const env={DB:db,MEDIA:bucket,PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'prepared-test',JOURNAL_ORIGIN:'https://guest.test'} as unknown as PrintEnv;
-  const plans=await preparedMugPlans(env,2026);assert.equal(plans.length,24);assert.deepEqual([...new Set(plans.map(p=>p.font))].sort(),['clean','handwritten','serif']);
+  const plans=await preparedMugPlans(env,2026);assert.equal(plans.length,36);assert.deepEqual([...new Set(plans.map(p=>p.font))].sort(),['clean','handwritten','serif']);
   for(const plan of plans){new DataView(png.buffer).setUint32(16,plan.renderWidth);new DataView(png.buffer).setUint32(20,Math.round(plan.renderWidth*plan.printHeight/plan.printWidth));const response=await preparedMugAdminRoute(new Request('https://admin.test',{method:'POST',headers:{'Content-Type':'image/png'},body:png}),env,'/api/mug-preview-library/sources/'+plan.id,2026);assert.equal(response?.status,200);}
   await syncPreparedMugs(env,2026);
   assert.equal((await db.prepare('SELECT desired_count FROM mug_preview_sync').first<any>()).desired_count,96);
-  const beforeAdmin=calls.length;assert.equal((await preparedMugPlans({...env,PRINTFUL_ENABLED:undefined,PRINTFUL_API_TOKEN:undefined},2026)).length,24);assert.equal(calls.length,beforeAdmin,'Admin source planning uses the saved supplier catalog without provider credentials');
+  const beforeAdmin=calls.length;assert.equal((await preparedMugPlans({...env,PRINTFUL_ENABLED:undefined,PRINTFUL_API_TOKEN:undefined},2026)).length,36);assert.equal(calls.length,beforeAdmin,'Admin source planning uses the saved supplier catalog without provider credentials');
   const empty=await preparedMugCatalog(env,2026);assert.equal(empty.prepared,true);assert.equal(empty.previews.length,0,'Initial fill stays in saved-only mode with no live-generation fallback');
   failed=true;assert.equal(await startPreparedJob(env),false);failed=false;
   assert.equal((await db.prepare("SELECT count(*) n FROM mug_preview_jobs WHERE status='queued'").first<any>()).n,36);

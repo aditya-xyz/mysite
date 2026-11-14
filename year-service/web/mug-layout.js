@@ -1,9 +1,14 @@
-// Versioned once for artwork, cached proofs, and future fulfillment payloads.
-export const MUG_LAYOUT_VERSION=2;
+import {mugPlacementGuides} from './mug-placement-guides.js';
+// Bump whenever guide calibration, artwork, or composition changes.
+export const MUG_LAYOUT_VERSION=3;
 export const MUG_RENDER_WIDTH=2400;
-export function mugPrintLayout(width,height){
- // Quarter points face the viewer with the handle left / right. Leave breathing
- // room vertically, and never let the two panels overlap on narrower wraps.
- const panelSize=Math.min(height,width/2.4);
- return {selectedCenter:width*.25,santaCenter:width*.75,panelSize,top:(height-panelSize)/2};
+export const mugPlacementGuide=(productId,width,height)=>mugPlacementGuides[`${productId}:${width}x${height}`]||null;
+export function mugPrintLayout(width,height,variant){
+ const guide=mugPlacementGuide(variant.productId,variant.printWidth,variant.printHeight);
+ if(!guide)throw new Error('This mug size needs a verified placement guide.');
+ const selectedCenter=width*guide.left,santaCenter=width*guide.right;
+ // Keep the widest caption inside the print boundary for narrow black mugs too.
+ const room=Math.min(selectedCenter,width-santaCenter,(santaCenter-selectedCenter)/2);
+ const panelSize=Math.min(height,room/.6);
+ return {selectedCenter,santaCenter,panelSize,top:(height-panelSize)/2};
 }
