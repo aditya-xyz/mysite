@@ -1,3 +1,4 @@
+import {budgetApprovalMarkup,bindBudgetApproval} from './order-budget-approval.js';
 import {mugOptionsLabel} from '../../web/mug-options.js';
 import {mugPreview} from '../../web/mug-preview.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -20,10 +21,11 @@ export function mountMugOrders({view,state,api,showModal,toast}){
  async function load(){
   try{latest=await api('mug-orders');if(!panel.isConnected)return;
    panel.querySelector('[data-mug-total]').textContent=String(latest.orders.length);
-   panel.querySelector('[data-mug-orders]').innerHTML=latest.orders.map(o=>`<article class="print-order"><div><strong>${esc(o.recipient_name)}</strong><p class="hint">${esc(o.status)} · ${new Date(o.created_at*1000).toLocaleDateString()}</p><p>${esc(o.caption)}</p><p class="hint">${esc(mugOptionsLabel(JSON.parse(o.configuration_json||'null')))}</p><div data-estimate-for="${esc(o.id)}">${estimateMarkup(o.quote_json)}</div></div><div class="actions"><button class="quiet" data-mug-proof="${esc(o.id)}">View saved mug design</button>${o.status==='simulated'?`<button class="secondary" data-mug-quote="${esc(o.id)}">${o.quote_json?'Refresh':'Get'} shipping estimate</button>`:''}</div></article>`).join('')||'<p class="hint">No mug orders.</p>';
+   panel.querySelector('[data-mug-orders]').innerHTML=latest.orders.map(o=>`<article class="print-order"><div><strong>${esc(o.recipient_name)}</strong><p class="hint">${esc(o.status)} · ${new Date(o.created_at*1000).toLocaleDateString()}</p><p>${esc(o.caption)}</p><p class="hint">${esc(mugOptionsLabel(JSON.parse(o.configuration_json||'null')))}</p><div data-estimate-for="${esc(o.id)}">${estimateMarkup(o.quote_json)}</div><div data-budget-for="${esc(o.id)}">${budgetApprovalMarkup(o,'mug')}</div></div><div class="actions"><button class="quiet" data-mug-proof="${esc(o.id)}">View saved mug design</button>${o.status==='simulated'?`<button class="secondary" data-mug-quote="${esc(o.id)}">${o.quote_json?'Refresh':'Get'} shipping estimate</button>`:''}</div></article>`).join('')||'<p class="hint">No mug orders.</p>';
+   for(const order of latest.orders)bindBudgetApproval(panel.querySelector(`[data-budget-for="${order.id}"]`),{order,kind:'mug',api,showModal,onApproved:async()=>{await load();toast('Mug budget approved. Order remains simulated.');}});
    panel.querySelectorAll('[data-mug-quote]').forEach(button=>button.onclick=async()=>{
     button.disabled=true;const region=panel.querySelector(`[data-estimate-for="${button.dataset.mugQuote}"]`);
-    try{const result=await api(`mug-orders/${button.dataset.mugQuote}/quote`,{});if(!region.isConnected)return;region.innerHTML=estimateMarkup(JSON.stringify(result.quote));button.textContent='Refresh shipping estimate';}
+    try{const result=await api(`mug-orders/${button.dataset.mugQuote}/quote`,{});if(!region.isConnected)return;region.innerHTML=estimateMarkup(JSON.stringify(result.quote));button.textContent='Refresh shipping estimate';await load();}
     catch(error){if(region.isConnected)region.textContent=error.message;}finally{if(button.isConnected)button.disabled=false;}
    });
    panel.querySelectorAll('[data-mug-proof]').forEach(b=>b.onclick=()=>{const o=latest.orders.find(o=>o.id===b.dataset.mugProof);showModal(`<p class="kicker">Mug order · ${esc(o.status)}</p><h2>${esc(o.recipient_name)}</h2>${mugPreview({src:`/api/editions/${state.year}/mug-orders/${o.id}/artwork`,caption:o.caption,alt:o.alt,...(o.mockup_key?{mockupSrc:`/api/editions/${state.year}/mug-orders/${o.id}/mockup`}:{})},JSON.parse(o.configuration_json||'null'))}<p class="hint">Saved artwork and caption from this order. Resetting the allowance deletes this order and its proof.</p>`);});

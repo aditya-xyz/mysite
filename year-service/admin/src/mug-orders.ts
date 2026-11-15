@@ -18,12 +18,12 @@ export async function mugAdminRoute(request:Request,env:PrintEnv,path:string,yea
   if(!order)throw new PrintProblem(404,'Simulated mug order not found.');
   await reserveMugEstimate(env,order.invitation_id);
   const estimate=await estimateMug(env,JSON.parse(order.configuration_json),mailingAddress(JSON.parse(order.address_json)));
-  const saved=await env.DB.prepare("UPDATE mug_orders SET quote_json=?1 WHERE id=?2 AND year=?3 AND status='simulated' AND allowance_reset_at IS NULL RETURNING id").bind(JSON.stringify(estimate),quote[1],year).first();
+  const saved=await env.DB.prepare("UPDATE mug_orders SET quote_json=?1,budget_review_required=CASE WHEN ?4>max(2500,coalesce(budget_approved_cents,0)) THEN 1 ELSE 0 END WHERE id=?2 AND year=?3 AND status='simulated' AND allowance_reset_at IS NULL RETURNING id").bind(JSON.stringify(estimate),quote[1],year,estimate.totalCents).first();
   if(!saved)throw new PrintProblem(409,'This order changed. Reopen mug history.');
   return Response.json({quote:estimate});
  }
  if(path==='/api/mug-orders'&&request.method==='GET'){
-  const orders=await env.DB.prepare("SELECT o.id,o.invitation_id,o.status,o.recipient_name,o.caption,o.alt,o.created_at,o.configuration_json,o.quote_json,COALESCE(p.image_key,m.image_key) AS mockup_key FROM mug_orders o LEFT JOIN mug_mockups m ON m.id=o.mockup_id LEFT JOIN mug_preview_images p ON p.id=o.prepared_preview_id WHERE o.year=?1 AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') ORDER BY o.created_at DESC,o.id LIMIT 200").bind(year).all();
+  const orders=await env.DB.prepare("SELECT o.id,o.invitation_id,o.status,o.recipient_name,o.caption,o.alt,o.created_at,o.configuration_json,o.quote_json,o.address_json,o.budget_review_required,o.budget_approved_cents,o.budget_approved_by,o.budget_approved_at,COALESCE(p.image_key,m.image_key) AS mockup_key FROM mug_orders o LEFT JOIN mug_mockups m ON m.id=o.mockup_id LEFT JOIN mug_preview_images p ON p.id=o.prepared_preview_id WHERE o.year=?1 AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') ORDER BY o.created_at DESC,o.id LIMIT 200").bind(year).all();
   const counts=await env.DB.prepare("SELECT i.id AS invitation_id,i.mug_order_count AS count,o.id AS active_order_id,o.status FROM invites i LEFT JOIN mug_orders o ON o.invitation_id=i.id AND o.year=i.edition_year AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') WHERE i.edition_year=?1").bind(year).all();
   return Response.json({orders:orders.results,counts:counts.results});
  }

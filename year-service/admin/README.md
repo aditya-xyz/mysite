@@ -1152,7 +1152,7 @@ saved folded design, and stages exactly one household with its destination count
 ID and selected return-address ID on every address row. It reads `/basket/allNew`
 for actual destination postage, shipping, tax, funding breakdown and total.
 Missing/inconsistent fields, wrong country/quantity or unrelated items stop the
-flow. The hard limit is **1000 USD cents including postage and tax**. An over-limit
+flow. The automatic limit is **1000 USD cents including postage and tax**; a saved order may receive an explicit per-order admin approval above that amount (migration 0034). An over-limit
 draft is removed by its verified basket-item ID and held for review; unrelated
 items are never removed or sent. Do not use the account basket manually while
 automatic jobs are staging; vendor basket APIs have no atomic item-version token.
@@ -1247,3 +1247,33 @@ https://developers.google.com/maps/documentation/address-validation/reference/re
 Public test-address references:
 https://www.nationalmuseumindia.gov.in/en/contact-us and
 https://www.rijksmuseum.nl/en/visit/practical-info/address-and-directions.
+
+## Per-order over-budget approval (Test Mode only)
+
+Apply migration `0034_order_budget_approval.sql` before deploying either Worker.
+In Invitations → Mug/Print order history, orders awaiting review expose **Review &
+approve budget**. Both allowed admin identities can review the recipient, saved
+selection/address and exact USD total, then confirm approval up to that total.
+The server records the authenticated actor, time and amount in the order and an
+admin audit event. The client cannot choose an arbitrary cap or approve a stale
+quote. Repeated requests do not queue duplicate work or replace the first approver.
+
+International mugs above $25 are saved awaiting approval, using one household
+allowance. The selection, configuration, artwork and address remain frozen. An
+approved mug remains a simulation; no Printful order adapter is added. Refreshing
+an estimate above the approved cap requires a new approval. Mug products, styles,
+colors, fonts, prices, catalog filtering and default choices are unchanged.
+
+Handwrytten automatic orders above $10 retain the removed-draft review hold. An
+approval requires account Test Mode, a confirmed removed basket draft and an
+unsubmitted automatic job. It queues safe preparation with the order-specific cap;
+actual checkout is checked again. A higher total removes the draft and returns to
+review, while changed/uncertain baskets retain the existing reconciliation hold.
+Quote-only jobs can never be approved into submissions. `ORDER_MODE=simulation`
+and `PRINT_ORDER_MODE=handwrytten_test` remain required; no live fulfillment is
+introduced. Existing Test Mode submissions can authorize but do not capture/mail.
+
+The preview dialog now contains only its recipient selector and Open button. The
+Worker passes the original preview-directory URL to Assets instead of rewriting
+it to `index.html`, preventing Assets' canonical redirect from looping. Page,
+asset and API access still require existing admin authentication.

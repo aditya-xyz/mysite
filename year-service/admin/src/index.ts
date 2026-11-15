@@ -1,3 +1,4 @@
+import {orderBudgetApprovalRoute} from './order-budget-approval.ts';
 import {recipientPreviewRoute} from './recipient-preview.ts';
 import {addressVerificationCurrent,type AddressState} from '../../src/address-state.ts';
 import {createContact,verifyNewContactAddress} from './contact-create.ts';
@@ -213,6 +214,7 @@ async function route(request: Request, env: Env, actor: string) {
     year=Number(scoped[1]);path="/api"+scoped[2];
   }
   if (path.startsWith("/api/")) await edition(env,year);
+  if(scoped){const approval=await orderBudgetApprovalRoute(request,env,path,year,actor,()=>body(request));if(approval)return approval;}
   if(scoped){const preview=await recipientPreviewRoute(request,env,year,path,invitationId=>{const previewUrl=new URL(url);if(invitationId){previewUrl.searchParams.delete('recipient');previewUrl.searchParams.set('invitation',invitationId);}return previewJournal(env,year,previewUrl);},()=>body(request));if(preview)return preview;}
   if(scoped){const mugs=await mugAdminRoute(request,env,path,year,()=>body(request));if(mugs)return mugs;}
   if(scoped){const printing=await printAdminRoute(request,env,path,year,()=>body(request));if(printing)return printing;}
@@ -450,7 +452,6 @@ async function route(request: Request, env: Env, actor: string) {
   }
   if (path.startsWith("/api/")) throw new Problem(404,"Not found.");
   if(['/pixel-santa.png','/pixel-face-emoji.png'].includes(path))return env.ASSETS.fetch(new Request(new URL('/pixelbook-preview'+path,url),request));
-  if(path==='/pixelbook-preview'||path==='/pixelbook-preview/')return env.ASSETS.fetch(new Request(new URL('/pixelbook-preview/index.html',url),request));
   return env.ASSETS.fetch(request);
 }
 

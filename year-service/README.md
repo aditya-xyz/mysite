@@ -759,8 +759,9 @@ saved verified street, city, region and postal code for US, India or Netherlands
 no name, phone, email or artwork is sent. India uses `state_name`; Netherlands
 omits state. International availability includes fulfillment outside the US and
 uses `/shipping/rates` to select an available method before `/orders/estimate-costs`.
-The complete USD total, including shipping, tax/VAT and reported fees, must fit
-$25 before an international simulated claim stores artwork or consumes allowance.
+The complete USD total includes shipping, tax/VAT and reported fees. International
+claims over $25 save the exact chosen mug and address as a simulation awaiting
+admin budget approval, reserving the household allowance to prevent duplicates.
 Unavailable delivery, incomplete prices and provider failures leave allowance intact.
 Import duties may be additional; the estimate is not a guarantee of landed cost.
 US claims retain the catalog planning-reserve check. Admin mug history can obtain

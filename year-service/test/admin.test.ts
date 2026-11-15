@@ -17,7 +17,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
   const mf = new Miniflare(convertV4MiniflareOptions({workers:[{
     name:"admin",routes:["admin.test/*"],modules:true,scriptPath:".wrangler/admin-test-bundle/index.js",compatibilityDate:"2026-08-06",
     d1Databases:{DB:"shared-db"},r2Buckets:{MEDIA:"shared-media"},
-    bindings:{ADMIN_EMAIL:adminEmail,ADMIN_EMAILS:" editor@example.com, ",ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:aud,JOURNAL_ORIGIN:"https://journal.test",SOCIAL_JOURNAL_ORIGIN:"https://scrapbook.test",INVITATION_LINK_KEY:"1".repeat(64)},outboundService:outbound
+    bindings:{ADMIN_EMAIL:adminEmail,ADMIN_EMAILS:" editor@example.com, ",ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:aud,JOURNAL_ORIGIN:"https://journal.test",SOCIAL_JOURNAL_ORIGIN:"https://scrapbook.test",INVITATION_LINK_KEY:"1".repeat(64)},outboundService:outbound,serviceBindings:{ASSETS:async(request:Request)=>new URL(request.url).pathname==='/pixelbook-preview/index.html'?Response.redirect(new URL('/pixelbook-preview/',request.url).href,308):new Response('asset:'+new URL(request.url).pathname)}
   },{
     name:"guest",routes:["journal.test/*","scrapbook.test/*"],modules:true,scriptPath:".wrangler/test-bundle/index.js",compatibilityDate:"2026-08-06",
     d1Databases:{DB:"shared-db"},r2Buckets:{MEDIA:"shared-media"},bindings:{SMS_ENABLED:"false",JOURNAL_ORIGIN:"https://journal.test",SOCIAL_JOURNAL_ORIGIN:"https://scrapbook.test"},outboundService:outbound
@@ -308,6 +308,10 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
       assert.equal((await req("/api/publish",{version:-1})).status,409);assert.deepEqual((await db.prepare("SELECT year FROM editions WHERE is_active=1").all()).results,[{year:2027}],"Failed publish does not deactivate the active year");
       nextDraft.photos[0].recipients=[];const saved=await next("draft",{version:nextVersion,draft:nextDraft});assert.equal(saved.status,200);
       assert.equal((await guestReq(`media/${nextPhoto}/original`,nextSession)).status,200,"New draft edits must not change the published edition");
+    });
+    await t.test('preview directory is served without an index.html canonical redirect loop',async()=>{
+      const response=await req('/pixelbook-preview/?year=2026&recipient=angela');assert.equal(response.status,200);assert.equal(await response.text(),'asset:/pixelbook-preview/');assert.equal(response.headers.get('Location'),null);
+      assert.equal((await req('/api/editions/2026/mug-orders/mug-test/approve-budget',{confirm:true,quote:'{}'},undefined,'')).status,401);
     });
     await t.test("rotating and revoking invitations invalidates existing sessions",async()=>{
       const changed=await req(`/api/people/${personId}/details`,{name:"Sam Updated",phone:"+15555550103"});assert.equal(changed.status,200);

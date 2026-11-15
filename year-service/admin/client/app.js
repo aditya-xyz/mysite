@@ -301,13 +301,12 @@ async function openPreview(){
     if(dirty)throw new Error('Your draft changed while saving. Save again to preview the latest changes.');
     if(view==='preview')render();
     modalReturnFocus=()=>byId('open-preview')?.focus({preventScroll:true});
-    modal.classList.add('preview-dialog');
-    showModal(`<div class="preview-dialog-header"><p class="kicker">${state.year} · Private draft</p><h2>Preview scrapbook</h2><p class="hint">Saved draft · No SMS sent · Nothing is published</p><label class="field"><span>Preview for</span><span class="select-control"><select id="preview-person">${previewOptions()}</select></span></label></div><p><a class="button" id="open-full-pixelbook" target="_blank" rel="noopener">Open full Pixelbook ↗</a></p><p class="hint">Full preview uses your admin login. Final order buttons are disabled; contacts and allowances stay unchanged.</p><div id="edition-preview" class="preview-dialog-body"></div>`);
+    modal.classList.add('recipient-preview-dialog');
+    showModal(`<div class="preview-dialog-header"><p class="kicker">${state.year} · Private draft</p><h2>Preview scrapbook</h2><p class="hint">Saved draft · No SMS sent · Nothing is published</p><label class="field"><span>Preview for</span><span class="select-control"><select id="preview-person">${previewOptions()}</select></span></label><p><a class="button" id="open-full-pixelbook" target="_blank" rel="noopener">Open full Pixelbook ↗</a></p></div>`);
     document.querySelector('.modal-close').setAttribute('aria-label','Close preview');
     const updateFullPreview=()=>{byId('open-full-pixelbook').href='/pixelbook-preview/?year='+state.year+'&'+(previewRecipient.startsWith('invite:')?'invitation='+encodeURIComponent(previewRecipient.slice(7)):'recipient='+encodeURIComponent(previewRecipient));};
     updateFullPreview();
-    byId('preview-person').onchange=event=>{previewRecipient=event.target.value;updateFullPreview();loadPreview();};
-    await loadPreview();
+    byId('preview-person').onchange=event=>{previewRecipient=event.target.value;updateFullPreview();};
   }catch(error){toast(error.message);}
 }
 function render(){
@@ -460,7 +459,7 @@ document.querySelector('.modal-close').onclick=closeModal;
 modal.addEventListener('cancel',event=>{if(modal.dataset.bulkDeleting){event.preventDefault();return;}if(modal.classList.contains('preview-dialog')){event.preventDefault();closeModal();}});
 modal.addEventListener('click',event=>{if(event.target===modal&&modal.classList.contains('preview-dialog')){const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeModal();}});
 modal.addEventListener('animationend',event=>{if(event.target===modal&&event.animationName==='preview-out')modal.close();});
-modal.addEventListener('close',()=>{clearTimeout(previewCloseTimer);previewLoader.cancel();modal.classList.remove('preview-dialog','is-closing','bulk-delete-dialog');document.querySelector('.modal-close').setAttribute('aria-label','Close dialog');inviteData=null;modalContent.innerHTML='';const restore=modalReturnFocus;modalReturnFocus=null;restore?.();});
+modal.addEventListener('close',()=>{clearTimeout(previewCloseTimer);previewLoader.cancel();modal.classList.remove('preview-dialog','recipient-preview-dialog','is-closing','bulk-delete-dialog');document.querySelector('.modal-close').setAttribute('aria-label','Close dialog');inviteData=null;modalContent.innerHTML='';const restore=modalReturnFocus;modalReturnFocus=null;restore?.();});
 function confirmUnpublish(){
   const year=state.year,publicationRevision=state.publicationRevision;
   showModal(`<p class="kicker">Unpublish ${year}</p><h2>Take this scrapbook offline?</h2><p>Guests with a valid invitation will see a message that this scrapbook has been taken offline, without needing a new verification code.</p><p>Your draft, photos, invitations, and last published version stay saved. Publish again to reopen access with the same invitation links. Unsaved edits stay in this window.</p><button class="button danger" id="confirm-unpublish">Unpublish scrapbook</button><p class="error" id="modal-error" role="alert"></p>`);

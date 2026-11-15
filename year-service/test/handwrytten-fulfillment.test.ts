@@ -1,3 +1,4 @@
+import {orderBudgetApprovalRoute} from '../admin/src/order-budget-approval.ts';
 import {test,mock} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -12,8 +13,9 @@ test('automatic test fulfillment serializes checkout, enforces destination total
  await db.exec("CREATE TABLE editions(year INTEGER PRIMARY KEY); CREATE TABLE invites(id TEXT PRIMARY KEY); CREATE TABLE print_orders(id TEXT PRIMARY KEY,invitation_id TEXT,year INTEGER,status TEXT,format TEXT,artwork_key TEXT,default_artwork_key TEXT,card_count INTEGER,handwrytten_preview_id TEXT,handwrytten_order_json TEXT,address_json TEXT,allowance_reset_at INTEGER,handwrytten_quote_json TEXT,provider_id TEXT,updated_at INTEGER); CREATE TABLE handwrytten_previews(id TEXT PRIMARY KEY,invitation_id TEXT,year INTEGER,status TEXT,card_id INTEGER,front_key TEXT,inside_key TEXT,back_key TEXT,updated_at INTEGER); INSERT INTO editions VALUES(2026); INSERT INTO invites VALUES('invite');");
  await db.batch((await readFile('migrations/0029_handwrytten_fulfillment.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
  await db.exec(await readFile('migrations/0033_handwrytten_quote_only.sql','utf8'));
- const env={DB:db as any,MEDIA:media as any,HANDWRYTTEN_API_KEY:'synthetic-key',HANDWRYTTEN_PREVIEWS_ENABLED:'true',PRINT_ORDER_MODE:'handwrytten_test'};
- let mode=1,postage=.82,basket:any[]=[],sendFailure=false,stageFailure=false,missingTax=false,externalAddition=false,unverifiable=false,stealLease=false;
+ await db.exec("ALTER TABLE print_orders ADD COLUMN budget_review_required INTEGER NOT NULL DEFAULT 0; ALTER TABLE print_orders ADD COLUMN budget_approved_cents INTEGER; ALTER TABLE print_orders ADD COLUMN budget_approved_by TEXT; ALTER TABLE print_orders ADD COLUMN budget_approved_at INTEGER; CREATE TABLE admin_events(id INTEGER PRIMARY KEY,actor TEXT,action TEXT,target TEXT);");
+ const env={DB:db as any,MEDIA:media as any,HANDWRYTTEN_API_KEY:'synthetic-key',HANDWRYTTEN_PREVIEWS_ENABLED:'true',PRINT_ORDER_MODE:'handwrytten_test',ORDER_MODE:'simulation'};
+ let approvedCap=10,mode=1,postage=.82,basket:any[]=[],sendFailure=false,stageFailure=false,missingTax=false,externalAddition=false,unverifiable=false,stealLease=false;
  const calls:{path:string;body:any}[]=[];
  const totals=()=>({grand_total:3.75+postage,tax:.29,total:Math.round((4.04+postage)*100)/100});
  const fetch=mock.method(globalThis,'fetch',async(url:string,init:RequestInit)=>{
@@ -29,12 +31,12 @@ test('automatic test fulfillment serializes checkout, enforces destination total
   }
   if(path.startsWith('/v2/orders/details')){if(unverifiable)throw new TypeError('Cannot confirm outcome');return Response.json({status:'ok',order:{id:100,client_metadata:'print-test',status:'test',test_mode:1,quantity:1,payed:totals().total}});}
   if(path==='/v2/basket/remove'){assert.equal(body.id,200);basket=[];return Response.json({status:'ok'});}
-  assert.equal(path,'/v2/basket/send','Unexpected provider endpoint');assert.equal(mode,1);assert.equal(basket.length,1);assert.equal(body.test_mode,1);assert.equal(body.price_structure.money,totals().total);assert.ok(body.price_structure.money<=10);
+  assert.equal(path,'/v2/basket/send','Unexpected provider endpoint');assert.equal(mode,1);assert.equal(basket.length,1);assert.equal(body.test_mode,1);assert.equal(body.price_structure.money,totals().total);assert.ok(body.price_structure.money<=approvedCap);
   basket=[];if(sendFailure)throw new TypeError('Response lost after acceptance');return Response.json({status:'ok'});
  });
  const state=async()=>await db.prepare("SELECT f.*,o.status AS order_status,o.handwrytten_quote_json,o.provider_id FROM print_fulfillment f JOIN print_orders o ON o.id=f.order_id WHERE o.id='print-test'").first<any>();
  async function reset(country='US'){
-  mode=1;postage=country==='US'?.82:1.85;basket=[];calls.length=0;sendFailure=false;stageFailure=false;missingTax=false;externalAddition=false;unverifiable=false;stealLease=false;
+  approvedCap=10;mode=1;postage=country==='US'?.82:1.85;basket=[];calls.length=0;sendFailure=false;stageFailure=false;missingTax=false;externalAddition=false;unverifiable=false;stealLease=false;
   await db.prepare('DELETE FROM print_orders').run();await db.prepare('DELETE FROM print_fulfillment_lock').run();await db.prepare('DELETE FROM handwrytten_previews').run();
   await db.prepare("INSERT INTO handwrytten_previews VALUES('proof','invite',2026,'ready',42,'front','inside','back',unixepoch())").run();
   const name=({US:'United States',IN:'India',NL:'Netherlands'} as any)[country],payload={card_id:42,font:'hwMadeline',font_size:13,auto_font_size:true,client_metadata:'print-test',addresses:[{to_country:name,to_address1:'Synthetic address',to_city:'Synthetic city',message:'Dear Household,\n\nA note.\nCheers, Pixel'}]};
@@ -66,6 +68,22 @@ test('automatic test fulfillment serializes checkout, enforces destination total
   await t.test('a worker that lost its lease cannot stage an order or release another worker’s lock',async()=>{await reset();stealLease=true;await tickPrintFulfillment(env);assert.equal(calls.some(c=>c.path.endsWith('/orders/placeBasket')),false);assert.equal((await db.prepare('SELECT owner FROM print_fulfillment_lock').first<any>()).owner,'another-worker');});
   await t.test('exactly $10 is accepted',async()=>{await reset();postage=5.96;await tickPrintFulfillment(env);assert.equal((await state()).state,'submitted');assert.equal(JSON.parse((await state()).handwrytten_quote_json).amounts.total,1000);});
   await t.test('Test Mode off stops before staging',async()=>{await reset();mode=0;await tickPrintFulfillment(env);assert.equal((await state()).state,'review');assert.equal(calls.some(c=>c.path.endsWith('/placeBasket')||c.path.endsWith('/send')),false);});
+  await t.test('manual approval authorizes only this test order and exact cap; price increases hold again',async()=>{
+   await reset();postage=10;await tickPrintFulfillment(env);let current=await state();
+   const approve=async(quote:string,actor='angela@example.com',overrides:any={})=>orderBudgetApprovalRoute(new Request('https://admin.test/api/editions/2026/print-orders/print-test/approve-budget',{method:'POST'}),{...env,...overrides},'/api/print-orders/print-test/approve-budget',2026,actor,async()=>({quote,confirm:true}));
+   const held=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(held.budget_review_required,1);
+   await assert.rejects(()=>approve('{}'),/quote changed/);
+   await db.prepare("UPDATE print_fulfillment SET quote_only=1 WHERE order_id='print-test'").run();await assert.rejects(()=>approve(current.handwrytten_quote_json),/Quote-only/);await db.prepare("UPDATE print_fulfillment SET quote_only=0,state='unknown' WHERE order_id='print-test'").run();await assert.rejects(()=>approve(current.handwrytten_quote_json),/reconciliation/);await db.prepare("UPDATE print_fulfillment SET state='review' WHERE order_id='print-test'").run();
+   await assert.rejects(()=>approve(current.handwrytten_quote_json,'owner@example.com',{PRINT_ORDER_MODE:'live'}),/Test Mode/);
+   mode=0;await assert.rejects(()=>approve(current.handwrytten_quote_json),/Test Mode/);mode=1;
+   const approved=await approve(current.handwrytten_quote_json);assert.equal(approved!.status,200);assert.equal((await state()).state,'pending');assert.equal((await state()).vendor_order_id,null);
+   assert.equal((await approve(current.handwrytten_quote_json))!.status,200);assert.equal((await db.prepare('SELECT count(*) n FROM admin_events').first<any>()).n,1);
+   postage=11;await tickPrintFulfillment(env);assert.equal((await state()).state,'review');assert.equal(calls.some(c=>c.path.endsWith('/basket/send')),false);
+   current=await state();await approve(current.handwrytten_quote_json,'owner@example.com');approvedCap=15.04;await tickPrintFulfillment(env);
+   assert.equal((await state()).state,'submitted');const saved=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(saved.budget_approved_cents,1504);assert.equal(saved.budget_approved_by,'owner@example.com');assert.equal(calls.filter(c=>c.path.endsWith('/basket/send')).length,1);
+   await tickPrintFulfillment(env);assert.equal(calls.filter(c=>c.path.endsWith('/basket/send')).length,1);
+   await assert.rejects(()=>approve(current.handwrytten_quote_json),/Active simulated order/);
+  });
   await t.test('over $10 removes only its own unsent draft and never submits',async()=>{await reset();postage=10;await tickPrintFulfillment(env);assert.equal((await state()).state,'review');assert.equal(basket.length,0);assert.equal(calls.filter(c=>c.path.endsWith('/basket/remove')).length,1);assert.equal(calls.some(c=>c.path.endsWith('/basket/send')),false);});
   await t.test('an unrelated basket is preserved and never submitted',async()=>{await reset();basket=[{id:999,client_metadata:'not-ours'}];await tickPrintFulfillment(env);assert.equal((await state()).state,'review');assert.equal(basket.length,1);assert.ok(calls.every(c=>!['/v2/orders/placeBasket','/v2/basket/send','/v2/basket/remove'].includes(c.path)));});
   await t.test('missing tax after staging holds the account without guessing',async()=>{await reset();missingTax=true;await tickPrintFulfillment(env);await tickPrintFulfillment(env);assert.equal((await state()).state,'unknown');assert.equal(calls.some(c=>c.path.endsWith('/basket/send')),false);});

@@ -44,7 +44,7 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
    const proof=await prepareSavedOrderProof(env,job.year,job.order_id);
    if(proof.status!=='ready'){await update('pending');return;}
   }
-  const saved=await env.DB.prepare("SELECT handwrytten_order_json,address_json FROM print_orders WHERE id=?1 AND status='simulated' AND allowance_reset_at IS NULL").bind(job.order_id).first<any>();
+  const saved=await env.DB.prepare("SELECT handwrytten_order_json,address_json,budget_approved_cents FROM print_orders WHERE id=?1 AND status='simulated' AND allowance_reset_at IS NULL").bind(job.order_id).first<any>();
   if(!saved)throw new PrintProblem(409,'The saved order was reset.');
   const payload=JSON.parse(saved.handwrytten_order_json),address=JSON.parse(saved.address_json),country=await handwryttenCountry(env,address.country),sender=await handwryttenSender(env);
   if(payload.addresses?.length!==1||payload.addresses[0].to_country!==country.name)throw new PrintProblem(409,'The saved destination does not match.');
@@ -57,13 +57,14 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
    mutated=true;canRelease=false;
    await handwryttenTestMutation(env,'/orders/placeBasket',{...payload,return_address_id:sender.id,shipping_method_id:1,addresses:payload.addresses.map((a:any)=>({...a,return_address_id:sender.id,to_country_id:country.id}))});
   }
+  const approvedLimit=Math.max(printOrderLimitCents,Number(saved.budget_approved_cents)||0);
   const basket=await handwryttenBasket(env),checked=checkedBasket(basket,{orderId:job.order_id,cardId:payload.card_id,vendorId:job.vendor_order_id||undefined,country:country.name});
-  const quote={currency:'USD',quantity:1,amounts:checked.amounts,quotedAt:now(),sender,destination:country.name,source:'handwrytten-test-basket',submitted:false,testMode:true,quoteOnly:!!job.quote_only,maxCents:printOrderLimitCents,withinBudget:checked.amounts.total<=printOrderLimitCents};
-  await env.DB.batch([env.DB.prepare("UPDATE print_fulfillment SET state='staged',vendor_order_id=?1,basket_item_id=?2,updated_at=?3 WHERE order_id=?4").bind(checked.vendorId,checked.basketId,now(),job.order_id),env.DB.prepare('UPDATE print_orders SET handwrytten_quote_json=?1 WHERE id=?2').bind(JSON.stringify(quote),job.order_id)]);
-  if(job.quote_only||checked.amounts.total>printOrderLimitCents){
+  const quote={currency:'USD',quantity:1,amounts:checked.amounts,quotedAt:now(),sender,destination:country.name,source:'handwrytten-test-basket',submitted:false,testMode:true,quoteOnly:!!job.quote_only,maxCents:printOrderLimitCents,withinBudget:checked.amounts.total<=printOrderLimitCents,approvedMaxCents:saved.budget_approved_cents||null};
+  await env.DB.batch([env.DB.prepare("UPDATE print_fulfillment SET state='staged',vendor_order_id=?1,basket_item_id=?2,updated_at=?3 WHERE order_id=?4").bind(checked.vendorId,checked.basketId,now(),job.order_id),env.DB.prepare('UPDATE print_orders SET handwrytten_quote_json=?1,budget_review_required=?3 WHERE id=?2').bind(JSON.stringify(quote),job.order_id,Number(!job.quote_only&&checked.amounts.total>approvedLimit))]);
+  if(job.quote_only||checked.amounts.total>approvedLimit){
    await handwryttenTestMutation(env,'/basket/remove',{id:checked.basketId});
    if(itemsOf(await handwryttenBasket(env)).some(i=>Number(i.id)===checked.vendorId))throw new PrintProblem(502,'The unsent test draft could not be removed.');
-   canRelease=true;await env.DB.prepare('UPDATE print_fulfillment SET basket_item_id=NULL WHERE order_id=?1').bind(job.order_id).run();await update('review',job.quote_only?null:'Checkout exceeds the $10 household limit. No order was submitted.');return;
+   canRelease=true;await env.DB.prepare('UPDATE print_fulfillment SET basket_item_id=NULL WHERE order_id=?1').bind(job.order_id).run();await update('review',job.quote_only?null:`Checkout exceeds the ${saved.budget_approved_cents?'approved':'automatic'} $${(approvedLimit/100).toFixed(2)} limit. Admin approval is required. No order was submitted.`);return;
   }
   // Re-read exact basket identities, total and funding immediately before submission.
   const final=checkedBasket(await handwryttenBasket(env),{orderId:job.order_id,cardId:payload.card_id,vendorId:checked.vendorId,country:country.name});
@@ -74,7 +75,7 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
   // Reconcile the known parent order ID; never repeat the submit call.
   try{await handwryttenTestMutation(env,'/basket/send',{test_mode:1,check_quantity:true,price_structure:checked.priceStructure});}catch{/* Verify the known order record below. */}
   const accepted=await handwryttenTestOrder(env,checked.vendorId);
-  if(Number(accepted?.id)!==checked.vendorId||accepted.client_metadata!==job.order_id||accepted.status!=='test'||Number(accepted.test_mode)!==1||Number(accepted.quantity)!==1||cents(accepted.payed)>printOrderLimitCents)throw new PrintProblem(502,'The Test Mode order acceptance could not be confirmed.');
+  if(Number(accepted?.id)!==checked.vendorId||accepted.client_metadata!==job.order_id||accepted.status!=='test'||Number(accepted.test_mode)!==1||Number(accepted.quantity)!==1||cents(accepted.payed)>approvedLimit)throw new PrintProblem(502,'The Test Mode order acceptance could not be confirmed.');
   await env.DB.batch([env.DB.prepare("UPDATE print_orders SET status='submitted',provider_id=?1,handwrytten_quote_json=?2,updated_at=?3 WHERE id=?4 AND status='simulated'").bind('handwrytten-test-'+checked.vendorId,JSON.stringify({...quote,submitted:true}),now(),job.order_id),env.DB.prepare("UPDATE print_fulfillment SET state='submitted',error=NULL,updated_at=?1 WHERE order_id=?2").bind(now(),job.order_id)]);
   canRelease=true;
  }catch(error){
