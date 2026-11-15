@@ -332,6 +332,7 @@ export default {
     await clearExpiredAddressVerifications(env.DB);
     await cleanMugMockups(env);
     await env.DB.batch([
+      env.DB.prepare('DELETE FROM contact_address_checks WHERE expires_at<=?1').bind(now()),
       env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?1").bind(now()),
       env.DB.prepare("DELETE FROM rate_limits WHERE expires_at<=?1").bind(now())
     ]);

@@ -1,4 +1,4 @@
-export function bindAddressAutocomplete({form,person,requestApi,simulated}){
+export function bindAddressAutocomplete({form,person,requestApi,simulated,onAddress}){
  const input=form.elements.line1,field=input.closest('.field'),modal=form.closest('dialog');
  const area=document.createElement('div');area.className='address-entry';field.before(area);
  const anchor=document.createElement('div');anchor.className='address-search';area.append(anchor);anchor.append(field);
@@ -16,7 +16,8 @@ export function bindAddressAutocomplete({form,person,requestApi,simulated}){
   try{
    const result=await requestApi(`contacts/${person.id}/address/place`,{version:person.version,placeId:selection.placeId,sessionToken,...(form.elements.country?{country:form.elements.country.value}:{})},controller.signal);
    if(disposed||stamp!==revision)return;
-   for(const key of ['line1','line2','city','state','postalCode'])form.elements[key].value=result.address[key]||'';
+   if(onAddress)onAddress(result.addressFields||result.address);
+   else for(const key of ['line1','line2','city','state','postalCode'])form.elements[key].value=result.address[key]||'';
    sessionToken=crypto.randomUUID();status.textContent='Address filled. Add a unit if needed, then verify.';form.elements.line2.focus();
   }catch(error){if(!disposed&&stamp===revision&&error.name!=='AbortError')status.textContent='Suggestions unavailable. Enter the address manually.';}
  }
@@ -25,7 +26,7 @@ export function bindAddressAutocomplete({form,person,requestApi,simulated}){
   clearTimeout(timer);controller?.abort();const stamp=++revision;hide();status.textContent='';
   if(input.value.trim().length<3)return;
   timer=setTimeout(async()=>{
-   if(disposed||form.querySelector('fieldset').disabled)return;
+   if(disposed||input.closest('fieldset')?.disabled)return;
    controller=new AbortController();
    try{
     const result=await requestApi(`contacts/${person.id}/address/autocomplete`,{version:person.version,input:input.value,sessionToken,...(form.elements.country?{country:form.elements.country.value}:{})},controller.signal);
@@ -45,6 +46,7 @@ export function bindAddressAutocomplete({form,person,requestApi,simulated}){
  });
  const outside=event=>{if(!area.contains(event.target))hide();};document.addEventListener('pointerdown',outside);
  function dispose(){if(disposed)return;disposed=true;revision++;clearTimeout(timer);controller?.abort();observer.disconnect();document.removeEventListener('pointerdown',outside);modal?.removeEventListener('close',dispose);}
- const observer=new MutationObserver(()=>{if(!form.isConnected)dispose();else if(form.querySelector('fieldset').disabled){clearTimeout(timer);controller?.abort();revision++;hide();status.textContent='';}});
+ const observer=new MutationObserver(()=>{if(!form.isConnected||!input.isConnected)dispose();else if(input.closest('fieldset')?.disabled){clearTimeout(timer);controller?.abort();revision++;hide();status.textContent='';}});
  observer.observe(modal,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});modal.addEventListener('close',dispose,{once:true});
+ return {destroy:dispose};
 }

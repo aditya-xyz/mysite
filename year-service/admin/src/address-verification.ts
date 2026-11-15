@@ -40,7 +40,7 @@ export function googleMailingAddress(response:unknown,expectedCountry:MailingAdd
  try{return mailingAddress({line1:p.addressLines[0],line2:p.addressLines.slice(1).join(', '),city:p.locality,state:p.administrativeArea,postalCode:p.postalCode,country:p.regionCode});}
  catch{throw new PrintProblem(422,'Google did not return a complete mailing address.');}
 }
-async function verifyGoogle(env:AddressEnv,address:MailingAddress){
+export async function verifyGoogle(env:AddressEnv,address:MailingAddress){
  await reserveGoogleRequest(env);
  let response:Response;
  try{response=await fetch('https://addressvalidation.googleapis.com/v1:validateAddress',{

@@ -84,6 +84,34 @@ custom-domain binding or bypass its Access policy.
 
 ## Editor behavior
 
+### Add a person with a mailing address
+
+The People directory and photo-recipient picker share the same Add a person form.
+Name is required; phone and the entire mailing-address section are optional.
+Country selection changes fields for US (state and ZIP), India (state/UT, PIN,
+and optional landmark/district/post office), or Netherlands (street, house number,
+addition, postcode and town, with no province field). Switching countries retains
+the current form's entries for each country. Dutch additions and Indian delivery
+details are preserved when composing the existing two-line mailing format; lines
+that exceed 120 characters require an explicit edit rather than truncation.
+
+**Check & review address** uses Google in the selected region, with USPS CASS only
+for US addresses. It presents the entered address alongside the recommendation;
+**Accept & add person** saves both contact and verified address atomically. A
+15-minute recommendation is bound to the form draft and authenticated admin, and
+cannot be substituted or replayed for another contact. India validation remains
+in Google's preview coverage. **Save without checking** works when verification
+is unavailable and saves the address explicitly unverified. Unchecking the address
+section adds only the person. No flow creates an invitation, sends SMS, enables
+gift permissions, or places an order. Verification is not a shipping quote.
+
+Apply `0032_new_contact_addresses.sql` before deploying both Workers. New contact
+requests carry a stable draft key so network retries do not duplicate people,
+including people without phone numbers. Verification and create failures leave
+no partial contact. Expired draft checks are pruned by the guest's daily cleanup;
+successful creation removes its checks. Creation receipts cascade when a person
+is deleted. Existing address editing remains available from each People card.
+
 The sidebar contains Overview; Creative > Scrapbooks, Articles, and People; and System >
 Home Server. It stays the same inside every workspace. Overview contains only
 three summary rows (Scrapbooks, Home server, Articles), each with View workspace.

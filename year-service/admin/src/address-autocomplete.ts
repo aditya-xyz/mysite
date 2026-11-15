@@ -17,7 +17,11 @@ export async function addressAutocompleteRoute(request:Request,env:AddressEnv,pa
  const route=/^\/api\/contacts\/([a-z0-9-]{1,100})\/address\/(autocomplete|place)$/.exec(path);
  if(!route||request.method!=='POST')return null;
  const data=await readBody();if(!Number.isInteger(data.version)||typeof data.sessionToken!=='string'||!/^[a-zA-Z0-9_-]{16,80}$/.test(data.sessionToken))throw new PrintProblem(400,'Check the address search session.');
- const person=await env.DB.prepare('SELECT id FROM people WHERE id=?1 AND version=?2').bind(route[1],data.version as number).first();if(!person)throw new PrintProblem(409,'This person changed. Reopen the address editor.');
+ if(route[1]==='new'){
+  if(typeof data.draftKey!=='string'||!/^[a-zA-Z0-9_-]{16,80}$/.test(data.draftKey))throw new PrintProblem(400,'Reopen Add a person and try again.');
+ }else{
+  const person=await env.DB.prepare('SELECT id FROM people WHERE id=?1 AND version=?2').bind(route[1],data.version as number).first();if(!person)throw new PrintProblem(409,'This person changed. Reopen the address editor.');
+ }
  if(!autocompleteAvailable(request,env))throw new PrintProblem(503,'Address suggestions are not configured. You can enter the address manually.');
  const country=data.country===undefined?'US':data.country;if(!['US','IN','NL'].includes(String(country)))throw new PrintProblem(400,'Choose a supported country.');
  const simulated=addressMode(request,env)==='local_mock';
@@ -38,7 +42,7 @@ export async function addressAutocompleteRoute(request:Request,env:AddressEnv,pa
  const part=(type:string,short=false)=>{const c=components.find((c:any)=>Array.isArray(c.types)&&c.types.includes(type));const text=c?.[short?'shortText':'longText'];return typeof text==='string'?text:'';};
  if(part('country',true)!==country)throw new PrintProblem(422,'Choose an address in the selected country.');
  const zip=part('postal_code'),suffix=part('postal_code_suffix');
- const address={line1:[part('street_number'),part('route')].filter(Boolean).join(' '),line2:part('subpremise')?'Unit '+part('subpremise'):'',city:part('locality')||part('postal_town')||part('sublocality_level_1'),state:part('administrative_area_level_1',true),postalCode:zip+(zip&&suffix?'-'+suffix:''),country:String(country)};
+ const address={line1:(country==='NL'?[part('route'),part('street_number')]:[part('street_number'),part('route')]).filter(Boolean).join(' '),line2:part('subpremise')?'Unit '+part('subpremise'):'',city:part('locality')||part('postal_town')||part('sublocality_level_1'),state:part('administrative_area_level_1',country!=='IN'),postalCode:zip+(zip&&suffix?'-'+suffix:''),country:String(country)};
  if(Object.values(address).some(v=>v.length>120||/[\r\n\x00-\x1f]/.test(v)))throw new PrintProblem(422,'Enter this address manually.');
- return Response.json({address,simulated:false});
+ return Response.json({address,...(country==='NL'?{addressFields:{...address,line1:part('route'),houseNumber:part('street_number'),addition:''}}:{}),simulated:false});
 }

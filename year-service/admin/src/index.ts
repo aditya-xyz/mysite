@@ -1,4 +1,5 @@
 import {addressVerificationCurrent,type AddressState} from '../../src/address-state.ts';
+import {createContact,verifyNewContactAddress} from './contact-create.ts';
 import {curatedMugChange} from '../../src/mug-catalog.ts';
 import {themeAssetManifest,themeAssetResponse} from '../../src/theme-assets.ts';
 import {mugAdminRoute} from './mug-orders.ts';
@@ -121,6 +122,7 @@ async function route(request: Request, env: Env, actor: string) {
   const url = new URL(request.url); let path = url.pathname;
   if (!["GET","HEAD","POST"].includes(request.method)) throw new Problem(405,"Method not allowed.");
   if (request.method === "POST" && !sameOrigin(request)) throw new Problem(403,"Use the admin dashboard to make changes.");
+  if(path==='/api/contacts/new/address/verify'&&request.method==='POST')return verifyNewContactAddress(request,env,actor,await body(request));
   if(path.startsWith('/api/contacts/')||path.startsWith('/api/address-verification/')){const autocomplete=await addressAutocompleteRoute(request,env,path,()=>body(request));if(autocomplete)return autocomplete;const address=await addressAdminRoute(request,env,path,()=>body(request));if(address)return address;}
   if (path === "/api/contacts") {
     if(request.method === "GET") {
@@ -128,7 +130,9 @@ async function route(request: Request, env: Env, actor: string) {
       return json({people:people.results});
     }
     if(request.method === "POST") {
-      const data=await body(request),name=text(data.name,"name",100),phone=text(data.phone??"","phone number",20,false)||null;
+      const data=await body(request);
+      if('draftKey' in data||'address' in data||'verificationId' in data||'verify' in data)return createContact(request,env,actor,data);
+      const name=text(data.name,"name",100),phone=text(data.phone??"","phone number",20,false)||null;
       if(phone && !/^\+[1-9]\d{7,14}$/.test(phone)) return fail("Use a full phone number including country code.");
       const id="contact-"+token().slice(0,24);
       const person=await env.DB.prepare("INSERT INTO people(id,name,phone) VALUES(?1,?2,?3) ON CONFLICT(phone) DO NOTHING RETURNING id,name,phone,version")

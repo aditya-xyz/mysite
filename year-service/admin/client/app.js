@@ -7,6 +7,7 @@ import {mugsMarkup,bindMugEditor} from './mug-editor.js';
 import {reorderItems,reorderButton,reorderToolbar,reorderHandle,bindReorder} from './reorder.js';
 import {selectedItems,setPhotosHidden,removeDraftPhotos,deleteSelectedMedia} from './photo-bulk.js';
 import {addressIsCurrent} from './address-editor.js';
+import {openPersonCreate} from './person-create.js';
 import {mountPrintAdmin,prunePrintPermissions,invitationPrintEligibility} from './print-admin.js';
 import {photoUploadError,uploadPhoto,findUploadedPhoto,addPhotoToDraft,isFileDrag,bindPhotoDropzone} from './photo-upload.js';
 import {sendApiRequest} from './api-request.js';
@@ -250,7 +251,7 @@ function deleteMediaSelection(items){
     }finally{busy=false;delete modal.dataset.bulkDeleting;submit.disabled=cancel.disabled=review.disabled=close.disabled=false;updateBadge();}
   };
 }
-function mailingSummary(person){let a;try{a=JSON.parse(person.mailing_address);}catch{}return a?`<address>${[a.line1,a.line2,[a.city,a.state,a.postalCode].filter(Boolean).join(', ')].filter(Boolean).map(esc).join('<br>')}</address><span class="badge ${addressIsCurrent(person)?'active-badge':''}">${addressIsCurrent(person)?'Verified US address':person.address_verified?'Verification expired':'Not verified'}</span>`:'<span class="no-address">No address yet</span>';}
+function mailingSummary(person){let a;try{a=JSON.parse(person.mailing_address);}catch{}return a?`<address>${[a.line1,a.line2,[a.city,a.state,a.postalCode].filter(Boolean).join(', '),({US:'United States',IN:'India',NL:'Netherlands'})[a.country]].filter(Boolean).map(esc).join('<br>')}</address><span class="badge ${addressIsCurrent(person)?'active-badge':''}">${addressIsCurrent(person)?'Verified address':person.address_verified?'Verification expired':'Not verified'}</span>`:'<span class="no-address">No address yet</span>';}
 function directoryRows(query=''){
   const matches=contacts.filter(p=>(p.name+' '+(p.phone||'')).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return matches.map(p=>`<article class="person"><div class="person-identity"><span class="person-avatar">${esc(p.name.slice(0,1).toUpperCase())}</span><div><strong>${esc(p.name)}</strong><p>${esc(p.phone||'No phone number · Can join a shared invitation')}</p></div></div><div class="person-address">${mailingSummary(p)}</div><div class="person-actions"><button class="secondary" data-edit-contact="${esc(p.id)}">Edit details</button><button class="quiet" data-person-usage="${esc(p.id)}">Where used</button><button class="quiet danger" data-delete-contact="${esc(p.id)}" aria-label="Delete ${esc(p.name)}">Delete</button></div></article>`).join('')||'<div class="empty">No people found.<span>Add someone to your directory, or try a different search.</span></div>';
@@ -492,17 +493,13 @@ function bindSharingActions(){
 }
 function addPerson({photoId='',name=''}={}){
   if(photoId)modalReturnFocus=()=>app.querySelector(`[data-picker="${photoId}"] .picker-summary`)?.focus();
-  showModal(`<p class="kicker">People directory</p><h2>Add a person</h2><form id="person-form"><label class="field"><span>Name</span><input name="name" value="${esc(name)}" required maxlength="100" autocomplete="off"></label><label class="field"><span>Phone, optional · include country code</span><input name="phone" type="tel" placeholder="+1…" autocomplete="off"></label><p class="hint">Saves them to People${photoId?' and selects them for this photo':''}. Only the verification contact needs a phone number. This doesn’t invite them to a scrapbook or send a text.</p><button class="button">${photoId?'Add & select person':'Add person'}</button><p class="error" id="modal-error" role="alert"></p></form>`);
-  byId('person-form').onsubmit=async event=>{
-    event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
-    try{
-      const result=await contactApi('',Object.fromEntries(new FormData(form)));updateContacts(result.person);
-      if(photoId){const photo=state.draft.photos.find(p=>p.id===photoId);photo.recipients=[...new Set([...photo.recipients,result.person.id])];mark();}
+  openPersonCreate({name,photoId,showModal,requestApi,onSaved:person=>{
+      updateContacts(person);
+      if(photoId){const photo=state.draft.photos.find(p=>p.id===photoId);if(photo){photo.recipients=[...new Set([...photo.recipients,person.id])];mark();}}
       modal.close();render();
       if(photoId)app.querySelector(`[data-picker="${photoId}"] .picker-summary`)?.focus();
-      toast(photoId?'Person added and selected. Create their invitation in Sharing when ready.':'Person added. No invitation was created.');
-    }catch(error){byId('modal-error').textContent=error.message;button.disabled=false;}
-  };
+      toast(photoId?'Person added and selected. No invitation was created.':person.mailing_address?`Person and ${addressIsCurrent(person)?'verified':'unverified'} address saved. No invitation was created.`:'Person added. No invitation was created.');
+  }});
 }
 function usageMarkup(usage){
  const photos=(items,label)=>items.length?`<h3 class="usage-heading">${label}</h3><ul class="usage-list">${items.map(p=>`<li><button class="quiet" data-usage-year="${p.year}" data-usage-photo="${esc(p.id)}">${p.year} · Photo ${p.number}${p.hidden?' · Hidden':''}<span>${esc(p.caption||'Untitled photo')}</span></button></li>`).join('')}</ul>`:'';

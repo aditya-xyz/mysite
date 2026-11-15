@@ -267,3 +267,15 @@ dialog h2[tabindex="-1"]:focus{outline:none}
  #modal .fc-spread>.fc-page{width:100%;flex:0 0 auto;aspect-ratio:4.25/5.5}
  #modal .fc-spread>.fc-page:first-child{border-right:0}
 }
+
+/* Add person: country-aware address entry and recommendation review. */
+.person-create-form [data-person-fields]{border:0;padding:0;margin:0;min-width:0}
+.person-address-toggle{display:flex;align-items:center;gap:10px;margin:22px 0 18px;font-weight:600}
+.person-address-toggle input{width:18px;height:18px;accent-color:var(--accent)}
+.person-create-form [data-country-fields]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}
+.person-create-form [data-country-fields]>.field:nth-child(-n+2),.contact-address-extra{grid-column:1/-1}
+.contact-address-extra summary{cursor:pointer;color:var(--muted);margin:10px 0 16px}
+.contact-address-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.contact-address-comparison h4{margin:0 0 8px;font-size:12px;color:var(--muted)}
+.contact-address-comparison address{overflow-wrap:anywhere}
+@media(max-width:600px){.person-create-form [data-country-fields],.contact-address-comparison{grid-template-columns:1fr}}
