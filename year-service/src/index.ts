@@ -1,4 +1,5 @@
 import {tickPrintFulfillment} from './handwrytten-fulfillment.ts';
+import {reserveSmsSend,SmsBudgetError,type SmsBudgetEnv} from './sms-budget.ts';
 import {handwryttenPreviewStatus,handwryttenPreviewImage} from './handwrytten-previews.ts';
 import {keepsakeManifest,keepsakeDefaultImage} from './keepsake-defaults.ts';
 import {preparedMugCatalog,preparedMugImage,preparedMugSource,tickPreparedMugs} from './prepared-mugs.ts';
@@ -16,7 +17,7 @@ import { previewDimensions } from "./image-dimensions.ts";
 import { invitationAudience, invitationName, invitationMembers, type InvitationAudience } from "./invitations.ts";
 import { publishedEdition, clientEdition, visiblePhotos, publishedMugs } from "./edition.ts";
 
-interface Env extends AddressEnv {
+interface Env extends AddressEnv, SmsBudgetEnv {
   DB: D1Database;
   MEDIA: R2Bucket;
   ASSETS: Fetcher;
@@ -150,10 +151,16 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     if (env.SMS_ENABLED !== "true") throw new Failure(503, "Your invitation is ready. Text verification will be enabled soon.");
     await limited(env, `send:${i.id}`, 5, 3600);
     const stamp = now();
-    const reserved = await env.DB.prepare(`UPDATE invites SET last_sent_at=?1, challenge_expires_at=0, attempts=0
+    const reserved = await env.DB.prepare(`UPDATE invites SET last_sent_at=?1
       WHERE id=?2 AND last_sent_at<=?3 AND revoked_at IS NULL AND expires_at>?1 AND version=?4 RETURNING id`)
       .bind(stamp, i.id, stamp - 60,i.version).first();
     if (!reserved) throw new Failure(429, "Please wait a minute before requesting another code.");
+    await reserveSmsSend(env);
+    // A budget rejection preserves any code the guest already received.
+    const challenge=await env.DB.prepare(`UPDATE invites SET challenge_expires_at=0,attempts=0
+      WHERE id=?1 AND last_sent_at=?2 AND version=?3 AND revoked_at IS NULL AND expires_at>?2 RETURNING id`)
+      .bind(i.id,stamp,i.version).first();
+    if(!challenge)throw new Failure(401,"This invitation changed. Please reopen your invitation.");
     const result = await twilio(env, "Verifications", { To: i.phone, Channel: "sms" });
     if (result.status !== "pending") throw new Failure(503, "The text could not be sent. Please try again later.");
     await env.DB.prepare("UPDATE invites SET challenge_expires_at=?1 WHERE id=?2 AND last_sent_at=?3 AND version=?4")
@@ -308,7 +315,7 @@ export default {
   async fetch(request: Request, env: Env, ctx:ExecutionContext) {
     let response: Response;
     try { response = await route(request, env, ctx); }
-    catch (error) { response = error instanceof PrintProblem ? json({error:error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{})},error.status,error.retryAfter?{'Retry-After':String(error.retryAfter)}:undefined) : error instanceof Failure ? json({ error: error.message,...(error.code?{code:error.code}:{}),...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
+    catch (error) { response = error instanceof PrintProblem ? json({error:error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{})},error.status,error.retryAfter?{'Retry-After':String(error.retryAfter)}:undefined) : error instanceof Failure || error instanceof SmsBudgetError ? json({ error: error.message,...(error.code?{code:error.code}:{}),...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "no-store, private");
     headers.set("Referrer-Policy", "no-referrer");

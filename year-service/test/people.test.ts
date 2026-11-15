@@ -27,6 +27,7 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
   const guest=(path:string,session:string)=>mf.dispatchFetch('https://guest.test/api/'+path,{headers:{Cookie:'__Host-year_session='+session}});
   try{
     const db=await mf.getD1Database('DB','admin'),bucket=await mf.getR2Bucket('MEDIA','admin');
+    await db.exec((await readFile('migrations/0031_sms_send_usage.sql','utf8')).replace(/\n/g,' '));
     const migrate=async(file:string)=>db.exec((await readFile('migrations/'+file,'utf8')).replace(/\n/g,' '));
     for(const file of ['0001_invites.sql','0002_editor.sql','0003_scrapbooks.sql'])await migrate(file);
     const expiry=Math.floor(Date.now()/1000)+86400;

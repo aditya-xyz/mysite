@@ -6,6 +6,7 @@ import { digest } from "../src/security.ts";
 
 test("invitation, SMS verification, and private media boundaries", async t => {
   const sent: URLSearchParams[] = [];
+  let sendFailure=false;
   const mf = new Miniflare(convertV4MiniflareOptions({
     modules: true, scriptPath: ".wrangler/test-bundle/index.js", compatibilityDate: "2026-08-06",
     d1Databases: ["DB"], r2Buckets: ["MEDIA"],
@@ -13,12 +14,14 @@ test("invitation, SMS verification, and private media boundaries", async t => {
     outboundService: async (request: { url: string; text(): Promise<string> }) => {
       assert.equal(new URL(request.url).hostname, "verify.twilio.com");
       const params = new URLSearchParams(await request.text()); sent.push(params);
-      assert.equal(params.get("To"), "+15555550101");
+      assert.ok(['+15555550101','+15555550102'].includes(params.get('To')||''));
+      if(sendFailure&&request.url.endsWith('Verifications'))return Response.json({status:'failed'},{status:503});
       return Response.json({ status: request.url.endsWith("VerificationCheck") ? (params.get("Code") === "123456" ? "approved" : "pending") : "pending" });
     }
   }));
   try {
     const db = await mf.getD1Database("DB");
+    await db.exec((await readFile('migrations/0031_sms_send_usage.sql','utf8')).replace(/\n/g,' '));
     const schema = await readFile("migrations/0001_invites.sql", "utf8");
     await db.exec(schema.replace(/\n/g, " "));
     await db.exec((await readFile("migrations/0002_editor.sql","utf8")).replace(/\n/g," "));
@@ -74,6 +77,18 @@ test("invitation, SMS verification, and private media boundaries", async t => {
       assert.deepEqual(results.map(r=>r.status).sort(),[200,429]);
       assert.equal(sent.length,1);
       assert.equal(sent[0].get("Channel"),"sms");
+      assert.equal((await db.prepare('SELECT sum(attempts) n FROM sms_send_usage').first<{n:number}>())?.n,1);
+    });
+    await t.test("global exhaustion blocks Twilio calls and preserves a previously sent code",async()=>{
+      const before=await db.prepare("SELECT challenge_expires_at,attempts FROM invites WHERE id='angela'").first();
+      await db.prepare("UPDATE invites SET last_sent_at=0 WHERE id='angela'").run();
+      await db.prepare('UPDATE sms_send_usage SET attempts=50').run();
+      const response=await req('send',{});
+      assert.equal(response.status,429);assert.ok(Number(response.headers.get('Retry-After'))>0);
+      assert.equal((await response.json() as any).code,'sms_limit_reached');
+      assert.equal(sent.length,1,'Exhausted global quota must never contact Twilio');
+      assert.deepEqual(await db.prepare("SELECT challenge_expires_at,attempts FROM invites WHERE id='angela'").first(),before);
+      await db.prepare('UPDATE sms_send_usage SET attempts=1').run();
     });
     await t.test("wrong code fails; approved code creates session and cannot be replayed", async () => {
       for (let n=0;n<5;n++) assert.equal((await req("verify",{code:"000000"})).status,400);
@@ -99,6 +114,28 @@ test("invitation, SMS verification, and private media boundaries", async t => {
       assert.equal(response.headers.get("Cache-Control"),"no-store, private");
       assert.match(response.headers.get("Content-Disposition")!,/attachment/);
       assert.equal(response.headers.get("Referrer-Policy"),"no-referrer");
+    });
+    await t.test("provider failures retain their global send reservation",async()=>{
+      await db.prepare('DELETE FROM sms_send_usage').run();
+      await db.prepare("UPDATE invites SET last_sent_at=0 WHERE id='angela'").run();
+      sendFailure=true;
+      const before=sent.length;
+      assert.equal((await req('send',{})).status,503);
+      assert.equal(sent.length,before+1);
+      assert.equal((await db.prepare('SELECT sum(attempts) n FROM sms_send_usage').first<{n:number}>())?.n,1);
+      sendFailure=false;
+    });
+    await t.test("different invitations race for the last shared daily send",async()=>{
+      const other=await req('open',{token:'b'.repeat(64)});
+      const otherCookie=other.headers.get('Set-Cookie')!.split(';')[0];
+      await db.prepare("UPDATE invites SET last_sent_at=0 WHERE id IN ('angela','other')").run();
+      await db.prepare('UPDATE sms_send_usage SET attempts=49').run();
+      const before=sent.length;
+      const results=await Promise.all([cookies,otherCookie].map(Cookie=>mf.dispatchFetch('https://pilot.test/api/send',{
+        method:'POST',headers:{Cookie,Origin:'https://pilot.test','Content-Type':'application/json'},body:'{}'
+      })));
+      assert.deepEqual(results.map(r=>r.status).sort(),[200,429]);assert.equal(sent.length,before+1);
+      assert.equal((await db.prepare('SELECT sum(attempts) n FROM sms_send_usage').first<{n:number}>())?.n,50);
     });
     await t.test("revocation immediately invalidates session and invitation", async () => {
       await db.prepare("UPDATE invites SET revoked_at=1 WHERE id='angela'").run();
