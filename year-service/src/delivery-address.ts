@@ -17,7 +17,7 @@ export async function deliveryState(request:Request,env:AddressEnv,invite:Invita
  const person=await deliveryContact(env,invite),mode=addressMode(request,env);
  const address=verifiedDelivery(person);
  // Test verification is valid only inside the explicit local preview, never production.
- const verified=!!address&&!!person.address_verification_key&&(person.address_verifier==='google'||mode==='local_mock');
+ const verified=!!address&&!!person.address_verification_key&&(person.address_verifier==='google'||person.address_verifier==='admin'||mode==='local_mock');
  let country='US';try{const saved=JSON.parse(person.mailing_address||'null');if(['US','IN','NL'].includes(saved?.country))country=saved.country;}catch{}
  return {verified,recipientName:await invitationRecipientName(env.DB,invite,person.name),version:person.version,address:verified?address:null,country,mode,autocompleteAvailable:autocompleteAvailable(request,env)};
 }
@@ -38,7 +38,12 @@ export async function deliveryAddressRoute(request:Request,env:AddressEnv,invite
  if(!match||request.method!=='POST')return null;
  const data=await readBody(),person=await deliveryContact(env,invite),action=match[1];
  if(action==='confirm'){await confirmDelivery(request,env,invite,data.version);return Response.json(await deliveryState(request,env,invite));}
- if((await deliveryState(request,env,invite)).verified)throw new PrintProblem(409,'This invitation already has a verified address. Contact dad if it needs to change.');
+ const state=await deliveryState(request,env,invite);
+ if(state.country!=='US')throw new PrintProblem(409,'Contact mom or dad to update this address in admin.');
+ if(action==='verify'&&mailingAddress(data.address).country!=='US')throw new PrintProblem(400,'Enter a US address here. International addresses are managed in admin.');
+ if((action==='autocomplete'||action==='place')&&data.country!==undefined&&data.country!=='US')throw new PrintProblem(400,'Enter a US address here. International addresses are managed in admin.');
+ if(action==='save'&&typeof data.verificationId==='string'){const check=await env.DB.prepare('SELECT address_json FROM address_verification_challenges WHERE id=?1 AND person_id=?2 AND person_version=?3').bind(data.verificationId,person.id,person.version).first<{address_json:string}>();if(check&&mailingAddress(JSON.parse(check.address_json)).country!=='US')throw new PrintProblem(409,'International addresses are managed in admin.');}
+ if(state.verified)throw new PrintProblem(409,'This invitation already has a verified address. Contact dad if it needs to change.');
  if(data.version!==person.version)throw new PrintProblem(409,'The saved contact changed. Check the address again.');
  if(action==='autocomplete'||action==='place')return addressAutocompleteRoute(request,env,`/api/contacts/${person.id}/address/${action}`,()=>Promise.resolve(data));
  if(action==='save'&&(typeof data.verificationId!=='string'||data.verify!==true))throw new PrintProblem(400,'Verify and review the suggested address before saving it.');

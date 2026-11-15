@@ -11,15 +11,17 @@ export function openPersonCreate({name='',photoId='',showModal,requestApi,onSave
  const withAddress=form.elements.withAddress;
  const read=()=>Object.fromEntries(new FormData(form));
  function note(){
-  form.querySelector('[data-country-note]').textContent=country==='IN'?'India validation is in preview. If Google cannot confirm your address, save without checking and review it later. Include a delivery phone before shipping.':country==='NL'?'Keep the house number addition intact. A province is not needed.':'Include your apartment or unit where applicable.';
+  form.querySelector('[data-country-note]').textContent=country==='IN'?'Enter the address exactly as provided. Google checking and suggestions are disabled for India.':country==='NL'?'Keep the house number addition intact. A province is not needed.':'Include your apartment or unit where applicable.';
  }
  function ready(){
   form.querySelector('[data-person-fields]').disabled=busy;
   withAddress.disabled=busy||!!suggestion;form.elements.country.disabled=busy||!!suggestion;
   fields.disabled=busy||!withAddress.checked||!!suggestion;
   fields.hidden=!withAddress.checked||!!suggestion;
-  form.querySelector('[data-verification-note]').hidden=!withAddress.checked||!!suggestion;
+  form.querySelector('[data-verification-note]').hidden=!withAddress.checked||!!suggestion||country==='IN';
   actions.hidden=!!suggestion;
+  actions.querySelector('[value="verify"]').hidden=withAddress.checked&&country==='IN';
+  actions.querySelector('[value="save"]').textContent=country==='IN'?'Add person':'Save without checking';
   actions.querySelector('[value="verify"]').disabled=busy||withAddress.checked&&['loading','disabled'].includes(config.mode);
   actions.querySelector('[value="verify"]').textContent=withAddress.checked?'Check & review address':photoId?'Add & select person':'Add person';
   actions.querySelector('[value="save"]').hidden=!withAddress.checked;
@@ -28,7 +30,7 @@ export function openPersonCreate({name='',photoId='',showModal,requestApi,onSave
  }
  function bindSuggestions(){
   autocomplete?.destroy();autocomplete=null;
-  if(!config.autocompleteAvailable)return;
+  if(!config.autocompleteAvailable||country==='IN')return;
   autocomplete=bindAddressAutocomplete({form,person:{id:'new',version:0},simulated:config.mode==='local_mock',requestApi:(path,data,signal)=>requestApi(path,{...data,draftKey},signal),onAddress:address=>{
    const values=contactAddressValues(address);
    for(const key of ['line1','line2','city','state','postalCode','houseNumber','addition'])if(form.elements[key])form.elements[key].value=values[key]||'';
@@ -37,7 +39,7 @@ export function openPersonCreate({name='',photoId='',showModal,requestApi,onSave
  withAddress.onchange=()=>{error.textContent='';ready();};
  form.elements.country.addEventListener('change',()=>{
   drafts[country]=read();country=form.elements.country.value;
-  autocomplete?.destroy();body.innerHTML=contactAddressFields(country,drafts[country]||{});suggestion=null;error.textContent='';note();bindSuggestions();
+  autocomplete?.destroy();body.innerHTML=contactAddressFields(country,drafts[country]||{});suggestion=null;error.textContent='';note();bindSuggestions();ready();
  });
  function showReview(){
   fields.disabled=true;fields.hidden=true;actions.hidden=true;review.hidden=false;
@@ -47,7 +49,7 @@ export function openPersonCreate({name='',photoId='',showModal,requestApi,onSave
  }
  form.onsubmit=async event=>{
   event.preventDefault();if(busy)return;
-  const choice=event.submitter?.value||'verify',person={name:form.elements.name.value,phone:form.elements.phone.value};
+  const choice=withAddress.checked&&country==='IN'?'save':event.submitter?.value||'verify',person={name:form.elements.name.value,phone:form.elements.phone.value};
   error.textContent='';
   try{
    let address=null;

@@ -8,6 +8,7 @@ function draftKey(value:unknown){
 }
 export async function verifyNewContactAddress(request:Request,env:AddressEnv,actor:string,data:Record<string,unknown>){
  const key=draftKey(data.draftKey),mode=addressMode(request,env),original=mailingAddress(data.address);
+ if(original.country==='IN')throw new PrintProblem(409,'India addresses are entered manually in admin. Save without checking.');
  if(mode==='disabled')throw new PrintProblem(503,'Google verification is unavailable. You can save without checking.');
  const address=mode==='google'?await verifyGoogle(env,original):{...original,line1:original.line1.toUpperCase(),city:original.city.toUpperCase()};
  const id=token(),at=now();
@@ -39,10 +40,12 @@ export async function createContact(request:Request,env:AddressEnv,actor:string,
   const check=await env.DB.prepare('SELECT address_json,provider,created_at FROM contact_address_checks WHERE id=?1 AND draft_key=?2 AND actor=?3 AND expires_at>?4 AND provider=?5')
    .bind(data.verificationId,key,actor,now(),addressMode(request,env)).first<{address_json:string;provider:string;created_at:number}>();
   if(!check)throw new PrintProblem(409,'The address recommendation expired or changed. Check and review the address again.');
-  address=mailingAddress(JSON.parse(check.address_json));provider=check.provider;at=check.created_at;
+  address=mailingAddress(JSON.parse(check.address_json));if(address.country==='IN')throw new PrintProblem(409,'Save the India address manually without checking.');provider=check.provider;at=check.created_at;
  }
+ if(!verified&&address?.country==='IN'){provider='admin';at=now();}
+ const confirmed=verified||provider==='admin';
  const id='contact-'+(await digest(key)).slice(0,24),encoded=address?JSON.stringify(address):null;
- const values=[id,name,phone,encoded,verified?1:0,at,provider,verified?token():null,provider==='google'&&at!==null?at+28*86400:null];
+ const values=[id,name,phone,encoded,confirmed?1:0,at,provider,confirmed?token():null,provider==='google'&&at!==null?at+28*86400:null];
  const insert=`INSERT INTO people(id,name,phone,mailing_address,address_verified,address_verified_at,address_verifier,address_verification_key,address_verified_until)
   SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9 ${verified?'FROM contact_address_checks WHERE id=?10 AND draft_key=?11 AND actor=?12 AND expires_at>unixepoch()':''} RETURNING *`;
  try{

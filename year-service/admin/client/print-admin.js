@@ -8,7 +8,7 @@ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 export function invitationPrintEligibility(state,contacts,invite){
  const person=contacts.find(p=>p.id===invite.person_id),ids=new Set([invite.id,...(invite.memberIds||[invite.person_id])]);
  const count=new Set(state.draft.photos.filter(p=>!p.hidden&&p.recipients.length&&p.recipients.some(id=>ids.has(id))).map(p=>p.id)).size;
- const reason=!addressIsCurrent(person)?'Mailing contact needs a current verified US address':invite.revoked_at||invite.expires_at<=Date.now()/1000?'Invitation is inactive':'';
+ const reason=!addressIsCurrent(person)?'Mailing contact needs a current mailing address':invite.revoked_at||invite.expires_at<=Date.now()/1000?'Invitation is inactive':'';
  return {count,person,reason};
 }
 export function prunePrintPermissions(state,contacts){

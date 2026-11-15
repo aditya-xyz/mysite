@@ -912,3 +912,19 @@ guest UI runs behind existing admin authentication, using a fresh gift flow and
 preview-only address state. Final order buttons and server-side order requests
 are disabled. No test SMS code or guest authentication bypass is installed; see
 admin/README.md for recipient, prepared-proof and verification behavior.
+
+## Admin-managed international delivery addresses
+
+Order-page address entry is US-only, without a country selector. Existing accepted
+India/Netherlands addresses are displayed read-only; incomplete international
+records direct the recipient to contact the admins. Guest APIs reject attempts to
+enter or replace international addresses, including older foreign verification
+challenges. International destinations are never relabeled as US.
+
+Admin India address creation/editing uses manual confirmation, without Google
+validation or Places requests. Required fields are the two mailing lines, city,
+state and PIN; landmark/district/post-office extras are removed. Saving marks the
+address as admin-confirmed, not Google-verified, and both gift flows accept that
+India-only status. Address edits still invalidate the prior permission binding.
+US and Netherlands verification are unchanged. Existing unverified records need
+an explicit admin save/check; this release does not rewrite stored contacts.

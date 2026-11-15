@@ -14,9 +14,9 @@ test('country-specific new-person fields preserve complete mailing addresses',()
  assert.equal(dutch.line1,'Voorbeeldstraat 12 -2');assert.equal(dutch.postalCode,'1234 AB');assert.equal(dutch.state,'');
  assert.match(mailingLabel(dutch),/1234 AB  Amsterdam/);
  const indian=contactMailingAddress('IN',{line1:'Flat 4, Sample House',line2:'Sample Road',landmark:'Near sample school',district:'Sample district',postOffice:'Sample post office',city:'Pune',state:'Maharashtra',postalCode:'411001'});
- assert.equal(indian.line2,'Sample Road, Near sample school, Sample district, Sample post office');
+ assert.equal(indian.line2,'Sample Road');assert.doesNotMatch(contactAddressFields('IN'),/landmark|district|postOffice/i);
  assert.throws(()=>contactMailingAddress('NL',{line1:'Street'}),/house number/);
- assert.throws(()=>contactMailingAddress('IN',{line2:'a'.repeat(100),landmark:'b'.repeat(100)}),/too long/);
+ assert.throws(()=>contactMailingAddress('IN',{line2:'a'.repeat(121)}),/too long/);
  assert.match(contactAddressFields('US',{line1:'<script>'}),/&lt;script&gt;/);
 });
 
@@ -87,12 +87,12 @@ test('new contacts and optional reviewed addresses save atomically without invit
    for(const [country,address] of Object.entries(addresses)){
     const response=await req('contacts',{draftKey:crypto.randomUUID(),name:'Unchecked '+country,verify:false,address},'disabled.test');
     assert.equal(response.status,201,await response.clone().text());const person=(await response.json() as any).person;
-    assert.deepEqual(JSON.parse(person.mailing_address),address);assert.equal(person.address_verified,0);assert.equal(person.address_verifier,null);
+    assert.deepEqual(JSON.parse(person.mailing_address),address);assert.equal(person.address_verified,country==='IN'?1:0);assert.equal(person.address_verifier,country==='IN'?'admin':null);
    }
    assert.equal(googleCalls,before);
   });
   await t.test('Google review creates no person until accepted; all countries save verified',async()=>{
-   for(const [country,address] of Object.entries(addresses)){
+   for(const [country,address] of Object.entries(addresses).filter(([country])=>country!=='IN')){
     const draftKey=crypto.randomUUID(),before=await count();
     const check=await req('contacts/new/address/verify',{draftKey,address});assert.equal(check.status,200,await check.clone().text());
     assert.equal(await count(),before);assert.equal(lastCountry,country);
@@ -118,14 +118,15 @@ test('new contacts and optional reviewed addresses save atomically without invit
   });
   await t.test('Google failure can be followed by saving the same draft unchecked',async()=>{
    googleFailure=true;const draftKey=crypto.randomUUID(),before=await count();
-   const failed=await req('contacts/new/address/verify',{draftKey,address:addresses.IN});assert.equal(failed.status,503);assert.doesNotMatch(await failed.text(),/private upstream/);assert.equal(await count(),before);
-   assert.equal((await req('contacts',{draftKey,name:'Manual fallback',verify:false,address:addresses.IN})).status,201);googleFailure=false;
+   const failed=await req('contacts/new/address/verify',{draftKey,address:addresses.NL});assert.equal(failed.status,503);assert.doesNotMatch(await failed.text(),/private upstream/);assert.equal(await count(),before);
+   assert.equal((await req('contacts',{draftKey,name:'Manual fallback',verify:false,address:addresses.NL})).status,201);googleFailure=false;
   });
   await t.test('existing contacts can review changes and save verified or unchecked addresses for each country',async()=>{
    for(const [country,address] of Object.entries(addresses)){
     const created=await req('contacts',{draftKey:crypto.randomUUID(),name:'Edit '+country,verify:false,address});
     let person=(await created.json() as any).person;
     const changed={...address,line2:'Updated delivery details'};
+    if(country==='IN'){const before=googleCalls,edited=await req(`contacts/${person.id}/address`,{version:person.version,verify:false,address:changed});assert.equal(edited.status,200);person=(await edited.json() as any).person;assert.equal(person.address_verifier,'admin');assert.equal(person.address_verified,1);assert.deepEqual(JSON.parse(person.mailing_address),changed);assert.equal((await req(`contacts/${person.id}/address/verify`,{version:person.version,address:changed})).status,409);assert.equal(googleCalls,before);continue;}
     const check=await req(`contacts/${person.id}/address/verify`,{version:person.version,address:changed});
     assert.equal(check.status,200,await check.clone().text());const recommendation=await check.json() as any;
     assert.deepEqual(JSON.parse((await db.prepare('SELECT mailing_address FROM people WHERE id=?1').bind(person.id).first<any>()).mailing_address),address,'Review must leave the saved address unchanged');
@@ -134,9 +135,16 @@ test('new contacts and optional reviewed addresses save atomically without invit
     assert.equal(person.address_verified,1);assert.deepEqual(JSON.parse(person.mailing_address),recommendation.address);
     const manual=await req(`contacts/${person.id}/address`,{version:person.version,verify:false,address},'disabled.test');
     assert.equal(manual.status,200);person=(await manual.json() as any).person;
-    assert.equal(person.address_verified,0);assert.equal(person.address_verifier,null);assert.deepEqual(JSON.parse(person.mailing_address),address);
+    assert.equal(person.address_verified,country==='IN'?1:0);assert.equal(person.address_verifier,country==='IN'?'admin':null);assert.deepEqual(JSON.parse(person.mailing_address),address);
     assert.equal((await req(`contacts/${person.id}/address`,{version:person.version-1,verify:false,address})).status,409);
    }
+  });
+  await t.test('India manual entry preserves flat/building lines and never calls Google or Places',async()=>{
+   const address={country:'IN',line1:'504 Building 1 Sample Phase 8',line2:'Sample Road 2',city:'Thane',state:'Maharashtra',postalCode:'400610'},before=googleCalls,placesBefore=placesCalls,draftKey=crypto.randomUUID();
+   assert.equal((await req('contacts/new/address/verify',{draftKey,address})).status,409);
+   for(const action of ['autocomplete','place'])assert.equal((await req(`contacts/new/address/${action}`,{draftKey,version:0,sessionToken:crypto.randomUUID(),country:'IN',input:'504 Building',placeId:'sample-place'})).status,409);
+   const result=await req('contacts',{draftKey,name:'Manual India',verify:false,address});assert.equal(result.status,201);const person=(await result.json() as any).person;
+   assert.equal(person.address_verified,1);assert.equal(person.address_verifier,'admin');assert.equal(person.address_verified_until,null);assert.ok(person.address_verification_key);assert.deepEqual(JSON.parse(person.mailing_address),address);assert.equal(googleCalls,before);assert.equal(placesCalls,placesBefore);
   });
   await t.test('invalid input and forged verification flags fail before creating a person',async()=>{
    const before=await count(),base={draftKey:crypto.randomUUID(),name:'Invalid',verify:false};

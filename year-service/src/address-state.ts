@@ -1,12 +1,13 @@
 export interface AddressState {
  address_verified?:unknown; address_verifier?:unknown;
- address_verified_at?:unknown; address_verified_until?:unknown;
+ mailing_address?:unknown;address_verified_at?:unknown; address_verified_until?:unknown;
 }
 // Google verification metadata has a short lifetime. The confirmed contact
 // address itself is owned/confirmed by the admin, not a cached provider response.
 export function addressVerificationCurrent(person:AddressState|null|undefined,at=Math.floor(Date.now()/1000)) {
  if(!person?.address_verified)return false;
  if(person.address_verifier==='local_mock')return true;
+ if(person.address_verifier==='admin'){try{return JSON.parse(String(person.mailing_address)).country==='IN';}catch{return false;}}
  return person.address_verifier==='google'&&typeof person.address_verified_at==='number'&&
   typeof person.address_verified_until==='number'&&person.address_verified_at<=at&&
   person.address_verified_until>at&&at<person.address_verified_at+28*86400;

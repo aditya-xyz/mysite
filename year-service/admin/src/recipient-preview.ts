@@ -48,7 +48,7 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
  }
  if(request.method==='POST'&&action==='delivery-address/verify'){
   if(addressMode(request,env)!=='google')throw new PrintProblem(503,'Google verification is unavailable. Preview does not change the contact.');
-  const data=await readBody();return Response.json({address:await verifyGoogle(env,mailingAddress(data.address)),verificationId:'preview-only',previewOnly:true});
+  const data=await readBody(),address=mailingAddress(data.address);if(address.country!=='US')throw new PrintProblem(400,'International addresses are managed in admin.');return Response.json({address:await verifyGoogle(env,address),verificationId:'preview-only',previewOnly:true});
  }
  // Explicit allowlist: checkout, contact saves, SMS and authentication never enter guest routes.
  throw new PrintProblem(403,'This admin preview cannot place orders, send texts or save contact changes.');

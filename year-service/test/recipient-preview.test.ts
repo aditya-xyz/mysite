@@ -24,11 +24,7 @@ test('admin recipient preview is country-aware and never saves contacts, session
    const address={country,line1:'Synthetic street 12',line2:'',city:country==='IN'?'Pune':'Amsterdam',state:country==='IN'?'Maharashtra':'',postalCode:country==='IN'?'411001':'1012 JS'};
    await DB.prepare('UPDATE people SET mailing_address=?1 WHERE id=?2').bind(JSON.stringify(address),'preview-person').run();
    const unchanged=await DB.prepare('SELECT * FROM people WHERE id=?1').bind('preview-person').first();
-   const google=mock.method(globalThis,'fetch',async (_url:any,init:any)=>{
-    const payload=JSON.parse(init.body);assert.equal(payload.address.regionCode,country);assert.equal(payload.enableUspsCass,false);
-    return Response.json({result:{verdict:{addressComplete:true,validationGranularity:'PREMISE'},address:{postalAddress:{...payload.address,regionCode:country}}}});
-   });
-   try{const checked=await (await call('delivery-address/verify',{address}))!.json() as any;assert.equal(checked.address.country,country);assert.equal(checked.previewOnly,true);}finally{google.mock.restore();}
+   await assert.rejects(()=>call('delivery-address/verify',{address}),/International addresses are managed in admin/);
    assert.deepEqual(await DB.prepare('SELECT * FROM people WHERE id=?1').bind('preview-person').first(),unchanged,'Google checks cannot change recipient contact data');
    const delivery=await (await call('delivery-address'))!.json() as any;assert.equal(delivery.country,country);assert.equal(delivery.previewOnly,true);assert.equal(delivery.verified,false);
    const data=await (await call('journal'))!.json() as any;assert.equal(data.adminPreview,true);assert.equal(data.gift.mode,'preview');assert.equal(data.gift.hasOrder,false);assert.equal(data.keepsake.enabled,true);assert.match(data.keepsake.defaultFrames.moss,/invitation=preview-invite/);

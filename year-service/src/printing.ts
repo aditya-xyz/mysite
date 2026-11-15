@@ -106,7 +106,7 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  SELECT ?1,i.id,e.year,?2,'preparing',p.mailing_address,?17,?16||CASE WHEN ?13=1 THEN coalesce(nullif(trim(json_extract(e.published_json,'$.defaultPrintNote')),''),json_extract(e.published_json,'$.printNote')) ELSE json_extract(e.published_json,'$.printNote') END,json_extract(e.published_json,'$.authors'),?3,?4,e.published_version,?11,?12,?13,?16||coalesce(nullif(trim(json_extract(e.published_json,'$.defaultPrintNote')),''),json_extract(e.published_json,'$.printNote')),'folded',?14,?15
  FROM invites i JOIN editions e ON e.year=i.edition_year JOIN people p ON p.id=i.person_id
  WHERE i.id=?5 AND i.print_order_count=0 AND i.version=?6 AND i.revoked_at IS NULL AND i.expires_at>?7 AND e.is_active=1 AND e.allow_print_orders=1 AND e.published_version=?8
- AND p.id=?9 AND p.version=?10 AND p.address_verified=1 AND p.address_verifier IN ('local_mock','google') AND (p.address_verifier!='google' OR p.address_verified_until>?7)
+ AND p.id=?9 AND p.version=?10 AND p.address_verified=1 AND (p.address_verifier IN ('local_mock','google') OR (p.address_verifier='admin' AND json_extract(p.mailing_address,'$.country')='IN')) AND (p.address_verifier!='google' OR p.address_verified_until>?7)
  AND i.allow_print=1 AND i.print_address_key=p.address_verification_key
  AND EXISTS(SELECT 1 FROM keepsake_defaults k WHERE k.year=e.year AND k.revision=?12)
  AND NOT EXISTS(SELECT 1 FROM print_orders WHERE invitation_id=i.id AND year=e.year AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')) ON CONFLICT DO NOTHING RETURNING id`)

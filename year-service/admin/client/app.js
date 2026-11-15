@@ -251,7 +251,7 @@ function deleteMediaSelection(items){
     }finally{busy=false;delete modal.dataset.bulkDeleting;submit.disabled=cancel.disabled=review.disabled=close.disabled=false;updateBadge();}
   };
 }
-function mailingSummary(person){let a;try{a=JSON.parse(person.mailing_address);}catch{}return a?`<address>${[a.line1,a.line2,[a.city,a.state,a.postalCode].filter(Boolean).join(', '),({US:'United States',IN:'India',NL:'Netherlands'})[a.country]].filter(Boolean).map(esc).join('<br>')}</address><span class="badge ${addressIsCurrent(person)?'active-badge':''}">${addressIsCurrent(person)?'Verified address':person.address_verified?'Verification expired':'Not verified'}</span>`:'<span class="no-address">No address yet</span>';}
+function mailingSummary(person){let a;try{a=JSON.parse(person.mailing_address);}catch{}return a?`<address>${[a.line1,a.line2,[a.city,a.state,a.postalCode].filter(Boolean).join(', '),({US:'United States',IN:'India',NL:'Netherlands'})[a.country]].filter(Boolean).map(esc).join('<br>')}</address><span class="badge ${addressIsCurrent(person)?'active-badge':''}">${person.address_verifier==='admin'?'Saved by admin':addressIsCurrent(person)?'Verified address':person.address_verified?'Verification expired':'Not verified'}</span>`:'<span class="no-address">No address yet</span>';}
 function directoryRows(query=''){
   const matches=contacts.filter(p=>(p.name+' '+(p.phone||'')).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   return matches.map(p=>`<article class="person"><div class="person-identity"><span class="person-avatar">${esc(p.name.slice(0,1).toUpperCase())}</span><div><strong>${esc(p.name)}</strong><p>${esc(p.phone||'No phone number · Can join a shared invitation')}</p></div></div><div class="person-address">${mailingSummary(p)}</div><div class="person-actions"><button class="secondary" data-edit-contact="${esc(p.id)}">Edit details</button><button class="quiet" data-person-usage="${esc(p.id)}">Where used</button><button class="quiet danger" data-delete-contact="${esc(p.id)}" aria-label="Delete ${esc(p.name)}">Delete</button></div></article>`).join('')||'<div class="empty">No people found.<span>Add someone to your directory, or try a different search.</span></div>';
@@ -499,7 +499,7 @@ function addPerson({photoId='',name=''}={}){
       if(photoId){const photo=state.draft.photos.find(p=>p.id===photoId);if(photo){photo.recipients=[...new Set([...photo.recipients,person.id])];mark();}}
       modal.close();render();
       if(photoId)app.querySelector(`[data-picker="${photoId}"] .picker-summary`)?.focus();
-      toast(photoId?'Person added and selected. No invitation was created.':person.mailing_address?`Person and ${addressIsCurrent(person)?'verified':'unverified'} address saved. No invitation was created.`:'Person added. No invitation was created.');
+      toast(photoId?'Person added and selected. No invitation was created.':person.address_verifier==='admin'?'Person and address saved as entered. No invitation was created.':person.mailing_address?`Person and ${addressIsCurrent(person)?'verified':'unverified'} address saved. No invitation was created.`:'Person added. No invitation was created.');
   }});
 }
 function usageMarkup(usage){

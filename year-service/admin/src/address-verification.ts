@@ -44,6 +44,7 @@ export function googleMailingAddress(response:unknown,expectedCountry:MailingAdd
  catch{throw new PrintProblem(422,'Google did not return a complete mailing address.');}
 }
 export async function verifyGoogle(env:AddressEnv,address:MailingAddress){
+ if(address.country==='IN')throw new PrintProblem(409,'India addresses are entered manually in admin. Save the address without Google checking.');
  await reserveGoogleRequest(env);
  let response:Response;
  try{response=await fetch('https://addressvalidation.googleapis.com/v1:validateAddress',{
@@ -84,6 +85,7 @@ export async function addressAdminRoute(request:Request,env:AddressEnv,path:stri
  }
  const mode=addressMode(request,env);
  if(route[2]){
+  if(mailingAddress(data.address).country==='IN')throw new PrintProblem(409,'India addresses are entered manually in admin. Save without checking.');
   if(mode==='disabled')throw new PrintProblem(503,'Address validation is not configured. You can save an unverified address.');
   const original=mailingAddress(data.address),address=mode==='google'?await verifyGoogle(env,original):{...original,line1:original.line1.toUpperCase(),line2:original.line2.toUpperCase(),city:original.city.toUpperCase()};
   const at=now(),verificationId=token();
@@ -91,10 +93,11 @@ export async function addressAdminRoute(request:Request,env:AddressEnv,path:stri
   return Response.json({verificationId,address,simulated:mode==='local_mock',expiresAt:at+900});
  }
  if(typeof data.verify!=='boolean')throw new PrintProblem(400,'Choose whether to verify the address.');
- if(!data.verify)return Response.json({person:await persistAddress(env,id,data.version as number,mailingAddress(data.address)),simulated:false});
+ if(!data.verify){const address=mailingAddress(data.address);return Response.json({person:await persistAddress(env,id,data.version as number,address,address.country==='IN'?{provider:'admin',at:now()}:undefined),simulated:false});}
  if(typeof data.verificationId==='string'){
   const challenge=await env.DB.prepare('DELETE FROM address_verification_challenges WHERE id=?1 AND person_id=?2 AND person_version=?3 AND expires_at>?4 AND provider=?5 RETURNING *').bind(data.verificationId,id,data.version as number,now(),mode).first<{address_json:string;provider:string;created_at:number}>();
   if(!challenge)throw new PrintProblem(409,'The address suggestion expired or was already used. Verify the address again.');
+  if(mailingAddress(JSON.parse(challenge.address_json)).country==='IN')throw new PrintProblem(409,'Save the India address manually without checking.');
   return Response.json({person:await persistAddress(env,id,data.version as number,mailingAddress(JSON.parse(challenge.address_json)),{provider:challenge.provider,at:challenge.created_at}),simulated:challenge.provider==='local_mock'});
  }
  // Compatibility for the original loopback-only fixture. Real Google verification

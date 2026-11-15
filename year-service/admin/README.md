@@ -1277,3 +1277,25 @@ The preview dialog now contains only its recipient selector and Open button. The
 Worker passes the original preview-directory URL to Assets instead of rewriting
 it to `index.html`, preventing Assets' canonical redirect from looping. Page,
 asset and API access still require existing admin authentication.
+
+## Manual India address entry and US-only guest forms
+
+India uses **Save address** / **Add person** without Google validation or Places.
+Only the two mailing lines, city, state and PIN remain; landmark, district and
+post-office extras were removed. Save the lines exactly as supplied. The stored
+`admin` confirmation is accepted only for India, with its own version/key; it is
+not presented as Google verification and has no Google freshness window. Changing
+or deleting the address still invalidates existing gift address bindings. Both
+approved admins retain the same permissions. US/Netherlands checks remain.
+
+Guests enter only US addresses. A saved accepted international address is shown
+as the delivery summary; an unfinished international address requires admin work.
+Provider/order snapshots preserve the saved country and mailing lines. Tests
+cover both order paths with an admin-confirmed India address, rejection of guest
+country changes, and zero India Google/Places calls. A private, ignored test used
+the supplied address end to end: both local order snapshots and the Handwrytten
+payload preserved its lines; real Printful estimates were $24.74 enamel/$23.54
+navy15oz and the Handwrytten destination-aware quote was $5.89. Its unsent test
+draft was removed under the shared basket lock. No live order was submitted and
+no production contact was created. Catalog choices and budget approvals remain
+unchanged.

@@ -44,5 +44,15 @@ test('guest delivery names all invitation members while verifying and saving onl
   await db.prepare("UPDATE invites SET revoked_at=unixepoch() WHERE id='invite'").run();assert.equal((await api()).status,401);
   assert.equal(validationCalls,1,'Stored address reads and confirmation do not reverify or fulfill orders');
   assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);assert.equal((await db.prepare('SELECT count(*) n FROM print_orders').first<any>()).n,0);
+  await db.prepare("UPDATE invites SET revoked_at=NULL WHERE id='invite'").run();
+  const india={country:'IN',line1:'504 Building 1 Sample Phase 8',line2:'Sample Road 2',city:'Thane',state:'Maharashtra',postalCode:'400610'};
+  await db.prepare("UPDATE people SET mailing_address=?1 WHERE id='contact'").bind(JSON.stringify(india)).run();
+  await db.prepare("UPDATE people SET address_verified=1,address_verifier='admin',address_verified_at=unixepoch(),address_verification_key='manual-india',version=version+1 WHERE id='contact'").run();
+  const manual=(await (await api()).json()) as any;assert.equal(manual.verified,true);assert.deepEqual(manual.address,india);const before=validationCalls;
+  assert.equal((await api('confirm',{version:manual.version})).status,200);
+  assert.equal((await api('verify',{version:manual.version,address:canonical})).status,409,'Guest must not replace the saved India address with US input');assert.equal(validationCalls,before);
+  await db.prepare("UPDATE people SET mailing_address=NULL,version=version+1 WHERE id='contact'").run();
+  const empty=(await (await api()).json()) as any;assert.equal(empty.country,'US');
+  assert.equal((await api('verify',{version:empty.version,address:india})).status,400);assert.equal(validationCalls,before);
  }finally{await mf.dispose();}
 });

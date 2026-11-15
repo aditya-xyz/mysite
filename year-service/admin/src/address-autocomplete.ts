@@ -24,6 +24,7 @@ export async function addressAutocompleteRoute(request:Request,env:AddressEnv,pa
  }
  if(!autocompleteAvailable(request,env))throw new PrintProblem(503,'Address suggestions are not configured. You can enter the address manually.');
  const country=data.country===undefined?'US':data.country;if(!['US','IN','NL'].includes(String(country)))throw new PrintProblem(400,'Choose a supported country.');
+ if(country==='IN')throw new PrintProblem(409,'India addresses are entered manually. Google suggestions are disabled.');
  const simulated=addressMode(request,env)==='local_mock';
  if(route[2]==='autocomplete'){
   if(typeof data.input!=='string'||data.input.length>200)throw new PrintProblem(400,'Enter a shorter address search.');

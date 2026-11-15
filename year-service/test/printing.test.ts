@@ -399,5 +399,12 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    const verified=await admin('contacts/contact/address',{version:r.person.version,address,verify:true});assert.equal(verified.status,200);const result=await verified.json() as any;assert.equal(result.simulated,true);assert.equal(result.person.address_verifier,'local_mock');assert.ok(result.person.address_verification_key);
    assert.equal((await status()).eligible,false,'Reverification cannot restore an old print permission automatically');
   });
+  await t.test('admin-confirmed India address can save a test keepsake without Google',async()=>{
+   await reset();const india={line1:'504 Building 1 Sample Phase 8',line2:'Sample Road 2',city:'Thane',state:'Maharashtra',postalCode:'400610',country:'IN'};
+   const person=await db.prepare("SELECT version FROM people WHERE id='contact'").first<any>();
+   const response=await admin('contacts/contact/address',{version:person.version,verify:false,address:india});assert.equal(response.status,200);const saved=(await response.json() as any).person;assert.equal(saved.address_verifier,'admin');assert.equal(saved.address_verified,1);
+   await db.prepare("UPDATE invites SET print_address_key=?1 WHERE id='invite'").bind(saved.address_verification_key).run();
+   const before=vendorCalls.length,result=await guest('print/orders',await order());assert.equal(result.status,200,await result.clone().text());const row=await db.prepare('SELECT address_json,handwrytten_order_json FROM print_orders').first<any>();assert.deepEqual(JSON.parse(row.address_json),india);const recipient=JSON.parse(row.handwrytten_order_json).addresses[0];assert.equal(recipient.to_address1,india.line1);assert.equal(recipient.to_address2,india.line2);assert.equal(recipient.to_country,'India');assert.equal(recipient.to_zip,'400610');assert.equal(vendorCalls.length,before);
+  });
  }finally{await mf.dispose();}
 });
