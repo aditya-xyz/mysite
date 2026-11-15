@@ -43,7 +43,8 @@ if(action==='seed') {
   console.log('Installed four server-side secrets.');
 } else if(action==='printful-secret') {
   if(!vars.PRINTFUL_API_TOKEN)throw new Error('Missing PRINTFUL_API_TOKEN in .dev.vars.');
-  const result=spawnSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','secret','bulk'],{input:JSON.stringify({PRINTFUL_API_TOKEN:vars.PRINTFUL_API_TOKEN}),encoding:'utf8'});
+  const config=process.argv.includes('--admin')?['--config','admin/wrangler.jsonc']:[];
+  const result=spawnSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','secret','bulk',...config],{input:JSON.stringify({PRINTFUL_API_TOKEN:vars.PRINTFUL_API_TOKEN}),encoding:'utf8'});
   if(result.status!==0)throw new Error('Installing the Printful Worker secret failed. Sensitive output suppressed.');
   console.log('Installed the server-only Printful secret. Actual ordering remains simulated.');
 } else if(action==='handwrytten-secret') {

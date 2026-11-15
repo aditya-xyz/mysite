@@ -63,7 +63,7 @@ export function mountPrintAdmin({view,state,contacts,api,requestApi,mark,saveDra
     if(result.status==='ready'){
      quote=result.quote;o.handwrytten_quote_json=JSON.stringify(quote);o.handwrytten_preview_id=result.proofId;
      region.innerHTML=markup();bindFoldedCard(region);button?.remove();message.textContent='Handwrytten picture proof · note illustrated locally.';
-     quoteRegion.innerHTML=printQuoteMarkup(quote);quoteMessage.textContent='Quote ready. Nothing submitted; orders remain simulated.';quoteButton.textContent='Refresh checkout total';
+     quoteRegion.innerHTML=printQuoteMarkup(quote);quoteMessage.textContent=quote.submitted?'Test Mode checkout total ready. No physical mail.':'Quote ready. Nothing submitted; orders remain simulated.';quoteButton.textContent='Refresh checkout total';
     }else{quoteMessage.textContent='The saved card proof is still preparing. Check the total again shortly.';quoteButton.textContent='Check checkout total';}
    }catch(error){if(quoteRegion.isConnected){quoteMessage.textContent=error.message;quoteButton.textContent='Retry checkout total';}}
    finally{if(quoteButton.isConnected)quoteButton.disabled=false;if(button?.isConnected)button.disabled=false;}

@@ -1199,3 +1199,12 @@ New Printful-enabled simulated mug orders freeze `print.png` plus layout version
 to delete its simulated order and both private artwork files. Actual mug ordering
 remains disabled. Admin Prepare previews must prepare the new versioned sources;
 Printful mockups then fill in under the existing background rate limits.
+
+International shipping estimates use the immutable saved order destination for
+US/India/Netherlands. Mug history exposes Get/Refresh shipping estimate and its
+$25 budget result; provision the existing Printful read-only token with
+`node scripts/provision.mjs printful-secret --admin`. Printful ordering remains
+simulated. Saved international print simulations use quote-only Handwrytten Test
+Mode baskets, remove their unsent drafts, and never call basket send; apply
+migration 0033 before deployment. Automatic test orders retain their existing
+$10 budget and Test Mode checks. Quote totals may exclude import duties.

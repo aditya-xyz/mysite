@@ -58,12 +58,12 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
    await handwryttenTestMutation(env,'/orders/placeBasket',{...payload,return_address_id:sender.id,shipping_method_id:1,addresses:payload.addresses.map((a:any)=>({...a,return_address_id:sender.id,to_country_id:country.id}))});
   }
   const basket=await handwryttenBasket(env),checked=checkedBasket(basket,{orderId:job.order_id,cardId:payload.card_id,vendorId:job.vendor_order_id||undefined,country:country.name});
-  const quote={currency:'USD',quantity:1,amounts:checked.amounts,quotedAt:now(),sender,destination:country.name,source:'handwrytten-test-basket',submitted:false};
+  const quote={currency:'USD',quantity:1,amounts:checked.amounts,quotedAt:now(),sender,destination:country.name,source:'handwrytten-test-basket',submitted:false,testMode:true,quoteOnly:!!job.quote_only,maxCents:printOrderLimitCents,withinBudget:checked.amounts.total<=printOrderLimitCents};
   await env.DB.batch([env.DB.prepare("UPDATE print_fulfillment SET state='staged',vendor_order_id=?1,basket_item_id=?2,updated_at=?3 WHERE order_id=?4").bind(checked.vendorId,checked.basketId,now(),job.order_id),env.DB.prepare('UPDATE print_orders SET handwrytten_quote_json=?1 WHERE id=?2').bind(JSON.stringify(quote),job.order_id)]);
-  if(checked.amounts.total>printOrderLimitCents){
+  if(job.quote_only||checked.amounts.total>printOrderLimitCents){
    await handwryttenTestMutation(env,'/basket/remove',{id:checked.basketId});
-   if(itemsOf(await handwryttenBasket(env)).some(i=>Number(i.id)===checked.vendorId))throw new PrintProblem(502,'The over-limit draft could not be removed.');
-   canRelease=true;await env.DB.prepare('UPDATE print_fulfillment SET basket_item_id=NULL WHERE order_id=?1').bind(job.order_id).run();await update('review','Checkout exceeds the $10 household limit. No order was submitted.');return;
+   if(itemsOf(await handwryttenBasket(env)).some(i=>Number(i.id)===checked.vendorId))throw new PrintProblem(502,'The unsent test draft could not be removed.');
+   canRelease=true;await env.DB.prepare('UPDATE print_fulfillment SET basket_item_id=NULL WHERE order_id=?1').bind(job.order_id).run();await update('review',job.quote_only?null:'Checkout exceeds the $10 household limit. No order was submitted.');return;
   }
   // Re-read exact basket identities, total and funding immediately before submission.
   const final=checkedBasket(await handwryttenBasket(env),{orderId:job.order_id,cardId:payload.card_id,vendorId:checked.vendorId,country:country.name});

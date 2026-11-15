@@ -748,21 +748,26 @@ reserve. Shipping reserves use the highest STANDARD rate measured across mainlan
 US/Alaska/Hawaii, plus the $0.40 holiday surcharge and a $0.50 buffer, rounded up
 to whole dollars; unknown combinations use an $11 reserve until reviewed. These
 are planning assumptions, not a promise of the maximum tax or shipping charge.
-Checkout uses this budget-filtered saved catalog, without an address-specific price check.
+US checkout uses this budget-filtered saved catalog. India and Netherlands checkout also requires a destination-specific estimate before consuming the allowance.
 The current filtered catalog has five styles /23 variants; travel mugs fail price
 filtering. All Printful colors/sizes that pass the budget are included. Font
 choices are our rendered caption artwork, not catalog variants. An unavailable
 preferred variant falls back to the first available curated mug.
 
-Authenticated catalog and quote endpoints never create orders. Quotes use only
-the invitation contact's verified US street/city/state/ZIP, with stale address
-versions rejected. No name, phone, email or artwork is sent for an estimate.
-The diagnostic estimate endpoint remains available, but guest checkout does not
-call it or display a supplier price. Simulated claims validate the selected tuple
-against the budget-filtered saved catalog, then save the verified address and
-order directly; new claims have no quote breakdown. Historical quotes remain in
-owner history. The $25 cutoff is based on catalog planning reserves, rather than
-a verified destination-specific total. No physical order or payment is created.
+Authenticated catalog and quote endpoints never create orders. Estimates use the
+saved verified street, city, region and postal code for US, India or Netherlands;
+no name, phone, email or artwork is sent. India uses `state_name`; Netherlands
+omits state. International availability includes fulfillment outside the US and
+uses `/shipping/rates` to select an available method before `/orders/estimate-costs`.
+The complete USD total, including shipping, tax/VAT and reported fees, must fit
+$25 before an international simulated claim stores artwork or consumes allowance.
+Unavailable delivery, incomplete prices and provider failures leave allowance intact.
+Import duties may be additional; the estimate is not a guarantee of landed cost.
+US claims retain the catalog planning-reserve check. Admin mug history can obtain
+or refresh the estimate for the immutable saved destination/configuration. Guest
+and admin estimates share household/global rate limits. No physical order or
+payment is created. Admin requires the same server-only Printful token; install it
+with `node scripts/provision.mjs printful-secret --admin`.
 Apply migrations 0019 and 0020 before deploying both Workers.
 
 Printful mockups compose the selected published cutout and caption/font into a
@@ -884,3 +889,19 @@ validated locally. Two distinct cards in one envelope remains unconfirmed with
 the provider; a successful design API call does not establish packaging support.
 The existing1200×1500 digital keepsakes also need approved padding/formatting for
 5×7 production artwork before any future physical fulfillment.
+
+## International quotes and shared country selector
+
+Apply `0033_handwrytten_quote_only.sql` before deploying either Worker. Saved
+India and Netherlands print simulations can request a destination-aware Handwrytten
+quote. The domestic `/outbound/process` preview is not used for these countries.
+Instead, an isolated Test Mode basket supplies the actual checkout breakdown;
+the worker then removes its own unsent draft and verifies removal. The durable
+`quote_only` flag prevents both the request and later cron retries from sending it.
+Uncertain mutations hold the basket for review. Existing automatic test jobs keep
+their original behavior and budget gate. Keep `PRINT_ORDER_MODE=handwrytten_test`
+and `ORDER_MODE=simulation`; no live order adapter is enabled.
+
+Guest delivery country and mug customization share `web/custom-select.js`,
+including the same styling, selected tick, keyboard navigation and Escape behavior.
+The address form preserves each country's draft when switching US/India/Netherlands.

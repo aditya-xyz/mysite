@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {tickPrintFulfillment,checkedBasket} from '../src/handwrytten-fulfillment.ts';
+import {quoteSavedPrintOrder} from '../src/handwrytten-quote.ts';
 import {googleMailingAddress} from '../admin/src/address-verification.ts';
 import {mailingAddress} from '../src/printing.ts';
 test('automatic test fulfillment serializes checkout, enforces destination totals and never replays uncertain mutations',async t=>{
@@ -10,6 +11,7 @@ test('automatic test fulfillment serializes checkout, enforces destination total
  const db=await mf.getD1Database('DB'),media=await mf.getR2Bucket('MEDIA');
  await db.exec("CREATE TABLE editions(year INTEGER PRIMARY KEY); CREATE TABLE invites(id TEXT PRIMARY KEY); CREATE TABLE print_orders(id TEXT PRIMARY KEY,invitation_id TEXT,year INTEGER,status TEXT,format TEXT,artwork_key TEXT,default_artwork_key TEXT,card_count INTEGER,handwrytten_preview_id TEXT,handwrytten_order_json TEXT,address_json TEXT,allowance_reset_at INTEGER,handwrytten_quote_json TEXT,provider_id TEXT,updated_at INTEGER); CREATE TABLE handwrytten_previews(id TEXT PRIMARY KEY,invitation_id TEXT,year INTEGER,status TEXT,card_id INTEGER,front_key TEXT,inside_key TEXT,back_key TEXT,updated_at INTEGER); INSERT INTO editions VALUES(2026); INSERT INTO invites VALUES('invite');");
  await db.batch((await readFile('migrations/0029_handwrytten_fulfillment.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+ await db.exec(await readFile('migrations/0033_handwrytten_quote_only.sql','utf8'));
  const env={DB:db as any,MEDIA:media as any,HANDWRYTTEN_API_KEY:'synthetic-key',HANDWRYTTEN_PREVIEWS_ENABLED:'true',PRINT_ORDER_MODE:'handwrytten_test'};
  let mode=1,postage=.82,basket:any[]=[],sendFailure=false,stageFailure=false,missingTax=false,externalAddition=false,unverifiable=false,stealLease=false;
  const calls:{path:string;body:any}[]=[];
@@ -43,6 +45,23 @@ test('automatic test fulfillment serializes checkout, enforces destination total
   for(const country of ['US','IN','NL'])await t.test(country+' uses exact destination-aware postage and automatically submits once',async()=>{
    await reset(country);await Promise.all([tickPrintFulfillment(env),tickPrintFulfillment(env)]);await tickPrintFulfillment(env);
    const s=await state(),q=JSON.parse(s.handwrytten_quote_json);assert.equal(s.state,'submitted');assert.equal(s.order_status,'submitted');assert.equal(s.provider_id,'handwrytten-test-100');assert.equal(q.amounts.total,country==='US'?486:589);assert.equal(q.amounts.postage,country==='US'?82:185);assert.equal(q.submitted,true);assert.equal(calls.filter(c=>c.path.endsWith('/basket/send')).length,1);
+  });
+  for(const country of ['IN','NL'])await t.test(country+' quote-only requests price the saved destination and remove their draft without submitting',async()=>{
+   await reset(country);await db.prepare('DELETE FROM print_fulfillment').run();
+   const result=await quoteSavedPrintOrder(env as any,2026,'print-test');
+   assert.equal(result.status,'ready');assert.equal(result.quote.amounts.postage,185);assert.equal(result.quote.amounts.total,589);
+   assert.equal(result.quote.destination,country==='IN'?'India':'Netherlands');assert.equal(result.quote.quoteOnly,true);assert.equal(result.quote.submitted,false);
+   const current=await state();assert.equal(current.order_status,'simulated');assert.equal(current.quote_only,1);assert.equal(current.state,'review');
+   assert.equal(basket.length,0);assert.equal(calls.filter(c=>c.path.endsWith('/basket/remove')).length,1);
+   assert.ok(calls.every(c=>!c.path.endsWith('/basket/send')&&!c.path.endsWith('/outbound/process')));
+   const count=calls.length;await tickPrintFulfillment(env);assert.equal(calls.length,count,'Cron must never submit a completed quote-only request');
+   await quoteSavedPrintOrder(env as any,2026,'print-test');assert.equal(calls.filter(c=>c.path.endsWith('/orders/placeBasket')).length,2,'An explicit refresh may prepare a fresh quote after removing its previous draft');
+   assert.ok(calls.every(c=>!c.path.endsWith('/basket/send')));
+  });
+  await t.test('international quote-only work is blocked before mutation when Test Mode is off',async()=>{
+   await reset('IN');await db.prepare('DELETE FROM print_fulfillment').run();mode=0;
+   await assert.rejects(()=>quoteSavedPrintOrder(env as any,2026,'print-test'),/Test Mode/);
+   assert.ok(calls.every(c=>!c.path.endsWith('/orders/placeBasket')&&!c.path.endsWith('/basket/send')));
   });
   await t.test('a worker that lost its lease cannot stage an order or release another worker’s lock',async()=>{await reset();stealLease=true;await tickPrintFulfillment(env);assert.equal(calls.some(c=>c.path.endsWith('/orders/placeBasket')),false);assert.equal((await db.prepare('SELECT owner FROM print_fulfillment_lock').first<any>()).owner,'another-worker');});
   await t.test('exactly $10 is accepted',async()=>{await reset();postage=5.96;await tickPrintFulfillment(env);assert.equal((await state()).state,'submitted');assert.equal(JSON.parse((await state()).handwrytten_quote_json).amounts.total,1000);});

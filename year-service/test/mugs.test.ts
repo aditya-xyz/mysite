@@ -12,7 +12,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
  const {publicKey,privateKey}=await generateKeyPair('RS256',{extractable:true});
  const jwk={...await exportJWK(publicKey),kid:'mugs',alg:'RS256',use:'sig'};
  const jwt=await new SignJWT({email:'owner@example.com'}).setProtectedHeader({alg:'RS256',kid:'mugs'}).setSubject('owner').setIssuedAt().setIssuer(issuer).setAudience('mugs').setExpirationTime('10m').sign(privateKey);
- let estimatedTotal=14.24,providerFailed=false;const providerCalls:string[]=[];
+ let estimatedTotal=14.24,providerFailed=false,estimateCountry='US';const providerCalls:string[]=[];
  const shared={modules:true,compatibilityDate:'2026-08-06',d1Databases:{DB:'mug-db'},r2Buckets:{MEDIA:'mug-media'},outboundService:async(req:Request)=>{
   if(req.url.startsWith('https://files.cdn.printful.com/'))return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=','base64'),{headers:{'Content-Type':'image/png'}});
   if(req.url.startsWith('https://api.printful.com/')){
@@ -23,13 +23,14 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    if(path.startsWith('/mockup-generator/create-task/')){const data=await req.json() as any;assert.equal(data.files[0].placement,'default');assert.deepEqual(data.files[0].position,{area_width:2700,area_height:1050,width:2700,height:1050,top:0,left:0});assert.match(data.files[0].image_url,/^https:\/\/live.test\/api\/gift\/mockup-source\/[a-f0-9]{64}$/);return Response.json({result:{task_key:'mockup-task',status:'pending'}});}
    if(path==='/mockup-generator/task')return Response.json({result:{status:'completed',mockups:[{mockup_url:'https://files.cdn.printful.com/mockup.png'}]}});
    if(path.startsWith('/products/'))return Response.json({result:{variants:[{id:1320,size:'11 oz',color:'White',price:'6.07',in_stock:true,availability_regions:{US:'United States'}}]}});
+   if(path==='/shipping/rates')return Response.json({result:[{id:'STANDARD',rate:'7.09',currency:'USD'}]});
    assert.equal(path,'/orders/estimate-costs');const payload=await req.json() as any;
-   assert.equal(payload.recipient.address1,'123 Verified Lane');assert.equal(payload.recipient.zip,'97201');assert.equal(payload.recipient.name,undefined);assert.equal(payload.items[0].files,undefined);
+   assert.equal(payload.recipient.address1,'123 Verified Lane');assert.equal(payload.recipient.zip,estimateCountry==='US'?'97201':estimateCountry==='IN'?'411001':'1234 AB');assert.equal(payload.recipient.country_code,estimateCountry);assert.equal(payload.recipient.name,undefined);assert.equal(payload.items[0].files,undefined);
    return Response.json({result:{costs:{currency:'USD',subtotal:6.07,shipping:estimatedTotal-7.15,tax:1.08,vat:0,discount:0,total:estimatedTotal}}});
   }
   assert.equal(req.url,issuer+'/cdn-cgi/access/certs');return Response.json({keys:[jwk]});
  }};
- const mf=new Miniflare(convertV4MiniflareOptions({workers:[{...shared,name:'live',routes:['live.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false',ORDER_MODE:'simulation',PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'fake-read-only'}},{...shared,name:'admin',routes:['admin.test/*'],scriptPath:'.wrangler/admin-test-bundle/index.js',bindings:{ADMIN_EMAIL:'owner@example.com',ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'mugs',JOURNAL_ORIGIN:'https://guest.test',ORDER_MODE:'simulation'}},{...shared,name:'guest',routes:['guest.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false'}},{...shared,name:'sim',routes:['sim.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false',ORDER_MODE:'simulation'}}]}));
+ const mf=new Miniflare(convertV4MiniflareOptions({workers:[{...shared,name:'live',routes:['live.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false',ORDER_MODE:'simulation',PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'fake-read-only'}},{...shared,name:'admin',routes:['admin.test/*'],scriptPath:'.wrangler/admin-test-bundle/index.js',bindings:{ADMIN_EMAIL:'owner@example.com',ACCESS_TEAM_DOMAIN:issuer,ACCESS_AUD:'mugs',JOURNAL_ORIGIN:'https://guest.test',ORDER_MODE:'simulation',PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'fake-read-only'}},{...shared,name:'guest',routes:['guest.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false'}},{...shared,name:'sim',routes:['sim.test/*'],scriptPath:'.wrangler/test-bundle/index.js',bindings:{SMS_ENABLED:'false',ORDER_MODE:'simulation'}}]}));
  const admin=(path:string,data?:unknown,jwtValue=jwt)=>mf.dispatchFetch('https://admin.test/api/editions/2026/'+path,{method:data===undefined?'GET':'POST',headers:{Origin:'https://admin.test','Cf-Access-Jwt-Assertion':jwtValue,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});
  const raw='c'.repeat(64);
  const guest=(path:string,authenticated=true)=>mf.dispatchFetch('https://guest.test/api/'+path,{headers:authenticated?{Cookie:'__Host-year_session='+raw}:{}});
@@ -186,6 +187,29 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const callsBefore=providerCalls.length;assert.equal((await live('claim',payload)).status,200);assert.equal(providerCalls.length,callsBefore,'Idempotent replay needs no new supplier call');
    assert.ok(providerCalls.every(path=>path==='/products'||/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(path)||path==='/orders/estimate-costs'));
    await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});assert.equal(await bucket.head(row.print_artwork_key),null);
+  });
+  await t.test('international simulated claims check the real destination total and freeze the estimate before using the allowance',async()=>{
+   const live=(path:string,data?:unknown)=>mf.dispatchFetch('https://live.test/api/gift/'+path,{method:data===undefined?'GET':'POST',headers:{Origin:'https://live.test',Cookie:'__Host-year_session='+raw,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});
+   for(const country of ['IN','NL']){
+    estimateCountry=country;await db.prepare("DELETE FROM rate_limits WHERE key LIKE 'mug-estimate:%' OR key LIKE 'mug-claim:%'").run();
+    const address={line1:'123 Verified Lane',line2:'',city:country==='IN'?'Pune':'Amsterdam',state:country==='IN'?'Maharashtra':'',postalCode:country==='IN'?'411001':'1234 AB',country};
+    await db.prepare("UPDATE people SET mailing_address=?1,version=version+1 WHERE id='contact-mug-invite'").bind(JSON.stringify(address)).run();
+    await db.prepare("UPDATE people SET address_verified=1,address_verifier='google',address_verified_at=unixepoch(),address_verified_until=unixepoch()+86400,address_verification_key='international-address' WHERE id='contact-mug-invite'").run();
+    const person=await db.prepare("SELECT version FROM people WHERE id='contact-mug-invite'").first<any>();
+    const payload={addressVersion:person.version,designId:'mug-0',requestKey:crypto.randomUUID(),configuration:{style:'classic',size:'11oz',color:'white',font:'clean'}};
+    estimatedTotal=25.01;assert.equal((await live('claim',payload)).status,409);assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);
+    providerFailed=true;const failed=await live('claim',payload);assert.equal(failed.status,503,await failed.clone().text());providerFailed=false;
+    estimatedTotal=14.24;const response=await live('claim',payload);assert.equal(response.status,200,await response.clone().text());
+    const receipt=(await response.json() as any).claim,row=await db.prepare('SELECT quote_json,status,address_json FROM mug_orders WHERE id=?1').bind(receipt.id).first<any>();
+    assert.equal(row.status,'simulated');assert.equal(JSON.parse(row.quote_json).destination,country);assert.equal(JSON.parse(row.quote_json).totalCents,1424);assert.deepEqual(JSON.parse(row.address_json),address);
+    const before=providerCalls.length;assert.equal((await live('claim',payload)).status,200);assert.equal(providerCalls.length,before,'Reopening an existing simulated gift must not repeat the estimate');
+    const refreshed=await admin(`mug-orders/${receipt.id}/quote`,{});assert.equal(refreshed.status,200,await refreshed.clone().text());assert.equal((await refreshed.json() as any).quote.destination,country);
+    assert.equal((await admin('invitations/mug-invite/reset-mug-allowance',{orderId:receipt.id,confirm:true})).status,200);
+   }
+   estimateCountry='US';estimatedTotal=14.24;
+   await db.prepare("UPDATE people SET mailing_address=?1,version=1 WHERE id='contact-mug-invite'").bind(JSON.stringify({line1:'123 Verified Lane',line2:'',city:'Portland',state:'OR',postalCode:'97201',country:'US'})).run();
+   await db.prepare("UPDATE people SET address_verified=1,address_verifier='google',address_verified_at=unixepoch(),address_verified_until=unixepoch()+86400,address_verification_key='mug-address' WHERE id='contact-mug-invite'").run();
+   await db.prepare("DELETE FROM rate_limits WHERE key LIKE 'mug-estimate:%'").run();
   });
   await t.test('signed-in estimates do not share the login POST budget and retain supplier limits',async()=>{
    const ip='203.0.113.15',hash=await digest(ip),expiry=Math.floor(Date.now()/1000)+300;

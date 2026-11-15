@@ -18,7 +18,8 @@ export async function deliveryState(request:Request,env:AddressEnv,invite:Invita
  const address=verifiedDelivery(person);
  // Test verification is valid only inside the explicit local preview, never production.
  const verified=!!address&&!!person.address_verification_key&&(person.address_verifier==='google'||mode==='local_mock');
- return {verified,recipientName:await invitationRecipientName(env.DB,invite,person.name),version:person.version,address:verified?address:null,mode,autocompleteAvailable:autocompleteAvailable(request,env)};
+ let country='US';try{const saved=JSON.parse(person.mailing_address||'null');if(['US','IN','NL'].includes(saved?.country))country=saved.country;}catch{}
+ return {verified,recipientName:await invitationRecipientName(env.DB,invite,person.name),version:person.version,address:verified?address:null,country,mode,autocompleteAvailable:autocompleteAvailable(request,env)};
 }
 export async function confirmDelivery(request:Request,env:AddressEnv,invite:InvitationAudience,version:unknown){
  const person=await deliveryContact(env,invite),state=await deliveryState(request,env,invite);

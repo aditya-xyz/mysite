@@ -2,7 +2,7 @@ import {preparedMugCatalog,preparedMugPrint} from './prepared-mugs.ts';
 // @ts-expect-error Shared browser/server simulation catalog.
 import {validMugOptions,pixelMugOptions,legacyMugOptions} from '../web/mug-options.js';
 import {confirmDelivery,deliveryState} from './delivery-address.ts';
-import {estimateMug,printfulEnabled,printfulCatalog} from './printful.ts';
+import {estimateMug,printfulEnabled,printfulCatalog,reserveMugEstimate} from './printful.ts';
 import {PrintProblem,mailingAddress,simulatedOrders,type PrintEnv} from './printing.ts';
 import {publishedMugs,type Published} from './edition.ts';
 import {now,token} from './security.ts';
@@ -22,7 +22,7 @@ export async function mugStatus(request:Request,env:PrintEnv,invite:InvitationAu
 export async function mugQuote(request:Request,env:PrintEnv,invite:InvitationAudience,data:Record<string,unknown>){
  if(!await mugAllowed(env,invite))throw new PrintProblem(403,'Complimentary mugs are not enabled for this invitation.');
  const delivery=await deliveryState(request,env,invite);
- if(!delivery.verified||!delivery.address)throw new PrintProblem(409,'Verify and save your US mailing address first.');
+ if(!delivery.verified||!delivery.address)throw new PrintProblem(409,'Verify and save your mailing address first.');
  if(data.addressVersion!==delivery.version)throw new PrintProblem(409,'The saved address changed. Reopen the address step.');
  return estimateMug(env,data.configuration,delivery.address);
 }
@@ -40,6 +40,14 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
  if(!configuration)throw new PrintProblem(400,'Choose an available mug style, size, color and font.');
  const delivery=await confirmDelivery(request,env,invite,data.addressVersion);
  const address=delivery.address,recipientName=await invitationRecipientName(env.DB,invite,delivery.person.name);
+ // Domestic catalog reserves are not an international delivery quote. Freeze
+ // the exact destination-aware estimate before reserving a simulated gift.
+ let quote=null;
+ if(printfulEnabled(env)&&address.country!=='US'){
+  await reserveMugEstimate(env,invite.id);
+  quote=await estimateMug(env,configuration,address);
+  if(!quote.withinBudget)throw new PrintProblem(409,'This mug’s estimated shipping and tax exceed the $25 gift limit for your address. Customize your mug and choose another option.');
+ }
  const mockup=typeof data.mockupId==='string'?await env.DB.prepare("SELECT id FROM mug_mockups WHERE id=?1 AND invitation_id=?2 AND year=?3 AND design_id=?4 AND configuration_json=?5 AND caption=?6 AND cutout_version=?7 AND status IN ('pending','ready')").bind(data.mockupId,invite.id,invite.edition_year,design.id,JSON.stringify(configuration),design.caption,design.cutoutVersion).first<{id:string}>():null;
  const prepared=typeof data.preparedPreviewId==='string'?await env.DB.prepare('SELECT id FROM mug_preview_images WHERE id=?1 AND year=?2 AND design_id=?3 AND cutout_version=?4 AND caption=?5 AND style=?6 AND size=?7 AND color=?8 AND font=?9').bind(data.preparedPreviewId,invite.edition_year,design.id,design.cutoutVersion,design.caption,configuration.style,configuration.size,configuration.color,configuration.font).first<{id:string}>():null;
  const file=await env.MEDIA.get(design.preview_key);if(!file)throw new PrintProblem(409,'The mug artwork is unavailable.');
@@ -55,7 +63,7 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
    WHERE i.id=?10 AND i.version=?11 AND i.revoked_at IS NULL AND i.expires_at>?12 AND e.is_active=1 AND e.allow_mug_orders=1 AND e.published_version=?13 AND i.mug_order_count=0 AND i.allow_mug=1
    AND i.person_id=?14 AND EXISTS(SELECT 1 FROM people p WHERE p.id=?14 AND p.version=?15 AND p.address_verified=1 AND p.address_verification_key IS NOT NULL AND p.address_verifier IN ('google','local_mock') AND (p.address_verifier!='google' OR p.address_verified_until>?12))
    AND NOT EXISTS(SELECT 1 FROM mug_orders WHERE invitation_id=i.id AND year=e.year AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')) ON CONFLICT DO NOTHING RETURNING id`)
-   .bind(id,data.requestKey,design.id,design.caption,design.alt,key,JSON.stringify(address),recipientName,1,invite.id,(invite as InvitationAudience&{version:number}).version,now(),row.published_version,delivery.person.id,delivery.person.version,JSON.stringify(configuration),null,mockup?.id||null,prepared?.id||null,printKey,print?.layoutVersion||1).first();
+   .bind(id,data.requestKey,design.id,design.caption,design.alt,key,JSON.stringify(address),recipientName,1,invite.id,(invite as InvitationAudience&{version:number}).version,now(),row.published_version,delivery.person.id,delivery.person.version,JSON.stringify(configuration),quote?JSON.stringify(quote):null,mockup?.id||null,prepared?.id||null,printKey,print?.layoutVersion||1).first();
   if(!inserted){await env.MEDIA.delete(printKey?[key,printKey]:[key]);const fresh=await mugStatus(request,env,invite);if(fresh.claim)return {...fresh,reused:true};throw new PrintProblem(409,'This request was already used or the scrapbook changed. Reopen the gift picker.');}
  }catch(error){await env.MEDIA.delete(printKey?[key,printKey]:[key]);throw error;}
  return {...await mugStatus(request,env,invite),reused:false};
