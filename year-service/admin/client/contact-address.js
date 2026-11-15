@@ -4,10 +4,29 @@ export const usStates='AL:Alabama|AK:Alaska|AZ:Arizona|AR:Arkansas|CA:California
 export const indianStates='Andaman and Nicobar Islands|Andhra Pradesh|Arunachal Pradesh|Assam|Bihar|Chandigarh|Chhattisgarh|Dadra and Nagar Haveli and Daman and Diu|Delhi|Goa|Gujarat|Haryana|Himachal Pradesh|Jammu and Kashmir|Jharkhand|Karnataka|Kerala|Ladakh|Lakshadweep|Madhya Pradesh|Maharashtra|Manipur|Meghalaya|Mizoram|Nagaland|Odisha|Puducherry|Punjab|Rajasthan|Sikkim|Tamil Nadu|Telangana|Tripura|Uttar Pradesh|Uttarakhand|West Bengal'.split('|').map(s=>[s,s]);
 export function contactAddressFields(country,values={}){
  const field=(name,label,{required=false,placeholder='',pattern='',inputmode='',maxlength=120}={})=>`<label class="field"><span>${label}</span><input name="${name}" value="${esc(values[name])}" maxlength="${maxlength}" ${required?'required':''} ${pattern?`pattern="${pattern}"`:''} ${inputmode?`inputmode="${inputmode}"`:''} placeholder="${esc(placeholder)}" autocomplete="off"></label>`;
- const select=(label,choices)=>`<label class="field"><span>${label}</span><select name="state" required><option value="">Select ${country==='US'?'state':'state or union territory'}</option>${choices.map(([value,name])=>`<option value="${esc(value)}" ${values.state===value?'selected':''}>${esc(name)}</option>`).join('')}</select></label>`;
+ const select=(label,choices)=>`<label class="field"><span>${label}</span><select name="state" required><option value="">Select ${country==='US'?'state':'state or union territory'}</option>${values.state&&!choices.some(([value])=>value===values.state)?`<option value="${esc(values.state)}" selected>${esc(values.state)} (saved)</option>`:''}${choices.map(([value,name])=>`<option value="${esc(value)}" ${values.state===value?'selected':''}>${esc(name)}</option>`).join('')}</select></label>`;
  if(country==='US')return field('line1','Street address',{required:true,placeholder:'House number and street'})+field('line2','Apartment, suite or unit (optional)')+field('city','City',{required:true})+select('State',usStates)+field('postalCode','ZIP code',{required:true,pattern:'[0-9]{5}(-[0-9]{4})?',placeholder:'12345 or 12345-6789',inputmode:'numeric',maxlength:10});
  if(country==='IN')return field('line1','Flat, house or building',{required:true})+field('line2','Street, area or locality',{required:true})+field('city','Village, town or city',{required:true})+select('State or union territory',indianStates)+field('postalCode','PIN code',{required:true,pattern:'[0-9]{6}',placeholder:'6 digits',inputmode:'numeric',maxlength:6})+`<details class="contact-address-extra"><summary>Landmark, district or post office (optional)</summary>${field('landmark','Landmark')}${field('district','District')}${field('postOffice','Post office')}</details>`;
  return field('line1','Street name',{required:true})+field('houseNumber','House number',{required:true,placeholder:'123'})+field('addition','House number addition (optional)',{placeholder:'A, bis or -2'})+field('postalCode','Postcode',{required:true,pattern:'[1-9][0-9]{3} ?[A-Za-z]{2}',placeholder:'1234 AB',maxlength:7})+field('city','Town or city',{required:true})+field('line2','Additional address line (optional)');
+}
+// Saved addresses use mailing lines. Split only the Dutch street/number line;
+// keep all other saved text intact so opening and saving cannot drop details.
+export function contactAddressValues(address={}){
+ const values={...address};
+ if(address.country==='US'||address.country==='IN'){
+  const choices=address.country==='US'?usStates:indianStates,state=String(address.state||'').toLowerCase();
+  const matching=choices.find(([code,name])=>code.toLowerCase()===state||name.toLowerCase()===state);
+  if(matching)values.state=matching[0];
+ }
+ if(address.country==='NL'&&address.houseNumber===undefined){
+  const line=String(address.line1||'').trim();
+  const dutch=/^(.*\S)\s+(\d[^\s]*)(?:\s+(.+))?$/.exec(line);
+  const legacy=/^(\d[^\s]*)\s+(.+)$/.exec(line);
+  if(dutch){values.line1=dutch[1];values.houseNumber=dutch[2];values.addition=dutch[3]||'';}
+  else if(legacy){values.line1=legacy[2];values.houseNumber=legacy[1];values.addition='';}
+  else{values.houseNumber='';values.addition='';}
+ }
+ return values;
 }
 export function contactMailingAddress(country,values){
  if(!countryNames[country])throw new Error('Choose a supported country.');

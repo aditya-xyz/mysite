@@ -4,7 +4,7 @@ import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {generateKeyPair,exportJWK,SignJWT} from 'jose';
 // @ts-expect-error Shared browser address presentation.
-import {contactAddressFields,contactMailingAddress,mailingLabel,usStates,indianStates} from '../admin/client/contact-address.js';
+import {contactAddressFields,contactAddressValues,contactMailingAddress,mailingLabel,usStates,indianStates} from '../admin/client/contact-address.js';
 
 test('country-specific new-person fields preserve complete mailing addresses',()=>{
  assert.equal(usStates.length,51);assert.equal(indianStates.length,36);
@@ -18,6 +18,23 @@ test('country-specific new-person fields preserve complete mailing addresses',()
  assert.throws(()=>contactMailingAddress('NL',{line1:'Street'}),/house number/);
  assert.throws(()=>contactMailingAddress('IN',{line2:'a'.repeat(100),landmark:'b'.repeat(100)}),/too long/);
  assert.match(contactAddressFields('US',{line1:'<script>'}),/&lt;script&gt;/);
+});
+
+test('existing country addresses populate editable fields without losing delivery details',()=>{
+ for(const line1 of ['Voorbeeldstraat 12 -2','Voorbeeldstraat 12A','Plein 1940 12A','2e Hugo de Grootstraat 12 bis']){
+  const address={country:'NL',line1,line2:'c/o Test Recipient',city:'Amsterdam',state:'',postalCode:'1234 AB'};
+  const values=contactAddressValues(address);assert.ok(values.houseNumber);
+  assert.deepEqual(contactMailingAddress('NL',values),address);
+ }
+ const legacy=contactAddressValues({country:'NL',line1:'12A Voorbeeldstraat',line2:'Unit 4',city:'Amsterdam',postalCode:'1234 AB'});
+ assert.equal(legacy.line1,'Voorbeeldstraat');assert.equal(legacy.houseNumber,'12A');assert.equal(legacy.line2,'Unit 4');
+ const indian={country:'IN',line1:'Flat 4, Sample House',line2:'Sample Road, Near sample school, Sample district, Sample post office',city:'Pune',state:'MAHARASHTRA',postalCode:'411001'};
+ const values=contactAddressValues(indian);assert.equal(values.state,'Maharashtra');
+ assert.deepEqual(contactMailingAddress('IN',values),{...indian,state:'Maharashtra'});
+ assert.equal(contactAddressValues({country:'US',state:'Oregon'}).state,'OR');
+ assert.match(contactAddressFields('IN',contactAddressValues({...indian,state:'MH'})),/value="MH" selected/,'Preserve saved abbreviations that do not match a dropdown option');
+ const unknown=contactAddressValues({country:'NL',line1:'Saved address without number'});
+ assert.equal(unknown.line1,'Saved address without number');assert.equal(unknown.houseNumber,'');
 });
 
 test('new contacts and optional reviewed addresses save atomically without invitations or SMS',async t=>{
@@ -103,6 +120,23 @@ test('new contacts and optional reviewed addresses save atomically without invit
    googleFailure=true;const draftKey=crypto.randomUUID(),before=await count();
    const failed=await req('contacts/new/address/verify',{draftKey,address:addresses.IN});assert.equal(failed.status,503);assert.doesNotMatch(await failed.text(),/private upstream/);assert.equal(await count(),before);
    assert.equal((await req('contacts',{draftKey,name:'Manual fallback',verify:false,address:addresses.IN})).status,201);googleFailure=false;
+  });
+  await t.test('existing contacts can review changes and save verified or unchecked addresses for each country',async()=>{
+   for(const [country,address] of Object.entries(addresses)){
+    const created=await req('contacts',{draftKey:crypto.randomUUID(),name:'Edit '+country,verify:false,address});
+    let person=(await created.json() as any).person;
+    const changed={...address,line2:'Updated delivery details'};
+    const check=await req(`contacts/${person.id}/address/verify`,{version:person.version,address:changed});
+    assert.equal(check.status,200,await check.clone().text());const recommendation=await check.json() as any;
+    assert.deepEqual(JSON.parse((await db.prepare('SELECT mailing_address FROM people WHERE id=?1').bind(person.id).first<any>()).mailing_address),address,'Review must leave the saved address unchanged');
+    const accepted=await req(`contacts/${person.id}/address`,{version:person.version,verify:true,verificationId:recommendation.verificationId});
+    assert.equal(accepted.status,200);person=(await accepted.json() as any).person;
+    assert.equal(person.address_verified,1);assert.deepEqual(JSON.parse(person.mailing_address),recommendation.address);
+    const manual=await req(`contacts/${person.id}/address`,{version:person.version,verify:false,address},'disabled.test');
+    assert.equal(manual.status,200);person=(await manual.json() as any).person;
+    assert.equal(person.address_verified,0);assert.equal(person.address_verifier,null);assert.deepEqual(JSON.parse(person.mailing_address),address);
+    assert.equal((await req(`contacts/${person.id}/address`,{version:person.version-1,verify:false,address})).status,409);
+   }
   });
   await t.test('invalid input and forged verification flags fail before creating a person',async()=>{
    const before=await count(),base={draftKey:crypto.randomUUID(),name:'Invalid',verify:false};

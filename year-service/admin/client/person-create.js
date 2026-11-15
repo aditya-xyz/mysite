@@ -1,5 +1,5 @@
 import {bindAddressAutocomplete} from './address-autocomplete.js';
-import {countryNames,contactAddressFields,contactMailingAddress,mailingLabel} from './contact-address.js';
+import {countryNames,contactAddressFields,contactAddressValues,contactMailingAddress,mailingLabel} from './contact-address.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 export function openPersonCreate({name='',photoId='',showModal,requestApi,onSaved}){
@@ -30,8 +30,8 @@ export function openPersonCreate({name='',photoId='',showModal,requestApi,onSave
   autocomplete?.destroy();autocomplete=null;
   if(!config.autocompleteAvailable)return;
   autocomplete=bindAddressAutocomplete({form,person:{id:'new',version:0},simulated:config.mode==='local_mock',requestApi:(path,data,signal)=>requestApi(path,{...data,draftKey},signal),onAddress:address=>{
-   if(country==='NL'&&!address.houseNumber){const match=/^(.*?)\s+(\d.*)$/.exec(address.line1||'');if(match){address={...address,line1:match[1],houseNumber:match[2],addition:''};}}
-   for(const key of ['line1','line2','city','state','postalCode','houseNumber','addition'])if(form.elements[key])form.elements[key].value=address[key]||'';
+   const values=contactAddressValues(address);
+   for(const key of ['line1','line2','city','state','postalCode','houseNumber','addition'])if(form.elements[key])form.elements[key].value=values[key]||'';
   }});
  }
  withAddress.onchange=()=>{error.textContent='';ready();};

@@ -112,6 +112,19 @@ no partial contact. Expired draft checks are pruned by the guest's daily cleanup
 successful creation removes its checks. Creation receipts cascade when a person
 is deleted. Existing address editing remains available from each People card.
 
+**Edit address** uses the same country-specific fields, validation and mailing
+label formatting as Add a person. Existing US state names and uppercase Indian
+states select the corresponding dropdown values; unmatched saved state values
+remain available instead of being discarded. Dutch mailing lines populate the
+street, number and addition fields, including older number-first addresses.
+Saved Indian address lines retain all existing delivery details without trying
+to guess which text was a landmark, district or post office. Country switching
+preserves unsaved entries separately for each country. Google recommendations
+show the entered and recommended addresses side by side before approval;
+**Save without checking** saves explicitly unverified, including when Google is
+unavailable. Updates retain person/version checks, address invalidation and
+deletion confirmation. This editor update requires no database migration.
+
 The sidebar contains Overview; Creative > Scrapbooks, Articles, and People; and System >
 Home Server. It stays the same inside every workspace. Overview contains only
 three summary rows (Scrapbooks, Home server, Articles), each with View workspace.
