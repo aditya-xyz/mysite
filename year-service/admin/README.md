@@ -1208,3 +1208,42 @@ simulated. Saved international print simulations use quote-only Handwrytten Test
 Mode baskets, remove their unsent drafts, and never call basket send; apply
 migration 0033 before deployment. Automatic test orders retain their existing
 $10 budget and Test Mode checks. Quote totals may exclude import duties.
+
+## Full recipient Pixelbook preview
+
+In Preview, choose an invitation or individual person and select **Open full
+Pixelbook**. This opens the actual guest renderer in a separate admin tab using
+the saved draft and the selected invitation’s photo audience. An invited individual
+resolves to their household invitation and its mailing contact, matching guest access. Both allowed admin identities
+must pass the existing Cloudflare Access JWT checks for the page, assets and API.
+No shared `123456` authenticator, invitation secret or guest session is created.
+
+This is a fresh gift walkthrough: existing orders/allowance are not altered.
+Invitation/edition gift permissions still decide which gifts appear. Mug proofs
+come from the prepared published library; prepare current proofs before reviewing
+new mug artwork. Keepsake editing and folded-card views are enabled, while final
+mug/print order buttons remain disabled. Server preview routes also reject order,
+SMS, authentication and contact-save requests. Google verification uses the
+normal capped provider; accepting its result stores it only in the preview tab.
+Reloading or choosing another recipient discards it. Preview URLs carry person or
+invitation IDs, never a login capability, and work only for signed-in admins.
+
+International verification on 2026-11-15 used synthetic destinations, mocked local
+browser contacts and real provider pricing APIs. Handwrytten quotes were $5.89 for
+both IN/NL, with no basket send; owned test drafts were removed under the shared
+fulfillment lock. Printful estimates were IN: classic11oz $18.99/enamel12oz $24.74;
+NL: classic11oz $14.39/enamel12oz $20.86. These are dated estimates, not fixed
+shipping prices or proof that a synthetic street is deliverable. The preferred
+navy15oz mug also passed: IN $23.54, NL $19.41 including reported charges. No production
+contact, invitation permission, allowance or order was changed for the test.
+
+Live Google verification also passed for the public National Museum address in
+India and the Rijksmuseum address in the Netherlands. The latter exposed a
+complete `PREMISE_PROXIMITY` / `ACCEPT` verdict. International verification now
+allows this precision only with explicit `ACCEPT`, a complete address and no
+unconfirmed components. The review step still applies; US precision and USPS DPV
+checks remain unchanged. Google’s verdict enums are documented at
+https://developers.google.com/maps/documentation/address-validation/reference/rest/v1/TopLevel/validateAddress.
+Public test-address references:
+https://www.nationalmuseumindia.gov.in/en/contact-us and
+https://www.rijksmuseum.nl/en/visit/practical-info/address-and-directions.

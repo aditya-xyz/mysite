@@ -1,3 +1,4 @@
+import {recipientPreviewRoute} from './recipient-preview.ts';
 import {addressVerificationCurrent,type AddressState} from '../../src/address-state.ts';
 import {createContact,verifyNewContactAddress} from './contact-create.ts';
 import {curatedMugChange} from '../../src/mug-catalog.ts';
@@ -118,6 +119,23 @@ async function validRenditions(grid:File,viewer:File){
   if(!g||!v||Math.max(g.width,g.height)>800||Math.max(v.width,v.height)>2400)return fail("Use JPEG previews up to 800px for the grid and 2400px for the viewer.");
   if(Math.abs(g.width*v.height-v.width*g.height)>2*Math.max(v.width,v.height))return fail("Both previews must have the same aspect ratio.");
 }
+async function previewJournal(env:Env,year:number,url:URL){
+    const id = url.searchParams.get("recipient") || "";
+    const person = id ? await env.DB.prepare(`SELECT p.id,p.name FROM people p WHERE p.id=?1 OR p.id=(SELECT person_id FROM invites WHERE id=?1 AND edition_year=?2)`)
+      .bind(id,year).first<{id:string;name:string}>() : null;
+    if (id && !person) throw new Problem(404,"Recipient not found.");
+    const row = await edition(env,year), draft=await canonicalDraft(JSON.parse(row.draft_json),env.DB,year), published = await snapshot(draft,env,year);
+    const invitationId=url.searchParams.get("invitation");
+    const invite=invitationId?await env.DB.prepare("SELECT * FROM invites WHERE id=?1 AND edition_year=?2").bind(invitationId,year).first<InvitationAudience>():null;
+    if(invitationId && !invite)throw new Problem(404,"Invitation not found.");
+    const data = invite ? clientEdition(published,invite.id,invitationName(invite),year,await invitationAudience(env.DB,invite)) : clientEdition(published,id,person?.name || "friend",year,person?.id);
+    data.shareSocials=!!invite?.share_socials;
+    Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,year,`/api/editions/${year}/theme`)});
+    if(invite&&(!invite.allow_mug||!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders)){data.gift.enabled=false;data.gift.designs=[];}
+    data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`,viewerSrc:`/api/editions/${year}/media/${p.id}/viewer`}));
+    data.gift.designs=data.gift.designs.map(d=>({...d,src:`/api/editions/${year}/media/${d.id}/cutout/${published.mugDesigns?.find(m=>m.id===d.id)?.cutoutVersion}`}));
+    return data;
+}
 async function route(request: Request, env: Env, actor: string) {
   const url = new URL(request.url); let path = url.pathname;
   if (!["GET","HEAD","POST"].includes(request.method)) throw new Problem(405,"Method not allowed.");
@@ -195,6 +213,7 @@ async function route(request: Request, env: Env, actor: string) {
     year=Number(scoped[1]);path="/api"+scoped[2];
   }
   if (path.startsWith("/api/")) await edition(env,year);
+  if(scoped){const preview=await recipientPreviewRoute(request,env,year,path,invitationId=>{const previewUrl=new URL(url);if(invitationId){previewUrl.searchParams.delete('recipient');previewUrl.searchParams.set('invitation',invitationId);}return previewJournal(env,year,previewUrl);},()=>body(request));if(preview)return preview;}
   if(scoped){const mugs=await mugAdminRoute(request,env,path,year,()=>body(request));if(mugs)return mugs;}
   if(scoped){const printing=await printAdminRoute(request,env,path,year,()=>body(request));if(printing)return printing;}
   const cutouts=await mugCutoutRoute(request,env,actor,year,path);if(cutouts)return cutouts;
@@ -246,21 +265,7 @@ async function route(request: Request, env: Env, actor: string) {
     return json({publishedVersion:result.published_version,isActive:true,takenOfflineAt:null,publicationRevision:result.publication_revision});
   }
   if (path === "/api/preview" && request.method === "GET") {
-    const id = url.searchParams.get("recipient") || "";
-    const person = id ? await env.DB.prepare(`SELECT p.id,p.name FROM people p WHERE p.id=?1 OR p.id=(SELECT person_id FROM invites WHERE id=?1 AND edition_year=?2)`)
-      .bind(id,year).first<{id:string;name:string}>() : null;
-    if (id && !person) throw new Problem(404,"Recipient not found.");
-    const row = await edition(env,year), draft=await canonicalDraft(JSON.parse(row.draft_json),env.DB,year), published = await snapshot(draft,env,year);
-    const invitationId=url.searchParams.get("invitation");
-    const invite=invitationId?await env.DB.prepare("SELECT * FROM invites WHERE id=?1 AND edition_year=?2").bind(invitationId,year).first<InvitationAudience>():null;
-    if(invitationId && !invite)throw new Problem(404,"Invitation not found.");
-    const data = invite ? clientEdition(published,invite.id,invitationName(invite),year,await invitationAudience(env.DB,invite)) : clientEdition(published,id,person?.name || "friend",year,person?.id);
-    data.shareSocials=!!invite?.share_socials;
-    Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,year,`/api/editions/${year}/theme`)});
-    if(invite&&(!invite.allow_mug||!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders)){data.gift.enabled=false;data.gift.designs=[];}
-    data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`,viewerSrc:`/api/editions/${year}/media/${p.id}/viewer`}));
-    data.gift.designs=data.gift.designs.map(d=>({...d,src:`/api/editions/${year}/media/${d.id}/cutout/${published.mugDesigns?.find(m=>m.id===d.id)?.cutoutVersion}`}));
-    return json(data);
+    return json(await previewJournal(env,year,url));
   }
   const linkRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/link$/.exec(path);
   if(linkRoute && request.method==="POST"){
@@ -444,6 +449,8 @@ async function route(request: Request, env: Env, actor: string) {
     return new Response(file.body,{headers:{"Content-Type":mediaRoute[2] !== "original" ? "image/jpeg" : media!.mime}});
   }
   if (path.startsWith("/api/")) throw new Problem(404,"Not found.");
+  if(['/pixel-santa.png','/pixel-face-emoji.png'].includes(path))return env.ASSETS.fetch(new Request(new URL('/pixelbook-preview'+path,url),request));
+  if(path==='/pixelbook-preview'||path==='/pixelbook-preview/')return env.ASSETS.fetch(new Request(new URL('/pixelbook-preview/index.html',url),request));
   return env.ASSETS.fetch(request);
 }
 

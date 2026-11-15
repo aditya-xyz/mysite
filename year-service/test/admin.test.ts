@@ -52,7 +52,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
         ...(data===undefined?{}:{body:encoded?await encoded.arrayBuffer():JSON.stringify(data)})});
     }
     await t.test("all admin pages, assets, and APIs reject unauthenticated or forged identities",async()=>{
-      for(const path of ["/","/app.js","/style.css","/api/state","/api/editions","/api/editions/2027/state","/api/media/anything/preview"])assert.equal((await req(path,undefined,undefined,"")).status,401);
+      for(const path of ["/","/app.js","/style.css","/api/state","/api/editions","/api/editions/2027/state","/api/media/anything/preview","/pixelbook-preview/","/pixelbook-preview/preview-entry.js","/api/editions/2026/recipient-preview/journal?recipient=angela"])assert.equal((await req(path,undefined,undefined,"")).status,401);
       const forged=await mf.dispatchFetch("https://admin.test/api/state",{headers:{"Cf-Access-Authenticated-User-Email":adminEmail}});assert.equal(forged.status,401);
       for(const jwt of [await signed("other@example.com"),await signed("editor@example.com.attacker.test"),await signed(""),await signed(adminEmail,"other-app"),await signed("editor@example.com","other-app"),await signed(adminEmail,aud,"-1m"),await signed(adminEmail,aud,"5m","https://other-team.cloudflareaccess.com"),"forged.jwt.value"])
         assert.equal((await req("/api/state",undefined,undefined,jwt)).status,401);

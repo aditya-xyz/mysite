@@ -16,7 +16,7 @@ export function mountKeepsake(journal,section){
   const photos=personalPhotos(journal.photos);
   if(!section||!journal.keepsake?.enabled)return {destroy(){}};
   let frame='santa',ordered=journal.keepsake.order||null;
-  const fixed=journal.keepsake.mode==='default',defaultSrc=()=>fixed&&ordered?ordered.artworkSrc:journal.keepsake.defaultSrc+frame;
+  const fixed=journal.keepsake.mode==='default',defaultSrc=()=>fixed&&ordered?ordered.artworkSrc:(journal.keepsake.defaultFrames?.[frame]||journal.keepsake.defaultSrc+frame);
   const entry=document.createElement('div');entry.className='pb-keepsake-content';section.classList.add('ks-entry');
   entry.innerHTML=`<figure class="pb-keepsake-art pb-present-art"><img src="${esc(defaultSrc())}" width="1200" height="1500" loading="lazy" decoding="async" alt="A keepsake from our little pack to yours"></figure><div class="pb-present-copy"><h3 id="pb-keepsake-title">for your fridge.</h3><p>${fixed?'a little piece of our year, from our pack to yours.<br>pick a border. i handled the rest.':'three favorite photos, made for your fridge.<br>our pack’s pick inside. a little note, too.'}</p><button class="button" type="button">make a keepsake</button><p class="pb-gift-allowance">${fixed?'one complimentary keepsake':'one complimentary folded keepsake'} for ${esc(journal.name)}</p></div>`;
   section.append(entry);
@@ -24,7 +24,7 @@ export function mountKeepsake(journal,section){
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
   let assembleNext=false,chosen=[],crops=new Map(),step='pick',file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
   const images=new Map(),urls=new Set();let cardImages=[],editorCleanup=null,previewFrame=0,orderToast=null,toastTimer=null;
-  const printFlow=createPrintFlow({householdName:journal.name,householdSize:journal.householdSize,getData:()=>({file,defaultSrc:defaultSrc(),cardCount:1,personalized:!fixed,recipe:{format:'folded',mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:status=>{if(fixed&&status?.order&&!status.order.personalized)setOrdered(status.order);if(modal.open&&step==='edit')updateExport();},onOrdered:(message,simulated,order)=>{if(fixed)setOrdered(order);if(modal.open){showOrderToast(message,simulated);modal.querySelector(fixed?'[data-close]':'[data-share],[data-save]')?.focus();}}});
+  const printFlow=createPrintFlow({previewOnly:journal.adminPreview===true,householdName:journal.name,householdSize:journal.householdSize,getData:()=>({file,defaultSrc:defaultSrc(),cardCount:1,personalized:!fixed,recipe:{format:'folded',mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:status=>{if(fixed&&status?.order&&!status.order.personalized)setOrdered(status.order);if(modal.open&&step==='edit')updateExport();},onOrdered:(message,simulated,order)=>{if(fixed)setOrdered(order);if(modal.open){showOrderToast(message,simulated);modal.querySelector(fixed?'[data-close]':'[data-share],[data-save]')?.focus();}}});
   function updateEntry(){
     if(!fixed||!ordered)return;
     entry.querySelector('img').src=ordered.artworkSrc;

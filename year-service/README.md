@@ -905,3 +905,9 @@ and `ORDER_MODE=simulation`; no live order adapter is enabled.
 Guest delivery country and mug customization share `web/custom-select.js`,
 including the same styling, selected tick, keyboard navigation and Escape behavior.
 The address form preserves each country's draft when switching US/India/Netherlands.
+
+The admin Preview recipient selector also offers **Open full Pixelbook**. The full
+guest UI runs behind existing admin authentication, using a fresh gift flow and
+preview-only address state. Final order buttons and server-side order requests
+are disabled. No test SMS code or guest authentication bypass is installed; see
+admin/README.md for recipient, prepared-proof and verification behavior.

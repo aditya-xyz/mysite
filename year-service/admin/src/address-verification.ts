@@ -35,7 +35,10 @@ export async function reserveGoogleRequest(env:AddressEnv,provider:'google'|'goo
 }
 export function googleMailingAddress(response:unknown,expectedCountry:MailingAddress['country']='US'):MailingAddress {
  const result=(response as any)?.result,v=result?.verdict,usps=result?.uspsData,p=result?.address?.postalAddress;
- if(!v||v.addressComplete!==true||!['PREMISE','SUB_PREMISE'].includes(v.validationGranularity)||v.hasUnconfirmedComponents===true||['FIX','CONFIRM_ADD_SUBPREMISES'].includes(v.possibleNextAction)||(expectedCountry==='US'&&(usps?.dpvConfirmation!=='Y'||usps?.dpvVacant==='Y'||usps?.dpvNoStat==='Y')))throw new PrintProblem(422,usps?.dpvConfirmation==='D'||usps?.dpvConfirmation==='S'?'Check the apartment or unit number before verifying this address.':'Google could not confirm a complete, deliverable address. Check the address and try again.');
+ // Google can ACCEPT complete international addresses at building-proximity precision.
+ // Keep unconfirmed components rejected and require explicit ACCEPT for this case.
+ const precision=v&&(['PREMISE','SUB_PREMISE'].includes(v.validationGranularity)||(expectedCountry!=='US'&&v.validationGranularity==='PREMISE_PROXIMITY'&&v.possibleNextAction==='ACCEPT'));
+ if(!v||v.addressComplete!==true||!precision||v.hasUnconfirmedComponents===true||['FIX','CONFIRM_ADD_SUBPREMISES'].includes(v.possibleNextAction)||(expectedCountry==='US'&&(usps?.dpvConfirmation!=='Y'||usps?.dpvVacant==='Y'||usps?.dpvNoStat==='Y')))throw new PrintProblem(422,usps?.dpvConfirmation==='D'||usps?.dpvConfirmation==='S'?'Check the apartment or unit number before verifying this address.':'Google could not confirm a complete, deliverable address. Check the address and try again.');
  if(!p||p.regionCode!==expectedCountry||!Array.isArray(p.addressLines)||p.addressLines.length<1||p.addressLines.length>(expectedCountry==='US'?2:6))throw new PrintProblem(422,'Google did not return a supported mailing address.');
  try{return mailingAddress({line1:p.addressLines[0],line2:p.addressLines.slice(1).join(', '),city:p.locality,state:p.administrativeArea,postalCode:p.postalCode,country:p.regionCode});}
  catch{throw new PrintProblem(422,'Google did not return a complete mailing address.');}

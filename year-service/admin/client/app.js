@@ -302,9 +302,11 @@ async function openPreview(){
     if(view==='preview')render();
     modalReturnFocus=()=>byId('open-preview')?.focus({preventScroll:true});
     modal.classList.add('preview-dialog');
-    showModal(`<div class="preview-dialog-header"><p class="kicker">${state.year} · Private draft</p><h2>Preview scrapbook</h2><p class="hint">Saved draft · No SMS sent · Nothing is published</p><label class="field"><span>Preview for</span><span class="select-control"><select id="preview-person">${previewOptions()}</select></span></label></div><div id="edition-preview" class="preview-dialog-body"></div>`);
+    showModal(`<div class="preview-dialog-header"><p class="kicker">${state.year} · Private draft</p><h2>Preview scrapbook</h2><p class="hint">Saved draft · No SMS sent · Nothing is published</p><label class="field"><span>Preview for</span><span class="select-control"><select id="preview-person">${previewOptions()}</select></span></label></div><p><a class="button" id="open-full-pixelbook" target="_blank" rel="noopener">Open full Pixelbook ↗</a></p><p class="hint">Full preview uses your admin login. Final order buttons are disabled; contacts and allowances stay unchanged.</p><div id="edition-preview" class="preview-dialog-body"></div>`);
     document.querySelector('.modal-close').setAttribute('aria-label','Close preview');
-    byId('preview-person').onchange=event=>{previewRecipient=event.target.value;loadPreview();};
+    const updateFullPreview=()=>{byId('open-full-pixelbook').href='/pixelbook-preview/?year='+state.year+'&'+(previewRecipient.startsWith('invite:')?'invitation='+encodeURIComponent(previewRecipient.slice(7)):'recipient='+encodeURIComponent(previewRecipient));};
+    updateFullPreview();
+    byId('preview-person').onchange=event=>{previewRecipient=event.target.value;updateFullPreview();loadPreview();};
     await loadPreview();
   }catch(error){toast(error.message);}
 }

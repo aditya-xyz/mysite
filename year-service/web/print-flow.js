@@ -1,7 +1,7 @@
 import {esc,householdOrderNote} from './pixelbook.js';
 import {foldedCardMarkup,bindFoldedCard} from './folded-card.js';
 import {createDeliveryAddress} from './delivery-address.js';
-export function createPrintFlow({getData,onChange,householdName='',householdSize=0,onOrdered=()=>{}}){
+export function createPrintFlow({getData,onChange,householdName='',householdSize=0,previewOnly=false,onOrdered=()=>{}}){
  let status=null,dialog=null,controller=null,closed=false,preparedDelivery=null,deliveryChanged=()=>{},frontDesign='personal';
  function prepareDelivery(){if(!preparedDelivery){preparedDelivery=createDeliveryAddress(()=>deliveryChanged());void preparedDelivery.load();}return preparedDelivery;}
  async function refresh(){
@@ -22,7 +22,8 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   const sheet=dialog;document.body.append(dialog);bindFoldedCard(dialog,{onSwap:swapPictures,onView:view=>activeView=view});
   const message=text=>{sheet.querySelector('.ks-status').textContent=text;};
   const submit=dialog.querySelector('[data-submit-print]');
-  function renderAddress(){if(!sheet.isConnected)return;const region=sheet.querySelector('[data-delivery-address]');region.innerHTML=delivery.markup();delivery.bind(region);submit.disabled=submitting||!delivery.ready;}
+  if(previewOnly)message('Admin preview · Final ordering is disabled. No allowance is used.');
+  function renderAddress(){if(!sheet.isConnected)return;const region=sheet.querySelector('[data-delivery-address]');region.innerHTML=delivery.markup();delivery.bind(region);submit.disabled=previewOnly||submitting||!delivery.ready;}
   delivery=prepareDelivery();deliveryChanged=renderAddress;renderAddress();
   function release(){URL.revokeObjectURL(proofUrl);deliveryChanged=()=>{};delivery.destroy();if(preparedDelivery===delivery)preparedDelivery=null;sheet.remove();if(dialog===sheet)dialog=null;}
   dialog.addEventListener('close',release,{once:true});
@@ -45,7 +46,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
    onOrdered(order.testMode?'Test keepsake ordered. No physical mail will be sent.':order.status==='simulated'?'Test keepsake order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your keepsake gift is headed your way 💌':'Your print request is recorded.',!order.testMode&&order.status==='simulated',order);
   }
   submit.onclick=async()=>{
-   if(submitting||!delivery.ready)return;submitting=true;submit.disabled=true;if(data.personalized)sheet.querySelector('[data-swap-card]')?.setAttribute('disabled','');message('Saving your order…');
+   if(previewOnly||submitting||!delivery.ready)return;submitting=true;submit.disabled=true;if(data.personalized)sheet.querySelector('[data-swap-card]')?.setAttribute('disabled','');message('Saving your order…');
    try{
     await delivery.confirm();await refresh();
     if(dialog!==sheet)return;

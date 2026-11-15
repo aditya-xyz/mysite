@@ -52,3 +52,6 @@ year-service/admin/web/fonts/Asap-OFL.txt
 
 /year-service/admin/web/folded-card.css
 /year-service/admin/web/loading.css
+
+# Private full Pixelbook preview, generated from guest source.
+/year-service/admin/web/pixelbook-preview/
