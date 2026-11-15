@@ -133,6 +133,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.equal((await (await sim('journal')).json() as any).gift.enabled,false);
    assert.equal((await admin('mug-settings',{allowMugOrders:true})).status,200);
    assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,false);
+   assert.equal((await (await sim('journal')).json() as any).gift.claim,null);
    for(const configuration of [{style:'unknown',size:'11oz',color:'white',font:'clean'},{style:'classic',size:'12oz',color:'white',font:'clean'},{style:'classic',size:'11oz',color:'red',font:'clean'},{style:'classic',size:'11oz',color:'white',font:'injected'},null]){
     assert.equal((await sim('gift/claim',{...payload,configuration})).status,400);
    }
@@ -143,6 +144,9 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders.length,1);assert.deepEqual(JSON.parse(history.orders[0].configuration_json),configuration);assert.equal(history.counts[0].count,1);
    assert.equal((await db.prepare("SELECT mug_order_count,print_order_count FROM invites WHERE id='mug-invite'").first<any>()).mug_order_count,1);
    assert.equal((await sim('journal')).status,200);assert.equal((await (await sim('journal')).json() as any).gift.mode,'simulation');assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,true);
+   const savedGift=(await (await sim('journal')).json() as any).gift.claim;
+   assert.deepEqual(savedGift,{designId:first.designId,status:first.status,configuration:first.configuration,design:first.design});
+   assert.equal('address' in savedGift,false,'Journal preloads only the gift display, without shipping details');
    assert.equal((await admin('mug-settings',{allowMugOrders:false})).status,200);
    assert.equal((await (await sim('gift/status')).json() as any).claim.id,first.id);assert.equal((await sim(first.design.src.replace('/api/',''))).status,200);
    assert.equal((await admin('mug-settings',{allowMugOrders:true})).status,200);
@@ -150,6 +154,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.equal((await admin(resetPath,{orderId:first.id,confirm:true})).status,200);
    const cleared=await (await admin('mug-orders')).json() as any;assert.equal(cleared.orders.length,0);assert.equal(cleared.counts[0].count,0);assert.equal((await (await sim('gift/status')).json() as any).claim,null);
    assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,false);
+   assert.equal((await (await sim('journal')).json() as any).gift.claim,null);
    assert.equal((await sim(first.design.src.replace('/api/',''))).status,404);assert.equal(await bucket.head(`2026/mug-orders/${first.id}/artwork.png`),null);
    const second=(await (await sim('gift/claim',{...payload,requestKey:crypto.randomUUID()})).json() as any).claim;assert.notEqual(second.id,first.id);assert.deepEqual(second.configuration,{style:'color-inside',size:'15oz',color:'dark blue',font:'clean'});
    assert.equal((await admin(resetPath,{orderId:first.id,confirm:true})).status,409);assert.equal((await (await sim('gift/status')).json() as any).claim.id,second.id);
@@ -222,6 +227,8 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.ok(!providerCalls.includes('/orders'));
    const saved=await (await mf.dispatchFetch('https://live.test/api/gift/claim',{method:'POST',headers:{Origin:'https://live.test',Cookie:'__Host-year_session='+raw,'Content-Type':'application/json'},body:JSON.stringify({designId:'mug-0',configuration,addressVersion:1,requestKey:crypto.randomUUID(),mockupId:job.id})})).json() as any;
    assert.match(saved.claim.design.mockupSrc,/^\/api\/gift\/orders\/mug-/);
+   const journalGift=(await (await mf.dispatchFetch('https://live.test/api/journal',{headers:{Cookie:'__Host-year_session='+raw}})).json() as any).gift;
+   assert.equal(journalGift.claim.design.mockupSrc,saved.claim.design.mockupSrc);
    assert.equal((await mf.dispatchFetch('https://live.test'+saved.claim.design.mockupSrc)).status,401);
    assert.equal((await mf.dispatchFetch('https://live.test'+saved.claim.design.mockupSrc,{headers:{Cookie:'__Host-year_session='+raw}})).headers.get('Content-Type'),'image/png');
    const history=await (await admin('mug-orders')).json() as any;assert.ok(history.orders[0].mockup_key);
