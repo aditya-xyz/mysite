@@ -52,7 +52,7 @@ export const uiDrafts=[
 ['our pack’s pick inside. a little note, too.','आत आमच्या टोळीचे आवडते फोटो. आणि एक छोटंसं पत्रही.','裡面有我們家的私心精選，還有一張小紙條。'],
 ['make a keepsake','आठवण बनवा','製作紀念卡'],
 ['one complimentary keepsake for {name}','{name} यांच्यासाठी भेट म्हणून एक आठवण','送給 {name} 的一張免費紀念卡'],
-['one complimentary folded keepsake for {name}','{name} यांच्यासाठी भेट म्हणून एक घडीचं कार्ड','送給 {name} 的一張免費對折紀念卡'],
+['one complimentary folded keepsake for {name}','{name} यांच्यासाठी भेट म्हणून एक घडीचं कार्ड','免費贈送給 {name} 的紀念卡（每戶一張）'],
 ['View your keepsake','तुझं कार्ड पाहा','查看你的紀念卡'],
 ['Your keepsake order is saved. Here’s the one you chose.','तुझ्या कार्डची ऑर्डर जतन झाली आहे. हे तू निवडलेलं कार्ड.','你的紀念卡訂單已儲存。這就是你選的款式。'],
 ['Keepsake ordered for {name}','{name} यांच्यासाठी कार्डची ऑर्डर झाली','已為 {name} 訂購紀念卡'],
