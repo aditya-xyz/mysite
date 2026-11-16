@@ -23,3 +23,9 @@ Final workspace assets:
 - `web/frames/starry-night-v1.png`
 - `web/frames/evergreen-v1.png`
 - `web/frames/winterlight-v1.png`
+
+Screen-only previews (`*-preview-v1.webp`) are 720×900 WebP derivatives of these
+approved backgrounds, encoded at quality 85. The picker preloads and decodes all
+three; full-size PNGs remain the source for saved and printed artwork.
+The bottom photo slots retain their original 544:480 proportions at 484×427,
+with a smaller heading and the heart beside the signature to recover photo height.

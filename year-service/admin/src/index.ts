@@ -451,7 +451,7 @@ async function route(request: Request, env: Env, actor: string) {
     return new Response(file.body,{headers:{"Content-Type":mediaRoute[2] !== "original" ? "image/jpeg" : media!.mime}});
   }
   if (path.startsWith("/api/")) throw new Problem(404,"Not found.");
-  if(/^\/frames\/(starry-night|evergreen|winterlight)-v1\.png$/.test(path))return env.ASSETS.fetch(new Request(new URL('/pixelbook-preview'+path,url),request));
+  if(/^\/frames\/(starry-night|evergreen|winterlight)(-v1\.png|-preview-v1\.webp)$/.test(path))return env.ASSETS.fetch(new Request(new URL('/pixelbook-preview'+path,url),request));
   if(['/pixel-santa.png','/pixel-face-emoji.png'].includes(path))return env.ASSETS.fetch(new Request(new URL('/pixelbook-preview'+path,url),request));
   return env.ASSETS.fetch(request);
 }
