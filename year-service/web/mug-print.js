@@ -9,17 +9,19 @@ export async function renderMugPrint(design,configuration,variant){
  await document.fonts.load(`600 32px ${family}`);
  const layout=mugPrintLayout(canvas.width,canvas.height,variant),h=layout.panelSize,padding=layout.top+h*.08,caption=String(design.caption||'');
  // One wrap file freezes both sides and is reused for previews and orders.
- const imageHeight=h*(caption?0.7:0.84),imageWidth=h*.8,scale=Math.min(imageWidth/image.naturalWidth,imageHeight/image.naturalHeight);
+ // Size Pixel from the full print height; narrow side guides only constrain width.
+ const room=Math.min(layout.selectedCenter,canvas.width-layout.santaCenter,(layout.santaCenter-layout.selectedCenter)/2);
+ const imageTop=canvas.height*.045,imageHeight=canvas.height*(caption ? .78 : .91),imageWidth=Math.min(canvas.height*.95,room*1.9),scale=Math.min(imageWidth/image.naturalWidth,imageHeight/image.naturalHeight);
  const w=image.naturalWidth*scale,ih=image.naturalHeight*scale;
- context.drawImage(image,layout.selectedCenter-w/2,padding+(imageHeight-ih)/2,w,ih);
+ context.drawImage(image,layout.selectedCenter-w/2,imageTop+(imageHeight-ih)/2,w,ih);
  if(caption){
-  let fontSize=h*.052,lines=[];const maxWidth=h*1.1;
-  for(;fontSize>=h*.025;fontSize-=1){
+  let fontSize=canvas.height*.065,lines=[];const maxWidth=room*1.9;
+  for(;fontSize>=canvas.height*.025;fontSize-=1){
    context.font=`600 ${fontSize}px ${family}`;lines=[];let line='';
    for(const word of caption.split(/\s+/)){const next=line?line+' '+word:word;if(line&&context.measureText(next).width>maxWidth){lines.push(line);line=word;}else line=next;}if(line)lines.push(line);
-   if(lines.length*fontSize*1.2<=h*.18&&lines.every(l=>context.measureText(l).width<=maxWidth))break;
+   if(lines.length*fontSize*1.2<=canvas.height*.12&&lines.every(l=>context.measureText(l).width<=maxWidth))break;
   }
-  context.fillStyle=configuration.style==='black-glossy'?'#ffffff':'#20392f';context.textAlign='center';context.textBaseline='top';lines.forEach((line,i)=>context.fillText(line,layout.selectedCenter,padding+imageHeight+h*.025+i*fontSize*1.2,maxWidth));
+  context.fillStyle=configuration.style==='black-glossy'?'#ffffff':'#20392f';context.textAlign='center';context.textBaseline='top';lines.forEach((line,i)=>context.fillText(line,layout.selectedCenter,imageTop+imageHeight+canvas.height*.02+i*fontSize*1.2,maxWidth));
  }
  const santa=variant.santaImage||new Image();if(!variant.santaImage){santa.src='/pixel-santa.png';await santa.decode();}
  const santaHeight=h*.76,santaScale=Math.min(h*.8/santa.naturalWidth,santaHeight/santa.naturalHeight),sw=santa.naturalWidth*santaScale,sh=santa.naturalHeight*santaScale;

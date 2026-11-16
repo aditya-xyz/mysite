@@ -30,3 +30,17 @@ test('every supported print area follows its supplier side guides with safe capt
  }
  assert.throws(()=>mugPrintLayout(2400,900,{productId:999,printWidth:2400,printHeight:900}),/verified placement guide/);
 });
+
+
+test('larger Pixel and captions fit every mug print area, including black 11oz',async()=>{
+ const previousDocument=(globalThis as any).document;
+ try{for(const key of Object.keys(mugPlacementGuides)){
+  const [productId,area]=key.split(':'),[printWidth,printHeight]=area.split('x').map(Number),draws:any[]=[],texts:any[]=[];
+  const height=Math.round(2400*printHeight/printWidth);
+  const context={font:'',drawImage(...args:any[]){draws.push(args)},measureText(t:string){return {width:t.length*Number(/([0-9.]+)px/.exec(this.font)![1])*.5}},fillText(...args:any[]){texts.push([...args,Number(/([0-9.]+)px/.exec(this.font)![1])])}};
+  (globalThis as any).document={fonts:{async load(){}},createElement(){return {width:0,height:0,getContext(){return context},toBlob(fn:any){fn(new Blob(['png']))}}}};
+  await renderMugPrint({caption:'per my last email'},{font:'clean',style:'black-glossy'},{productId:Number(productId),printWidth,printHeight,renderWidth:2400,sourceImage:{naturalWidth:1121,naturalHeight:1402},santaImage:{naturalWidth:369,naturalHeight:400}});
+  const [,x,y,w,h]=draws[0];assert.ok(h>=height*.77,key);assert.ok(x>=0&&x+w<=2400&&y>=0&&y+h<height,key);
+  const [,cx,cy,maxWidth,fontSize]=texts[0];assert.ok(cx-maxWidth/2>=0&&cx+maxWidth/2<=2400,key);assert.ok(fontSize>=height*.06,key);assert.ok(cy>y+h&&cy+fontSize*1.2<=height,key);
+ }}finally{(globalThis as any).document=previousDocument;}
+});

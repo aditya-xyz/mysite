@@ -1,6 +1,6 @@
 import {mugPlacementGuides} from './mug-placement-guides.js';
 // Bump whenever guide calibration, artwork, or composition changes.
-export const MUG_LAYOUT_VERSION=3;
+export const MUG_LAYOUT_VERSION=4;
 export const MUG_RENDER_WIDTH=2400;
 export const mugPlacementGuide=(productId,width,height)=>mugPlacementGuides[`${productId}:${width}x${height}`]||null;
 export function mugPrintLayout(width,height,variant){
