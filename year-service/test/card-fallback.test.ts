@@ -2,14 +2,16 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
-import {cardFallbackPreview,tickCardFallback,setCardFallbackExclusion} from '../src/card-fallback.ts';
-import {countryDeadline,giftWindow} from '../src/gift-deadline.ts';
+import {cardFallbackPreview,tickCardFallback} from '../src/card-fallback.ts';
+import {countryDeadline,giftWindow,cutoffSchedule} from '../src/gift-deadline.ts';
 import {createPrintOrder,printStatus,finishSavedPrintOrder,type PrintEnv} from '../src/printing.ts';
 import {createMugOrder,mugStatus,mugQuote} from '../src/mug-orders.ts';
 import {keepsakeManifest} from '../src/keepsake-defaults.ts';
 import {orderBudgetApprovalRoute} from '../admin/src/order-budget-approval.ts';
 import {cardFallbackAdminRoute} from '../admin/src/card-fallback.ts';
 import {digest} from '../src/security.ts';
+// @ts-expect-error Shared admin presentation helpers.
+import {fallbackReport,lastChoiceDate} from '../admin/client/card-fallback.js';
 // @ts-expect-error Shared browser markup and clock helper.
 import {giftMarkup} from '../web/pixelbook.js';
 // @ts-expect-error Shared browser clock helper.
@@ -64,6 +66,21 @@ test('fallback cards preserve eligibility, household uniqueness, frozen content 
     await reset();await add('us');await due();await db.exec('UPDATE editions SET '+change+' WHERE year=2026');await tickCardFallback(env,at);assert.equal(await count('print_orders'),0);assert.equal((await cardFallbackPreview(env,2026,at)).rows[0].decision,'skipped');
    }
   });
+  await t.test('admins can save Pacific last-choice dates without changing contacts, invitations or orders',async()=>{
+   await reset();await add('us');const before=await db.prepare('SELECT * FROM people').all(),invites=await db.prepare('SELECT * FROM invites').all();
+   const previousPolicy=await db.prepare('SELECT * FROM card_fallback_policies WHERE year=2026').first<any>();
+   const response=await cardFallbackAdminRoute(new Request('https://admin.test',{method:'POST'}),env,'/api/card-fallback/dates',2026,'owner@example.com',async()=>({previousPolicy,internationalLastDay:'2026-11-29',usLastDay:'2026-12-06'}));assert.equal(response?.status,200);
+   const saved=await db.prepare('SELECT * FROM card_fallback_policies WHERE year=2026').first<any>();assert.equal(saved.international_cutoff,1796025600);assert.equal(saved.us_cutoff,1796630400);
+   assert.deepEqual((await db.prepare('SELECT * FROM people').all()).results,before.results);assert.deepEqual((await db.prepare('SELECT * FROM invites').all()).results,invites.results);assert.equal(await count('print_orders'),0);assert.equal(await count('card_fallback_jobs'),0);
+   await assert.rejects(cardFallbackAdminRoute(new Request('https://admin.test',{method:'POST'}),env,'/api/card-fallback/dates',2026,'angela@example.com',async()=>({previousPolicy,internationalLastDay:'2026-11-28',usLastDay:'2026-12-05'})),/schedule changed/);
+  });
+  await t.test('invalid dates, past dates and edits after closure are rejected; retired exclusion controls do nothing',async()=>{
+   await reset();await add('us');const previousPolicy=await db.prepare('SELECT * FROM card_fallback_policies WHERE year=2026').first<any>();
+   for(const internationalLastDay of ['2026-02-30','2025-11-29','2026-01-01'])await assert.rejects(cardFallbackAdminRoute(new Request('https://admin.test',{method:'POST'}),env,'/api/card-fallback/dates',2026,'owner@example.com',async()=>({previousPolicy,internationalLastDay,usLastDay:'2026-12-06'})));
+   await due();await tickCardFallback(env,at);const current=await db.prepare('SELECT * FROM card_fallback_policies WHERE year=2026').first<any>();
+   await assert.rejects(cardFallbackAdminRoute(new Request('https://admin.test',{method:'POST'}),env,'/api/card-fallback/dates',2026,'owner@example.com',async()=>({previousPolicy:current,internationalLastDay:'2026-11-29',usLastDay:'2026-12-06'})),/cutoff has already started/);
+   assert.equal(await cardFallbackAdminRoute(new Request('https://admin.test',{method:'POST'}),env,'/api/card-fallback/exclusions/us',2026,'owner@example.com',async()=>({excluded:true})),null);
+  });
   await t.test('midnight closes gifts, 6 a.m. queues cards, and no mugs are created',async()=>{
    await reset();const india=await add('india','IN'),us=await add('us');
    assert.equal((await giftWindow(env.DB,india,at+199)).closed,false);assert.equal((await giftWindow(env.DB,india,at+200)).closed,true);assert.equal((await giftWindow(env.DB,us,at+200)).closed,false);
@@ -83,10 +100,10 @@ test('fallback cards preserve eligibility, household uniqueness, frozen content 
    await db.prepare("UPDATE editions SET published_json=json_set(published_json,'$.defaultPrintNote','Changed') WHERE year=2026").run();
    await tickCardFallback(env,at+60);assert.equal(await count('print_orders'),1);assert.equal((await db.prepare('SELECT note FROM print_orders').first<any>()).note,o.note);
   });
-  await t.test('skip missing/incomplete addresses, inactive invitations, excluded households and permissions off',async()=>{
-   await reset();await add('missing','US',false);await add('bad');await add('revoked');await add('expired');await add('off');await add('excluded');
+  await t.test('skip missing/incomplete addresses, inactive invitations and permissions off',async()=>{
+   await reset();await add('missing','US',false);await add('bad');await add('revoked');await add('expired');await add('off');
    await db.prepare("UPDATE people SET mailing_address=json_set(mailing_address,'$.postalCode','bad') WHERE id='bad'").run();
-   await db.prepare("UPDATE invites SET revoked_at=?1 WHERE id='revoked'").bind(at).run();await db.prepare("UPDATE invites SET expires_at=?1 WHERE id='expired'").bind(at-1).run();await db.prepare("UPDATE invites SET allow_print=0 WHERE id='off'").run();await setCardFallbackExclusion(env,2026,'excluded',true,'owner@example.com');
+   await db.prepare("UPDATE invites SET revoked_at=?1 WHERE id='revoked'").bind(at).run();await db.prepare("UPDATE invites SET expires_at=?1 WHERE id='expired'").bind(at-1).run();await db.prepare("UPDATE invites SET allow_print=0 WHERE id='off'").run();
    await due();await tickCardFallback(env,at);assert.equal(await count('print_orders'),0);assert.equal((await cardFallbackPreview(env,2026,at)).rows.every(r=>r.decision==='skipped'),true);
    await db.prepare("UPDATE people SET mailing_address=?1 WHERE id='missing'").bind(JSON.stringify({line1:'123 Example Road',line2:'',city:'Portland',state:'OR',postalCode:'97201',country:'US'})).run();
    await tickCardFallback(env,at+60);assert.equal(await count('print_orders'),0,'Late addresses do not reopen the cutoff decision');
@@ -156,4 +173,20 @@ test('open pages close gifts exactly once at deadline and after a background-tab
  let clock=1000,callback:()=>void=()=>{},visibility:()=>void=()=>{},closed=0,canceled=0;
  const stop=watchGiftDeadline({closesAt:2,closed:false},()=>closed++,{now:()=>clock,schedule:(cb:()=>void,delay:number)=>{assert.ok(delay>0);callback=cb;return 1;},cancel:()=>canceled++,events:{addEventListener:(_name:string,cb:()=>void)=>{visibility=cb;},removeEventListener:()=>{}}});
  assert.equal(closed,0);clock=1999;callback();assert.equal(closed,0);clock=2000;visibility();assert.equal(closed,1);callback();assert.equal(closed,1);stop();assert.ok(canceled>0);
+});
+
+test('cutoff calendar dates follow Pacific daylight saving and report unique existing orders',()=>{
+ assert.equal(cutoffSchedule('2026-11-29',2026).closesAt,1796025600);assert.equal(lastChoiceDate(1796025600),'2026-11-29');
+ const spring=cutoffSchedule('2026-03-07',2026);assert.equal(new Date(spring.closesAt*1000).toISOString(),'2026-03-08T08:00:00.000Z');assert.equal(new Date(spring.runAt*1000).toISOString(),'2026-03-08T13:00:00.000Z');
+ const autumn=cutoffSchedule('2026-10-31',2026);assert.equal(new Date(autumn.closesAt*1000).toISOString(),'2026-11-01T07:00:00.000Z');assert.equal(new Date(autumn.runAt*1000).toISOString(),'2026-11-01T14:00:00.000Z');
+ const report=fallbackReport([{invitationId:'a',name:'Household A',orderId:'same-order',decision:'submitted',address:{}},{invitationId:'b',name:'Household B',orderId:'same-order',decision:'submitted',address:{}},{invitationId:'c',name:'Missing address',decision:'skipped',address:null}]);
+ assert.equal(report.counts.ordered,1);assert.equal(report.counts.missing,1);assert.equal(report.groups.length,2);assert.deepEqual(report.groups[0].names,['Household A','Household B']);
+});
+
+test('open pages pick up changed dates without placing orders',async()=>{
+ let clock=1000,callback:()=>Promise<void>=async()=>{},closed=0;
+ let next={closesAt:4,closed:false};
+ const stop=watchGiftDeadline({closesAt:2,closed:false},()=>closed++,{now:()=>clock,schedule:(cb:()=>Promise<void>)=>{callback=cb;return 1;},cancel:()=>{},events:{addEventListener:()=>{},removeEventListener:()=>{}},refresh:async()=>next,repeat:()=>1,stopRepeat:()=>{}});
+ clock=2000;await callback();assert.equal(closed,0,'An extension keeps gifts open past the old deadline');
+ next={closesAt:3,closed:true};await callback();assert.equal(closed,1);stop();
 });

@@ -1313,20 +1313,26 @@ custom designs/proofs only; it never called order, basket or payment endpoints.
 The back signature, handwriting, order caps, manual budget approval, mug catalog
 and recipient/address behavior are unchanged.
 
-### Fallback cards
+### Automatic cards
 
-Open **Invitations → Automatic fallback cards → Preview automatic cards** to
-review the read-only 2026 plan, complete saved addresses and skip reasons.
-Dates are shown in Pacific time. Admin exclusions apply to the whole household
-and do not cancel already reserved orders. The default is a Starry Night folded
-card with the published default note; missing addresses are skipped permanently
-at cutoff. Normal print history shows fallback proofs, fulfillment state,
-checkout quotes and exact-quote budget approval. A failed preparation can be
-retried; submitted or uncertain vendor orders cannot be re-sent this way.
+Open **Invitations → Automatic cards**. Set the **Last day to choose gifts** for
+India/Netherlands and the US, then select **Save cutoff dates**. Recipients have
+through 11:59 p.m. Pacific that day; automatic cards start at 06:00 the following
+morning. Saving dates changes only this policy, never the People directory or
+existing invitations/orders. Changes from a stale tab are rejected; refresh and
+review the current dates. Dates lock after the first cutoff starts.
 
-Admin endpoints are edition scoped: `GET /api/editions/:year/card-fallback`,
-`POST /api/editions/:year/card-fallback/exclusions/:invitation` with
-`{excluded:boolean}`, and `POST /api/editions/:year/card-fallback/retry/:invitation`.
-All use the existing admin identity and origin checks. Dry runs never invoke
-Handwrytten. Live mailing stays disabled; both simulation and vendor Test Mode
-are required for automatic test preparation and normal budget approvals remain.
+**Check recipients** is read-only. It shows cards ready for fallback, unique
+existing orders and missing addresses; expand **View recipients** for names and
+reasons. Entries covered by the same existing card are grouped. No address and
+no order means no card is sent, with no manual exclusion toggle. Existing orders
+keep their normal print-history proofs and budget approvals. Failed preparation
+can be retried; submitted/uncertain orders cannot be re-sent this way.
+
+Edition-scoped endpoints: `GET /api/editions/:year/card-fallback`,
+`POST /api/editions/:year/card-fallback/dates` with
+`{internationalLastDay,usLastDay,previousPolicy}`, and
+`POST /api/editions/:year/card-fallback/retry/:invitation`. All use the existing
+admin identity and origin checks. The former exclusions endpoint is removed.
+Live mailing stays disabled; simulation and vendor Test Mode are still required
+and the normal manual approvals remain.

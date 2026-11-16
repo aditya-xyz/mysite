@@ -967,17 +967,27 @@ US/IN/NL address, approved Starry Night artwork and a published default note get
 one default A2 folded card, even if they qualified for personalized artwork.
 The published default note falls back to the published personalized note when
 blank. No new Google verification is required for the admin-owned address.
-Missing/incomplete addresses, exclusions, inactive invitations, disabled cards
+Missing/incomplete addresses, inactive invitations, disabled cards
 and existing household orders are skipped. Existing submitted, uncertain,
 approval-pending and allowance-reset order history prevents duplicate fallback
 mailings. Skipped cutoff decisions are final; adding an address afterward does
 not reopen gifts. Household membership changes after a recorded cutoff require
 review rather than silently changing the mailing audience.
 
-The authenticated admin Invitations view contains **Automatic fallback cards**.
-**Preview automatic cards** reads the current candidates, addresses, deadlines,
-existing order state and skip reasons without creating jobs, vendor proofs,
-quotes, baskets or orders. Admins can exclude a household before reservation.
+The authenticated admin Invitations view contains **Automatic cards**. Set the
+**Last day to choose gifts** for India/Netherlands and the US, then select
+**Save cutoff dates**. Dates mean the end of the selected day in Pacific time;
+the next morning's 06:00 run is calculated automatically, including daylight
+saving changes. Optimistic updates reject a stale schedule from another admin.
+Dates lock once a cutoff starts or a decision is recorded, preventing reopening
+old gifts or re-sending a card. This saves only the policy row and audit event;
+people, addresses, invitations, published content and existing orders are unchanged.
+
+**Check recipients** reads current eligibility without creating jobs, proofs,
+quotes, baskets or orders. Counts and collapsed recipient details group entries
+covered by the same existing order. Missing addresses are automatically left out;
+there is no manual exclusion control. The old exclusion table is retained as
+historical data but no longer affects eligibility.
 Existing orders remain in print history, tagged Automatic fallback; their saved
 proofs and normal budget approval controls remain available. Safe preparation
 errors retry three times and can be retried from admin after fixing the cause.
@@ -993,5 +1003,6 @@ not turn these simulations into physical shipments.
 
 Both card and mug claims enforce the cutoff in the server reservation. The gift
 section disappears at cutoff, including open pages and pages restored from a
-background tab. Mugs are never ordered by this automation. Mug catalogs, styles,
+background tab. Open pages refresh saved deadline changes at least every minute
+and at the current deadline; reservation SQL also rechecks the current policy. Mugs are never ordered by this automation. Mug catalogs, styles,
 SMS settings, published content and existing orders are preserved.

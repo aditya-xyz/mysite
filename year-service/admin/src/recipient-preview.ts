@@ -30,6 +30,7 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
    if(canPrint)data.keepsake.defaultFrames=Object.fromEntries(Object.keys(defaults!.frames).map(frame=>[frame,base+`default/${defaults!.revision}/${frame}`+query]));
    return Response.json({...data,previewContext:query});
   }
+  if(action==='gift/deadline')return Response.json(window);
   if(action==='gift/status')return Response.json({eligible:!window.closed&&!!(invite?.allow_mug&&edition?.allow_mug_orders),claim:null,livePricing:true,mode:'preview'});
   if(action==='gift/catalog'){
    const catalog=await preparedMugCatalog(env,year,true);if(!catalog)throw new PrintProblem(409,'Prepare mug previews in admin first.');

@@ -145,7 +145,7 @@ function showJournal() {
   document.fonts?.ready.then(()=>{if(grids[0]?.isConnected)grids.forEach(layoutPhotoGrid);});
   app.querySelectorAll('[data-photo]').forEach(button => button.onclick=()=>openPhoto(journal.photos.find(p=>p.id===button.dataset.photo)));
   pixelGift=mountPixelGift(journal,app);
-  stopGiftDeadline=watchGiftDeadline(journal.giftWindow,()=>{keepsake?.destroy();pixelGift?.destroy();app.querySelector('.pb-presents')?.remove();});
+  stopGiftDeadline=app.querySelector('.pb-presents')?watchGiftDeadline(journal.giftWindow,()=>{keepsake?.destroy();pixelGift?.destroy();app.querySelector('.pb-presents')?.remove();},{refresh:()=>api('gift/deadline')}):null;
   window.scrollTo(0,0);
 }
 function openPhoto(photo) {

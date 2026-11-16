@@ -200,6 +200,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     const response=await deliveryAddressRoute(request,env,invite,path,()=>body(request));
     if(response)return response;
   }
+  if(path==='/api/gift/deadline'&&request.method==='GET')return json(await giftWindow(env.DB,await authenticated(request,env)));
   if(path==='/api/gift/status'&&request.method==='GET')return json(await mugStatus(request,env,await authenticated(request,env)));
   const preparedSource=/^\/api\/gift\/prepared-source\/([a-f0-9]{64})$/.exec(path);
   if(preparedSource&&['GET','HEAD'].includes(request.method))return preparedMugSource(env,preparedSource[1]);

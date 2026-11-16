@@ -1,4 +1,4 @@
-import {giftWindow} from './gift-deadline.ts';
+import {giftWindow,giftReservationOpenSQL} from './gift-deadline.ts';
 import {handwryttenPrintFont} from './handwrytten.ts';
 import {keepsakeDefault} from './keepsake-defaults.ts';
 import {addressVerificationCurrent,type AddressState} from './address-state.ts';
@@ -110,7 +110,7 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  FROM invites i JOIN editions e ON e.year=i.edition_year JOIN people p ON p.id=i.person_id
  WHERE i.id=?5 AND i.print_order_count=0 AND i.version=?6 AND i.revoked_at IS NULL AND i.expires_at>?7 AND e.is_active=1 AND e.allow_print_orders=1 AND e.published_version=?8
  AND p.id=?9 AND p.version=?10 AND p.address_verified=1 AND (p.address_verifier IN ('local_mock','google') OR (p.address_verifier='admin' AND json_extract(p.mailing_address,'$.country')='IN')) AND (p.address_verifier!='google' OR p.address_verified_until>?7)
- AND unixepoch()<?18
+ AND unixepoch()<?18 AND ${giftReservationOpenSQL}
  AND i.allow_print=1 AND i.print_address_key=p.address_verification_key
  AND EXISTS(SELECT 1 FROM keepsake_defaults k WHERE k.year=e.year AND k.revision=?12)
  AND NOT EXISTS(SELECT 1 FROM card_fallback_jobs j JOIN print_orders fo ON fo.id=j.order_id JOIN invites fi ON fi.id=j.invitation_id WHERE j.year=e.year AND fo.status IN ('preparing','simulated','submitted','unknown') AND (fi.id=i.id OR fi.person_id=i.person_id OR EXISTS(SELECT 1 FROM json_each(fi.member_ids) a JOIN json_each(i.member_ids) b ON a.value=b.value)))

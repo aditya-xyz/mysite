@@ -1,12 +1,25 @@
-import {cardFallbackPreview,setCardFallbackExclusion} from '../../src/card-fallback.ts';
+import {cutoffSchedule,type CardFallbackPolicy} from '../../src/gift-deadline.ts';
+import {now} from '../../src/security.ts';
+import {cardFallbackPreview} from '../../src/card-fallback.ts';
 import {PrintProblem,type PrintEnv} from '../../src/printing.ts';
 export async function cardFallbackAdminRoute(request:Request,env:PrintEnv,path:string,year:number,actor:string,readBody:()=>Promise<Record<string,unknown>>){
  if(path==='/api/card-fallback'&&request.method==='GET')return Response.json(await cardFallbackPreview(env,year));
- const exclude=/^\/api\/card-fallback\/exclusions\/([a-z0-9-]{1,100})$/.exec(path);
- if(exclude&&request.method==='POST'){
-  const data=await readBody();if(typeof data.excluded!=='boolean')throw new PrintProblem(400,'Choose whether to exclude this household.');
-  if(!await env.DB.prepare('SELECT id FROM invites WHERE id=?1 AND edition_year=?2').bind(exclude[1],year).first())throw new PrintProblem(404,'Invitation not found.');
-  await setCardFallbackExclusion(env,year,exclude[1],data.excluded,actor);return Response.json({excluded:data.excluded});
+ if(path==='/api/card-fallback/dates'&&request.method==='POST'){
+  const data=await readBody(),previous=data.previousPolicy as CardFallbackPolicy|undefined;
+  if(typeof data.internationalLastDay!=='string'||typeof data.usLastDay!=='string'||!previous||previous.year!==year||!['international_cutoff','international_run_at','us_cutoff','us_run_at'].every(key=>Number.isSafeInteger((previous as unknown as Record<string,unknown>)[key])))throw new PrintProblem(400,'Choose both cutoff dates and reload the current schedule before saving.');
+  let international,us;
+  try{international=cutoffSchedule(data.internationalLastDay,year);us=cutoffSchedule(data.usLastDay,year);}catch(error){throw new PrintProblem(400,error instanceof Error?error.message:'Choose valid cutoff dates.');}
+  if(Math.min(international.closesAt,us.closesAt)<=now())throw new PrintProblem(400,'Choose dates whose gift cutoff is still in the future.');
+  const result=await env.DB.batch([
+   env.DB.prepare(`UPDATE card_fallback_policies SET international_cutoff=?1,international_run_at=?2,us_cutoff=?3,us_run_at=?4
+    WHERE year=?5 AND international_cutoff=?6 AND international_run_at=?7 AND us_cutoff=?8 AND us_run_at=?9
+    AND international_cutoff>unixepoch() AND us_cutoff>unixepoch()
+    AND NOT EXISTS(SELECT 1 FROM card_fallback_jobs WHERE year=?5) RETURNING *`)
+    .bind(international.closesAt,international.runAt,us.closesAt,us.runAt,year,previous.international_cutoff,previous.international_run_at,previous.us_cutoff,previous.us_run_at),
+   env.DB.prepare('INSERT INTO admin_events(actor,action,target) SELECT ?1,?2,?3 WHERE changes()>0').bind(actor,'update-card-cutoff-dates',JSON.stringify({year,internationalLastDay:data.internationalLastDay,usLastDay:data.usLastDay}))
+  ]);
+  if(!result[0].results.length)throw new PrintProblem(409,'The schedule changed or a cutoff has already started. Refresh to see the current dates. Recorded decisions and existing orders are preserved.');
+  return Response.json({policy:result[0].results[0]});
  }
  const retry=/^\/api\/card-fallback\/retry\/([a-z0-9-]{1,100})$/.exec(path);
  if(retry&&request.method==='POST'){
