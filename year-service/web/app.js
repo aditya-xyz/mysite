@@ -1,3 +1,5 @@
+import {loadViewerPhoto} from './photo-image.js';
+import {loadingPaw} from './loading.js';
 import {installLocalization} from './localization.js';
 import {watchGiftDeadline} from './gift-deadline.js';
 import {codeEntryMarkup,invitationEntryMarkup} from './auth-entry.js';
@@ -163,10 +165,18 @@ function showPhoto(photo,direction=0){
   originalRequest?.abort();originalRequest=null;
   if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}
   selected=photo;preparedFile=null;saveMode='share';const current=++generation;
-  const image=dialog.querySelector('img');image.draggable=false;image.src=photo.src;image.alt=photo.alt;document.querySelector('#photo-caption').textContent=photo.caption;
-  if(photo.viewerSrc&&photo.viewerSrc!==photo.src){
-    const detailed=new Image();detailed.decoding='async';detailed.onload=()=>{if(current===generation&&!preparedFile)image.src=photo.viewerSrc;};detailed.src=photo.viewerSrc;
-  }
+  const image=dialog.querySelector('img'),frame=dialog.querySelector('.photo-image');
+  image.draggable=false;image.style.visibility='hidden';image.removeAttribute('src');image.alt=photo.alt;
+  frame.style.setProperty('--photo-ratio',String(photo.width&&photo.height?photo.width/photo.height:1));
+  frame.setAttribute('aria-busy','true');
+  let loader=frame.querySelector('.photo-loading');
+  if(!loader){loader=document.createElement('div');loader.className='photo-loading';loader.setAttribute('role','status');frame.append(loader);}
+  loader.hidden=false;loader.innerHTML=loadingPaw()+'<span>Loading photo…</span>';
+  document.querySelector('#photo-caption').textContent=photo.caption;
+  loadViewerPhoto(photo,{isCurrent:()=>current===generation&&!preparedFile,
+    reveal(src,width,height){frame.style.setProperty('--photo-ratio',String(width/height));image.src=src;image.style.visibility='visible';loader.hidden=true;frame.removeAttribute('aria-busy');},
+    fail(){frame.removeAttribute('aria-busy');loader.textContent='Couldn’t load this photo. ';const retry=document.createElement('button');retry.type='button';retry.textContent='Try again';retry.onclick=()=>showPhoto(photo);loader.append(retry);}
+  });
   document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full res';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');
   previousPhoto.disabled=viewerIndex===0;nextPhoto.disabled=viewerIndex===viewerPhotos.length-1;
   document.querySelector('#photo-count').textContent=`Photo ${viewerIndex+1} of ${viewerPhotos.length}`;
@@ -256,6 +266,9 @@ fullResolution.onclick=async()=>{
     const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]||'photo.jpg';
     preparedFile=new File([blob],filename,{type:blob.type});
     fullImageUrl=URL.createObjectURL(preparedFile);dialog.querySelector('img').src=fullImageUrl;
+    dialog.querySelector('img').style.visibility='visible';
+    dialog.querySelector('.photo-image').removeAttribute('aria-busy');
+    const loader=dialog.querySelector('.photo-loading');if(loader)loader.hidden=true;
     fullResolution.textContent='Full res ✓';fullResolution.classList.add('is-ready');
     save.disabled=false;save.setAttribute('aria-label','Save original photo');save.title='Save original photo';
     status.textContent='Full resolution loaded. Tap the download icon to save or share.';

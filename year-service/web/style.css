@@ -179,3 +179,11 @@ footer[hidden],header .signature[hidden]{display:none}
 html:lang(mr) body,html:lang(mr) button,html:lang(mr) input,html:lang(mr) select,html:lang(mr) textarea{font-family:"Noto Sans Devanagari","Devanagari Sangam MN",sans-serif}html:lang(zh-TW) body,html:lang(zh-TW) button,html:lang(zh-TW) input,html:lang(zh-TW) select,html:lang(zh-TW) textarea{font-family:"PingFang TC","Microsoft JhengHei",sans-serif}
 html:lang(mr) .pb-cover-note,html:lang(zh-TW) .pb-cover-note{line-height:1.6}
 html:lang(mr) h1,html:lang(mr) h2,html:lang(mr) h3,html:lang(mr) p,html:lang(mr) span,html:lang(zh-TW) h1,html:lang(zh-TW) h2,html:lang(zh-TW) h3,html:lang(zh-TW) p,html:lang(zh-TW) span{font-family:inherit}
+
+/* Keep the lightbox at its final aspect ratio while the viewing image decodes. */
+#photo .photo-image{--photo-side-space:152px;--photo-vertical-space:160px;width:min(1000px,calc(100vw - var(--photo-side-space)),calc((100dvh - var(--photo-vertical-space))*var(--photo-ratio,1)));aspect-ratio:var(--photo-ratio,1)}
+#photo .photo-image>img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:contain}
+.photo-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#fff;font-size:14px}
+.photo-loading[hidden]{display:none}.photo-loading button{color:inherit;background:transparent;border:1px solid #fff8;border-radius:24px;padding:10px 18px;font:inherit;cursor:pointer}
+@media(max-width:600px){#photo .photo-image{--photo-side-space:136px}}
+@media(max-height:500px){#photo .photo-image{--photo-vertical-space:120px}}
