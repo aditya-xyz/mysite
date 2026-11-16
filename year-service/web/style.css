@@ -38,9 +38,9 @@ html:has(#photo[open]){overflow:hidden}
 #photo[open].is-closing{animation:photo-exit 180ms ease-in both;pointer-events:none}
 #photo.is-closing::backdrop{animation:photo-backdrop-out 180ms ease-in both}
 @keyframes photo-enter{from{opacity:0;transform:translateY(14px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes photo-exit{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(8px) scale(.97)}}
-@keyframes photo-backdrop-in{from{background:rgb(8 13 12 / 0);-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0)}to{background:rgb(4 9 7 / .9);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}}
-@keyframes photo-backdrop-out{from{background:rgb(4 9 7 / .9);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}to{background:rgb(8 13 12 / 0);-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0)}}
+@keyframes photo-exit{from{opacity:var(--photo-dismiss-opacity,1);transform:var(--photo-dismiss-transform,none)}to{opacity:0;transform:var(--photo-dismiss-transform,none)}}
+@keyframes photo-backdrop-in{from{opacity:0}to{opacity:1}}
+@keyframes photo-backdrop-out{from{opacity:var(--photo-backdrop-opacity,1)}to{opacity:0}}
 @media(prefers-reduced-motion:reduce){#photo[open],#photo[open].is-closing,#photo::backdrop,#photo.is-closing::backdrop{animation:none}}
 @media(prefers-reduced-transparency:reduce){#photo::backdrop,#photo.is-closing::backdrop{background:rgb(4 9 7 / .96);-webkit-backdrop-filter:none;backdrop-filter:none;animation:none}}
 

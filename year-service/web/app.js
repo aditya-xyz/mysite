@@ -279,6 +279,10 @@ function closePhoto(){
   if(!dialog.open||dialog.classList.contains('is-closing'))return;
   generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;save.disabled=true;
   if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){dialog.close();return;}
+  const appearance=getComputedStyle(dialog),backdrop=getComputedStyle(dialog,'::backdrop');
+  dialog.style.setProperty('--photo-dismiss-opacity',appearance.opacity);
+  dialog.style.setProperty('--photo-dismiss-transform',appearance.transform);
+  dialog.style.setProperty('--photo-backdrop-opacity',backdrop.opacity);
   dialog.classList.add('is-closing');
   // Fallback if the browser suppresses animationend (for example, a hidden tab).
   closeTimer=setTimeout(()=>{if(dialog.open)dialog.close();},260);
