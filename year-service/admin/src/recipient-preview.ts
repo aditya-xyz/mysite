@@ -1,3 +1,4 @@
+import {giftWindow} from '../../src/gift-deadline.ts';
 import {addressMode,verifyGoogle,type AddressEnv} from './address-verification.ts';
 import {addressVerificationCurrent} from '../../src/address-state.ts';
 import {mailingAddress,PrintProblem,foldedPreviewNote,foldedBackText} from '../../src/printing.ts';
@@ -18,17 +19,18 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
  const edition=await env.DB.prepare('SELECT * FROM editions WHERE year=?1').bind(year).first<any>();
  const base=`/api/editions/${year}/recipient-preview/`,query=url.search;
  const defaults=await keepsakeDefault(env,year);
- const canPrint=!!(invite?.allow_print&&edition?.allow_print_orders&&defaults);
+ const window=invite?await giftWindow(env.DB,invite):{closed:false,closesAt:null,runAt:null};
+ const canPrint=!window.closed&&!!(invite?.allow_print&&edition?.allow_print_orders&&defaults);
  if(request.method==='GET'){
   if(action==='journal'){
-   const data=await journal(invite?.id);data.adminPreview=true;data.shareSocials=!!invite?.share_socials;data.householdSize=invite?invitationMembers(invite).length:1;
-   if(!invite?.allow_mug||!edition?.allow_mug_orders){data.gift.enabled=false;data.gift.designs=[];}
+   const data=await journal(invite?.id);data.adminPreview=true;data.giftWindow=window;data.shareSocials=!!invite?.share_socials;data.householdSize=invite?invitationMembers(invite).length:1;
+   if(window.closed||!invite?.allow_mug||!edition?.allow_mug_orders){data.gift.enabled=false;data.gift.designs=[];}
    Object.assign(data.gift,{mode:'preview',orderingEnabled:false,livePricing:true,hasOrder:false,claim:null});
    data.keepsake=canPrint?{enabled:true,mode:data.photos.filter((p:any)=>p.personal).length>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults!.revision,defaultSrc:base+`default/${defaults!.revision}/`}: {enabled:false};
    if(canPrint)data.keepsake.defaultFrames=Object.fromEntries(Object.keys(defaults!.frames).map(frame=>[frame,base+`default/${defaults!.revision}/${frame}`+query]));
    return Response.json({...data,previewContext:query});
   }
-  if(action==='gift/status')return Response.json({eligible:!!(invite?.allow_mug&&edition?.allow_mug_orders),claim:null,livePricing:true,mode:'preview'});
+  if(action==='gift/status')return Response.json({eligible:!window.closed&&!!(invite?.allow_mug&&edition?.allow_mug_orders),claim:null,livePricing:true,mode:'preview'});
   if(action==='gift/catalog'){
    const catalog=await preparedMugCatalog(env,year,true);if(!catalog)throw new PrintProblem(409,'Prepare mug previews in admin first.');
    return Response.json({...catalog,previews:(catalog.previews||[]).map((p:any)=>({...p,src:base+'mug-image/'+p.id+query}))});

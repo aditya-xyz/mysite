@@ -50,6 +50,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await db.batch((await readFile('migrations/0029_handwrytten_fulfillment.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.exec(await readFile('migrations/0033_handwrytten_quote_only.sql','utf8'));
   await db.batch((await readFile('migrations/0034_order_budget_approval.sql','utf8')).split('--> statement-breakpoint').filter(sql=>/^(ALTER TABLE print_orders|UPDATE print_orders)/.test(sql.trim())).map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0035_card_fallback.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   const expires=Math.floor(Date.now()/1000)+86400,session='c'.repeat(64);
   await db.prepare("INSERT INTO people(id,name,phone) VALUES('contact','Test Recipient','+15555550100'),('partner','Test Partner',NULL)").run();
   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('invite','contact',?1,'Test Recipient','+15555550100',?2,?3)").bind(await digest('a'.repeat(64)),expires,JSON.stringify(['contact','partner'])).run();
@@ -90,6 +91,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await t.test('auth and CSRF gates apply to print APIs',async()=>{
    await reset();assert.equal((await guest('print/status',undefined,{cookie:false})).status,401);
    assert.equal((await admin('editions/2026/print-orders',undefined,false)).status,401);
+   assert.equal((await admin('editions/2026/card-fallback',undefined,false)).status,401);
    assert.equal((await guest('print/orders',await order(),{origin:'https://unrelated.test'})).status,403);
   });
   await t.test('Candy cane is accepted and preserved in the saved print recipe; unknown frames are rejected',async()=>{

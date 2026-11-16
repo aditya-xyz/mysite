@@ -1,3 +1,5 @@
+import {tickCardFallback} from './card-fallback.ts';
+import {giftWindow} from './gift-deadline.ts';
 import {tickPrintFulfillment} from './handwrytten-fulfillment.ts';
 import {reserveSmsSend,SmsBudgetError,type SmsBudgetEnv} from './sms-budget.ts';
 import {handwryttenPreviewStatus,handwryttenPreviewImage} from './handwrytten-previews.ts';
@@ -229,7 +231,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
   if(mugProof&&request.method==='GET')return mugOrderArtwork(env,await authenticated(request,env),mugProof[1],mugProof[2]==='mockup');
   const defaultKeepsake=/^\/api\/keepsake\/default\/([a-f0-9]{32,64})\/(moss|classic|santa|starry-night|evergreen|winterlight)$/.exec(path);
   if(defaultKeepsake&&request.method==='GET')return keepsakeDefaultImage(env,await authenticated(request,env),defaultKeepsake[1],defaultKeepsake[2]);
-  const printProof=/^\/api\/print\/orders\/(print-[a-z0-9]+)\/(artwork|default-artwork)$/.exec(path);
+  const printProof=/^\/api\/print\/orders\/(print-[a-z0-9-]+)\/(artwork|default-artwork)$/.exec(path);
   if(printProof&&request.method==='GET')return printOrderArtwork(env,await authenticated(request,env),printProof[1],printProof[2]==='default-artwork');
   if(path==='/api/print/previews'&&request.method==='POST'){await authenticated(request,env);throw new PrintProblem(410,'Keepsake previews are now generated locally. Reopen your keepsake.');}
   const pictureProof=/^\/api\/print\/previews\/([a-f0-9]{64})(?:\/(front|inside|back))?$/.exec(path);
@@ -252,6 +254,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
       data.shareSocials=!!i.share_socials;
       Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,i.edition_year)});
       Object.assign(data,{keepsake:await keepsakeManifest(env,i,data.photos.filter(p=>p.personal).length)});
+      Object.assign(data,{giftWindow:await giftWindow(env.DB,i)});
       const giftStatus=await mugStatus(request,env,i);
       if(!giftStatus.eligible){data.gift.enabled=false;data.gift.designs=[];}
       const claim=giftStatus.claim;
@@ -337,6 +340,7 @@ export default {
       env.DB.prepare("DELETE FROM rate_limits WHERE expires_at<=?1").bind(now())
     ]);
     }
+    try{await tickCardFallback(env);}catch(error){console.error('Card fallback scheduling failed',error);}
     await tickPrintFulfillment(env);
     await tickPreparedMugs(env,_event.cron==='23 9 * * *');
   }

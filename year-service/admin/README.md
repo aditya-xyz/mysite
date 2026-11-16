@@ -1312,3 +1312,21 @@ ordinary review uses matching insets as well. Real Test Mode calibration created
 custom designs/proofs only; it never called order, basket or payment endpoints.
 The back signature, handwriting, order caps, manual budget approval, mug catalog
 and recipient/address behavior are unchanged.
+
+### Fallback cards
+
+Open **Invitations → Automatic fallback cards → Preview automatic cards** to
+review the read-only 2026 plan, complete saved addresses and skip reasons.
+Dates are shown in Pacific time. Admin exclusions apply to the whole household
+and do not cancel already reserved orders. The default is a Starry Night folded
+card with the published default note; missing addresses are skipped permanently
+at cutoff. Normal print history shows fallback proofs, fulfillment state,
+checkout quotes and exact-quote budget approval. A failed preparation can be
+retried; submitted or uncertain vendor orders cannot be re-sent this way.
+
+Admin endpoints are edition scoped: `GET /api/editions/:year/card-fallback`,
+`POST /api/editions/:year/card-fallback/exclusions/:invitation` with
+`{excluded:boolean}`, and `POST /api/editions/:year/card-fallback/retry/:invitation`.
+All use the existing admin identity and origin checks. Dry runs never invoke
+Handwrytten. Live mailing stays disabled; both simulation and vendor Test Mode
+are required for automatic test preparation and normal budget approvals remain.

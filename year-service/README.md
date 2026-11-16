@@ -952,3 +952,46 @@ approximately 78.5% panel width. Back signature and note settings are unchanged.
 Existing ready vendor proofs are not overwritten. The calibration used only
 image upload, custom-design and picture-proof endpoints: no order, basket, payment
 or mailing request was made. Both Worker order modes remain test/simulation.
+
+### Automatic 2026 fallback cards
+
+Migration `0035_card_fallback.sql` installs the 2026 policy. India and Netherlands
+gifts close after November 29 at 11:59 p.m. Pacific (November 30 00:00 PST);
+the US and households without an address close after December 6 at 11:59 p.m.
+Pacific (December 7 00:00 PST). Automatic runs start at 06:00 PST on November 30
+and December 7 respectively. The minute cron records each cutoff decision, then
+prepares one due household per tick. Other editions have no implicit cutoff.
+
+Eligible, active invitations with published card permission, a complete saved
+US/IN/NL address, approved Starry Night artwork and a published default note get
+one default A2 folded card, even if they qualified for personalized artwork.
+The published default note falls back to the published personalized note when
+blank. No new Google verification is required for the admin-owned address.
+Missing/incomplete addresses, exclusions, inactive invitations, disabled cards
+and existing household orders are skipped. Existing submitted, uncertain,
+approval-pending and allowance-reset order history prevents duplicate fallback
+mailings. Skipped cutoff decisions are final; adding an address afterward does
+not reopen gifts. Household membership changes after a recorded cutoff require
+review rather than silently changing the mailing audience.
+
+The authenticated admin Invitations view contains **Automatic fallback cards**.
+**Preview automatic cards** reads the current candidates, addresses, deadlines,
+existing order state and skip reasons without creating jobs, vendor proofs,
+quotes, baskets or orders. Admins can exclude a household before reservation.
+Existing orders remain in print history, tagged Automatic fallback; their saved
+proofs and normal budget approval controls remain available. Safe preparation
+errors retry three times and can be retried from admin after fixing the cause.
+Vendor submission uncertainty is handled by the existing fulfillment review flow
+and is never automatically re-submitted.
+
+Preparation requires `ORDER_MODE=simulation` and
+`PRINT_ORDER_MODE=handwrytten_test`. It queues the same test-only fulfillment
+worker as recipient orders; totals above $10 still require manual approval of
+the exact quote. This feature does not enable live mailing. Future production
+mailing needs a separate live adapter; upgrading a vendor account alone does
+not turn these simulations into physical shipments.
+
+Both card and mug claims enforce the cutoff in the server reservation. The gift
+section disappears at cutoff, including open pages and pages restored from a
+background tab. Mugs are never ordered by this automation. Mug catalogs, styles,
+SMS settings, published content and existing orders are preserved.

@@ -21,6 +21,7 @@ export function sectionHeading(number,title,note,id='',pairedTitle=''){
   return `<div class="pb-section-heading">${number?`<span class="pb-section-number">${esc(number)}</span>`:''}<div><h2 ${id?`id="${esc(id)}"`:''} ${pairedTitle?`class="pb-friends-title" aria-label="${esc(title)} are ${esc(pairedTitle)}"`:''}>${heading}</h2><p>${esc(note)}</p></div><span class="pb-section-flower" aria-hidden="true">${sparkle}</span></div>`;
 }
 export function giftMarkup(journal){
+  if(journal.giftWindow?.closed)return '';
   const mug=hasMugChoices(journal),keepsake=!!journal.keepsake?.enabled;
   if(!mug&&!keepsake)return '';
   const portraits=(journal.gift?.designs||[]).filter(d=>d.id&&assetPath(d.src)).slice(0,4);

@@ -1,3 +1,4 @@
+import {watchGiftDeadline} from './gift-deadline.js';
 import {codeEntryMarkup,invitationEntryMarkup} from './auth-entry.js';
 import {installFocusModality} from './focus.js';
 installFocusModality();
@@ -12,7 +13,7 @@ const dialog = document.querySelector('#photo');
 const save = document.querySelector('#save');
 const fullResolution=document.querySelector('#full-resolution');
 const previousPhoto=document.querySelector('#previous-photo'),nextPhoto=document.querySelector('#next-photo'),photoStage=dialog.querySelector('.photo-stage');
-let viewerPhotos=[],viewerIndex=-1,viewerReturnFocus,keepsake,pixelGift,scrapbookMotion;
+let viewerPhotos=[],viewerIndex=-1,viewerReturnFocus,keepsake,pixelGift,scrapbookMotion,stopGiftDeadline;
 let preparedFile, selected, journal, saveMode = 'share', generation = 0, fullImageUrl, originalRequest, downloadPending=false, imageObserver, layoutObserver, closeTimer;
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path, data) {
@@ -91,7 +92,7 @@ function layoutPhotoGrid(grid){
   spans.forEach(([card,span])=>{if(card.style.gridRowEnd!==span)card.style.gridRowEnd=span;});
 }
 function showJournal() {
-  keepsake?.destroy();pixelGift?.destroy();scrapbookMotion?.destroy();
+  stopGiftDeadline?.();keepsake?.destroy();pixelGift?.destroy();scrapbookMotion?.destroy();
   renderFooter(journal.shareSocials===true);
   imageObserver?.disconnect();layoutObserver?.disconnect();
   applyBrand(journal.authors,journal.year);
@@ -144,6 +145,7 @@ function showJournal() {
   document.fonts?.ready.then(()=>{if(grids[0]?.isConnected)grids.forEach(layoutPhotoGrid);});
   app.querySelectorAll('[data-photo]').forEach(button => button.onclick=()=>openPhoto(journal.photos.find(p=>p.id===button.dataset.photo)));
   pixelGift=mountPixelGift(journal,app);
+  stopGiftDeadline=watchGiftDeadline(journal.giftWindow,()=>{keepsake?.destroy();pixelGift?.destroy();app.querySelector('.pb-presents')?.remove();});
   window.scrollTo(0,0);
 }
 function openPhoto(photo) {

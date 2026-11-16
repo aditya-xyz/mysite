@@ -1,3 +1,4 @@
+import {giftWindow} from './gift-deadline.ts';
 import {handwryttenPrintFont} from './handwrytten.ts';
 import {keepsakeDefault} from './keepsake-defaults.ts';
 import {addressVerificationCurrent,type AddressState} from './address-state.ts';
@@ -46,9 +47,11 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  const photos=published?visiblePhotos(published,i.id,await invitationAudience(env.DB,i)).filter(p=>p.recipients.length):[];
  const defaults=edition?.is_active&&edition.allow_print_orders&&i.allow_print?await keepsakeDefault(env,i.edition_year):null;
  const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json,(SELECT state FROM print_fulfillment f WHERE f.order_id=print_orders.id) AS fulfillment_state FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
+ const window=await giftWindow(env.DB,i);
  const mode=env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':simulatedOrders(request,env)?'local_mock':'disabled';
  let reason='';
  if(existing)reason='Your complimentary print has already been ordered.';
+ else if(window.closed)reason='The gift deadline has passed.';
  else if(!edition?.is_active)reason='This scrapbook is no longer active.';
  else if(!edition.allow_print_orders)reason='Print orders are turned off for this scrapbook.';
  else if(!(photos.length>=3?published?.printNote:published?.defaultPrintNote?.trim()||published?.printNote)?.trim())reason='The folded card note is not published yet.';
@@ -59,7 +62,7 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  else if(mode==='disabled')reason='The print provider is not configured. No orders can be placed.';
  const confirmationKey=await digest(JSON.stringify(['folded-a2-portrait-v1',i.id,i.version,edition?.published_version,person?.version,person?.mailing_address,published?.printNote,published?.defaultPrintNote]));
  const needsAddress=!!reason&&['The mailing contact needs a verified mailing address.','The mailing address changed. Ask us to re-enable printing.'].includes(reason)&&mode!=='disabled';
- return {i,edition,person,published,photos,existing,mode,reason,confirmationKey,needsAddress,defaults};
+ return {i,edition,person,published,photos,existing,mode,reason,confirmationKey,needsAddress,defaults,window};
 }
 export async function printStatus(request:Request,env:PrintEnv,invite:InvitationAudience){
  const c=await printContext(request,env,invite);
@@ -107,28 +110,38 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  FROM invites i JOIN editions e ON e.year=i.edition_year JOIN people p ON p.id=i.person_id
  WHERE i.id=?5 AND i.print_order_count=0 AND i.version=?6 AND i.revoked_at IS NULL AND i.expires_at>?7 AND e.is_active=1 AND e.allow_print_orders=1 AND e.published_version=?8
  AND p.id=?9 AND p.version=?10 AND p.address_verified=1 AND (p.address_verifier IN ('local_mock','google') OR (p.address_verifier='admin' AND json_extract(p.mailing_address,'$.country')='IN')) AND (p.address_verifier!='google' OR p.address_verified_until>?7)
+ AND unixepoch()<?18
  AND i.allow_print=1 AND i.print_address_key=p.address_verification_key
  AND EXISTS(SELECT 1 FROM keepsake_defaults k WHERE k.year=e.year AND k.revision=?12)
+ AND NOT EXISTS(SELECT 1 FROM card_fallback_jobs j JOIN print_orders fo ON fo.id=j.order_id JOIN invites fi ON fi.id=j.invitation_id WHERE j.year=e.year AND fo.status IN ('preparing','simulated','submitted','unknown') AND (fi.id=i.id OR fi.person_id=i.person_id OR EXISTS(SELECT 1 FROM json_each(fi.member_ids) a JOIN json_each(i.member_ids) b ON a.value=b.value)))
  AND NOT EXISTS(SELECT 1 FROM print_orders WHERE invitation_id=i.id AND year=e.year AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')) ON CONFLICT DO NOTHING RETURNING id`)
- .bind(id,recipe.requestKey,JSON.stringify({...recipe,layout:'a2-portrait-v1'}),key,c.i.id,c.i.version,now(),c.edition!.published_version,c.person!.id,c.person!.version,defaultKey,c.defaults!.revision,personalized?2:1,foldedBackText(c.i.edition_year),null,printedGreeting(c.i),recipientName).first();
+ .bind(id,recipe.requestKey,JSON.stringify({...recipe,layout:'a2-portrait-v1'}),key,c.i.id,c.i.version,now(),c.edition!.published_version,c.person!.id,c.person!.version,defaultKey,c.defaults!.revision,personalized?2:1,foldedBackText(c.i.edition_year),null,printedGreeting(c.i),recipientName,c.window.closesAt??Number.MAX_SAFE_INTEGER).first();
  if(!inserted){const fresh=await printStatus(request,env,invite);if(fresh.order)return {order:fresh.order,reused:true};throw new PrintProblem(409,'The print settings changed, or this request was already attempted. Reopen the order confirmation.');}
  try{
   await env.MEDIA.put(key,frontBytes,{httpMetadata:{contentType:'image/jpeg'}});
   // Legacy column/key name: folded orders store the chosen inside-left image here.
   if(insideBytes)await env.MEDIA.put(defaultKey,insideBytes,{httpMetadata:{contentType:'image/jpeg'}});
-  const snapshot=await env.DB.prepare('SELECT note,authors,recipient_name,address_json FROM print_orders WHERE id=?1').bind(id).first<{note:string;authors:string;recipient_name:string;address_json:string}>();
-  const address=JSON.parse(snapshot!.address_json) as MailingAddress,name=snapshot!.recipient_name.trim().split(/\s+/);
-  const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:({US:'United States',IN:'India',NL:'Netherlands'})[address.country],message:snapshot!.note}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
-  await env.DB.prepare('UPDATE print_orders SET handwrytten_order_json=?1 WHERE id=?2').bind(JSON.stringify(payload),id).run();
-  if(env.PRINT_ORDER_MODE==='handwrytten_test')await env.DB.prepare("INSERT INTO print_fulfillment(order_id,state) VALUES(?1,'pending')").bind(id).run();
-  // Live mailing is never enabled; the separate worker requires vendor Test Mode.
-  await env.DB.prepare("UPDATE print_orders SET status='simulated',provider_id=?1,updated_at=unixepoch() WHERE id=?2 AND status='preparing'").bind('local-'+id,id).run();
+  await finishSavedPrintOrder(env,id,c.i.edition_year);
  }catch{
   // No provider submission happened, so this is a definite failure and releases the allowance.
-  await env.DB.prepare("UPDATE print_orders SET status='failed',updated_at=unixepoch() WHERE id=?1 AND status='preparing'").bind(id).run();
-  await env.MEDIA.delete([key,defaultKey]).catch(()=>{});throw new PrintProblem(503,'The local order could not be saved. Retry with a new request.');
+  const failed=await env.DB.prepare("UPDATE print_orders SET status='failed',updated_at=unixepoch() WHERE id=?1 AND status='preparing' RETURNING id").bind(id).first();
+  // An acknowledged-late commit may already have queued this exact order. Keep its artwork.
+  if(failed)await env.MEDIA.delete([key,defaultKey]).catch(()=>{});throw new PrintProblem(503,'The local order could not be saved. Retry with a new request.');
  }
  return {order:printOrderView({id,status:'simulated',created_at:now(),card_count:personalized?2:1,recipe_json:JSON.stringify(recipe),format:'folded',back_text:foldedBackText(c.i.edition_year),fulfillment_state:env.PRINT_ORDER_MODE==='handwrytten_test'?'pending':undefined,note:(personalized?c.published!.printNote:c.published!.defaultPrintNote?.trim()||c.published!.printNote)||'',authors:c.published!.authors}),reused:false};
+}
+
+// Both recipient orders and fallback jobs use the same frozen payload and test-only queue.
+export async function finishSavedPrintOrder(env:PrintEnv,id:string,year:number){
+ const snapshot=await env.DB.prepare('SELECT note,recipient_name,address_json FROM print_orders WHERE id=?1 AND year=?2').bind(id,year).first<{note:string;recipient_name:string;address_json:string}>();
+ if(!snapshot)throw new PrintProblem(404,'Saved card order not found.');
+ const address=JSON.parse(snapshot.address_json) as MailingAddress,name=snapshot.recipient_name.trim().split(/\s+/);
+ const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:({US:'United States',IN:'India',NL:'Netherlands'})[address.country],message:snapshot.note}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
+ const statements=[env.DB.prepare("UPDATE print_orders SET handwrytten_order_json=?1 WHERE id=?2 AND year=?3 AND status='preparing'").bind(JSON.stringify(payload),id,year)];
+ if(env.PRINT_ORDER_MODE==='handwrytten_test')statements.push(env.DB.prepare("INSERT INTO print_fulfillment(order_id,state) SELECT id,'pending' FROM print_orders WHERE id=?1 AND year=?2 AND status='preparing' ON CONFLICT(order_id) DO NOTHING").bind(id,year));
+ // Commit the test queue and ready state together. A stale preparer cannot reset a vendor payload.
+ statements.push(env.DB.prepare("UPDATE print_orders SET status='simulated',provider_id=?1,updated_at=unixepoch() WHERE id=?2 AND year=?3 AND status='preparing'").bind('local-'+id,id,year));
+ await env.DB.batch(statements);
 }
 
 export function printOrderView(order:PrintOrderProof){
