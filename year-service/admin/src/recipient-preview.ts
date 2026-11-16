@@ -33,11 +33,11 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
   if(action==='gift/deadline')return Response.json(window);
   if(action==='gift/status')return Response.json({eligible:!window.closed&&!!(invite?.allow_mug&&edition?.allow_mug_orders),claim:null,livePricing:true,mode:'preview'});
   if(action==='gift/catalog'){
-   const catalog=await preparedMugCatalog(env,year,true);if(!catalog)throw new PrintProblem(409,'Prepare mug previews in admin first.');
+   const catalog=await preparedMugCatalog(env,year,true,true);if(!catalog)throw new PrintProblem(409,'Prepare mug previews in admin first.');
    return Response.json({...catalog,previews:(catalog.previews||[]).map((p:any)=>({...p,src:base+'mug-image/'+p.id+query}))});
   }
   const image=/^mug-image\/([a-f0-9]{64})$/.exec(action);
-  if(image&&invite)return preparedMugImage(env,invite,image[1]);
+  if(image&&invite)return preparedMugImage(env,invite,image[1],true);
   if(action==='delivery-address'){
    let address=null;try{if(person?.mailing_address)address=mailingAddress(JSON.parse(person.mailing_address));}catch{}
    return Response.json({previewOnly:true,verified:!!address&&addressVerificationCurrent(person),address:address&&addressVerificationCurrent(person)?address:null,country:address?.country||'US',recipientName:person?.name||'friend',version:person?.version||1,mode:addressMode(request,env),autocompleteAvailable:false});

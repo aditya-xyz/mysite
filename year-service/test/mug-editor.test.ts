@@ -62,7 +62,7 @@ test('the shared gift section preserves independent keepsake and mug visibility'
 test('removing and undoing a mugshot only changes draft selection, preserving artwork and captions',()=>{
  const designs=curatedMugIds.map(id=>({id,caption:'Saved caption '+id,alt:'Approved photo',cutoutVersion:'a'.repeat(32)}));
  const state:any={draft:{photos:[{id:'gallery'}],mugDesigns:structuredClone(designs)}};
- assert.equal(removeMugPhoto(state,designs[1].id),true);assert.equal(state.draft.mugDesigns.length,5);
+ assert.equal(removeMugPhoto(state,designs[1].id),true);assert.equal(state.draft.mugDesigns.length,designs.length-1);
  assert.deepEqual(state.draft.photos,[{id:'gallery'}]);assert.deepEqual(state.removedMugDesigns[0].design,designs[1]);
  assert.equal(removeMugPhoto(state,'missing'),false);
  assert.equal(restoreMugPhoto(state,designs[1].id),true);assert.deepEqual(state.draft.mugDesigns,designs);assert.deepEqual(state.removedMugDesigns,[]);
