@@ -1365,3 +1365,7 @@ Paperless confirmation uses a short fan-club message in English, Marathi and Tra
 Recipient previews use the same tab-memory display cache as the guest scrapbook. Its scope includes invitation, draft and publication revision, with a fifteen-minute preview expiry; it never persists private photos to browser storage. Paperless status reads “paperless fan club · unlimited downloads”, with matching Marathi and Traditional Chinese copy.
 
 Edit invitation → **Allow paperless** defaults on. Turning it off prevents new household mailing opt-outs, while preserving requested and automated postcards. It applies immediately without publishing. Existing saved choices have a separate Reset paperless preference action. Migration 0039 is required before deploying either Worker.
+
+Photo translation workflow: enter translated zingers beneath their English captions, then Save draft and publish the scrapbook normally. Nonempty supplied translations show Ready to publish and need no second approval. Photo accessibility descriptions saved in Translation settings follow the same publication step. English source matching, audience filtering, hidden-photo exclusion and atomic publication remain enforced. Other site/story text keeps its separate review controls.
+
+Review & publish no longer contains a Publication check panel. Preview, Save draft and Publish remain in the header, alongside optional Translation settings. Missing required content is still enforced and named directly when publishing.

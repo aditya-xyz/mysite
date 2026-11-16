@@ -2,6 +2,17 @@ import type {Draft} from '../../src/edition.ts';
 import {language,translationSources,starterTranslations,type TranslationEntries} from '../../src/translations.ts';
 import {PrintProblem} from '../../src/printing.ts';
 const problem=(status:number,message:string):never=>{throw new PrintProblem(status,message);};
+// Photo text is manually supplied in Studio and needs no separate language approval.
+// Run before the edition UPDATE in the same D1 batch, with identical source guards.
+export function photoTranslationPublication(db:D1Database,year:number,draft:Draft,version:number,revision:number,actor:string){
+ const sources=Object.fromEntries(translationSources(draft).filter(s=>s.key.startsWith('photo:')).map(s=>[s.key,s.source]));
+ const matches=`t.key=s.key AND json_extract(t.value,'$.source')=s.value AND json_type(t.value,'$.value')='text'`;
+ return db.prepare(`UPDATE edition_translations SET
+ published_json=json_patch(coalesce(published_json,'{}'),(SELECT json_group_object(t.key,json(t.value)) FROM json_each(edition_translations.draft_json) t JOIN json_each(?2) s ON ${matches})),
+ published_at=unixepoch(),reviewed_by=?3,version=version+1
+ WHERE year=?1 AND EXISTS(SELECT 1 FROM editions WHERE year=?1 AND draft_version=?4 AND publication_revision=?5)
+ AND EXISTS(SELECT 1 FROM json_each(edition_translations.draft_json) t JOIN json_each(?2) s ON ${matches})`).bind(year,JSON.stringify(sources),actor,version,revision);
+}
 export async function translationsRoute(request:Request,env:{DB:D1Database},path:string,year:number,actor:string,readBody:()=>Promise<Record<string,unknown>>){
  const match=/^\/api\/translations\/(mr|zh-TW)(\/publish)?$/.exec(path);if(!match)return null;
  const locale=language(match[1]),db=env.DB;
@@ -17,7 +28,7 @@ export async function translationsRoute(request:Request,env:{DB:D1Database},path
  const entries:TranslationEntries=Object.create(null);
  if(match[2]){
   if(data.reviewed!==true||!row)problem(400,'Save the translation draft, then confirm you reviewed it before publishing.');
-  for(const s of sources){const e=drafts[s.key];if(e?.source!==s.source||!e.value?.trim())problem(409,'Complete and review every current translation before publishing.');entries[s.key]=e;}
+  for(const s of sources){const e=drafts[s.key];if(s.key.startsWith('photo:')&&(e?.source!==s.source||!e.value?.trim()))continue;if(e?.source!==s.source||!e.value?.trim())problem(409,'Complete and review every current translation before publishing.');entries[s.key]=e;}
  }else{
   if(!data.entries||typeof data.entries!=='object'||Array.isArray(data.entries))problem(400,'Provide translation entries.');
   const submitted=data.entries as TranslationEntries;

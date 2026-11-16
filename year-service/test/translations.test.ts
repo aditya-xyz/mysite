@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
-import {translationsRoute} from '../admin/src/translations.ts';
+import {translationsRoute,photoTranslationPublication} from '../admin/src/translations.ts';
 import {translationPayload,localizeJournal,translationSources,language,type TranslationEntries} from '../src/translations.ts';
 import {clientEdition,type Draft,type Published} from '../src/edition.ts';
 // @ts-expect-error Shared UI translator.
@@ -87,4 +87,24 @@ test('reviewed UI templates substitute names and numbers without executing marku
  assert.equal(translateText('Resend available in 21 seconds',{'Resend available in {seconds} seconds':'{seconds} 秒後可重新傳送'}),'21 秒後可重新傳送');
  assert.equal(translateText('hi <script>!',{'hi {name}!':'嗨，{name}！'}),'嗨，<script>！');
  assert.equal(translateText('Unknown English',{}),'Unknown English');
+});
+
+test('photo translations publish atomically with the scrapbook without approving unrelated drafts',async()=>{
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:'export default {fetch(){return new Response("ok")}}',compatibilityDate:'2026-08-06',d1Databases:['DB']}));
+ try{
+  const db=await mf.getD1Database('DB');for(const file of(await readdir('migrations')).filter(f=>f.endsWith('.sql')).sort()){const sql=await readFile('migrations/'+file,'utf8');if(sql.includes('--> statement-breakpoint'))await db.batch(sql.split('--> statement-breakpoint').map(s=>db.prepare(s)));else await db.exec(sql.replace(/^--.*$/gm,'').replace(/\n/g,' '));}
+  const draft={title:'Test',authors:'Pixel',intro:'Welcome',note:'English note',sharedTitle:'Photos',stories:[],photos:[{id:'one',caption:'Hello',alt:'A dog',recipients:[]},{id:'hidden',caption:'Hidden',alt:'Hidden dog',recipients:[],hidden:true}],mugDesigns:[]} as unknown as Draft;
+  for(const id of ['one','hidden'])await db.prepare("INSERT INTO media_objects(id,year,preview_key,filename,mime,bytes) VALUES(?1,2026,'fixture.jpg','fixture.jpg','image/jpeg',10)").bind(id).run();
+  await db.prepare('UPDATE editions SET draft_json=?1,draft_version=10,publication_revision=0 WHERE year=2026').bind(JSON.stringify(draft)).run();
+  const approved={'ui:Continue':{source:'Continue',value:'approved control'},note:{source:'English note',value:'approved note'}};
+  for(const locale of ['mr','zh-TW'])await db.prepare('INSERT INTO edition_translations(year,language,draft_json,published_json) VALUES(2026,?1,?2,?3)').bind(locale,JSON.stringify({...approved,'ui:Continue':{source:'Continue',value:'unreviewed control'},note:{source:'English note',value:'unreviewed note'},'photo:one:caption':{source:'Hello',value:locale+' caption'},'photo:one:alt':{source:'A dog',value:locale+' description'},'photo:hidden:caption':{source:'Hidden',value:'hidden caption'},'photo:removed:caption':{source:'Removed',value:'removed caption'}}),JSON.stringify(approved)).run();
+  assert.deepEqual((await translationPayload(db,2026,'mr')).translations,approved,'Saving a draft never goes live');
+  const publish=()=>db.prepare('UPDATE editions SET published_json=draft_json,published_version=draft_version,publication_revision=publication_revision+1 WHERE year=2026 AND draft_version=10 AND publication_revision=0');
+  await db.batch([photoTranslationPublication(db,2026,draft,10,0,'owner'),publish()]);
+  for(const locale of ['mr','zh-TW']){const live=(await translationPayload(db,2026,locale)).translations;assert.equal(live['photo:one:caption'].value,locale+' caption');assert.equal(live['photo:one:alt'].value,locale+' description');assert.equal(live['ui:Continue'].value,'approved control');assert.equal(live.note.value,'approved note');assert.equal(live['photo:hidden:caption'],undefined);assert.equal(live['photo:removed:caption'],undefined);}
+  const before=await db.prepare('SELECT * FROM edition_translations WHERE year=2026 ORDER BY language').all();
+  await photoTranslationPublication(db,2026,draft,10,0,'stale').run();assert.deepEqual((await db.prepare('SELECT * FROM edition_translations WHERE year=2026 ORDER BY language').all()).results,before.results,'A stale publication cannot change translations');
+  await assert.rejects(()=>db.batch([photoTranslationPublication(db,2026,draft,10,1,'rollback'),db.prepare("INSERT INTO editions(year,draft_json) VALUES(2026,'{}')")]));assert.deepEqual((await db.prepare('SELECT * FROM edition_translations WHERE year=2026 ORDER BY language').all()).results,before.results,'An edition publication failure rolls back the translation update');
+  const changed={...draft,photos:[{...draft.photos[0],caption:'Changed English'}]};await photoTranslationPublication(db,2026,changed,10,1,'owner').run();const live=localizeJournal({photos:[{id:'one',caption:'Changed English',alt:'A dog'}]},await translationPayload(db,2026,'mr'));assert.equal(live.photos[0].caption,'Changed English','Outdated translations fall back to English');
+ }finally{await mf.dispose();}
 });
