@@ -22,7 +22,7 @@ export async function keepsakeManifest(env:PrintEnv,invite:InvitationAudience,pe
  if(digital)return {enabled:true,mode:digital.personalized&&personalCount>=3?'personal':'default',digitalOnly:true,digitalFrame:digital.frame,digitalArtworkSrc:'/api/print/digital/image',cardCount:1,format:'folded',defaultRevision:digital.default_revision,defaultSrc:'/api/print/digital/default/'};
  if(ordered)return {enabled:true,mode:'default',cardCount:1,order:printOrderView(ordered)};
  if(!defaults)return {enabled:false};
- return {enabled:true,mode:personalCount>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults.revision,defaultSrc:`/api/keepsake/default/${defaults.revision}/`};
+ return {enabled:true,allowPaperless:invite.allow_paperless!==0,mode:personalCount>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults.revision,defaultSrc:`/api/keepsake/default/${defaults.revision}/`};
 }
 
 export async function keepsakeDefaultImage(env:PrintEnv,invite:InvitationAudience,revision:string,frame:string){

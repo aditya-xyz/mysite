@@ -1,5 +1,6 @@
 // Reviewed feature copy, also offered in the Studio translation catalog.
 export const digitalUi=[
+['Paperless is not enabled for this invitation.','या आमंत्रणासाठी पेपरलेस पर्याय उपलब्ध नाही.','這份邀請目前未開放無紙明信片。'],
 ['one free postcard.','एक पोस्टकार्ड, आमच्याकडून भेट.','一張免費明信片。'],
 ['a free mug. with my face on it.','एक मग, आमच्याकडून भेट. त्यावर माझा चेहरा.','免費送你一個馬克杯。上面有我的臉。'],
 ['your morning coffee is about to become more pawesome','तुझ्या सकाळच्या कॉफीला आता माझ्या पंजांची जादू लाभणार','你的早晨咖啡，馬上就要多一點汪汪的可愛了'],

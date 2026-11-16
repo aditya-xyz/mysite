@@ -44,6 +44,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
     await db.batch((await readFile('migrations/0035_card_fallback.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0037_digital_postcards.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0038_paperless_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0039_allow_paperless.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     const expires=Math.floor(Date.now()/1000)+86400;
     await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',?1,'Angela','+15555550101',?2)").bind(await digest("a".repeat(64)),expires).run();
@@ -256,6 +257,18 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
       assert.deepEqual(listing.editions.map(e=>e.year),[2027,2026]);
       assert.ok(!JSON.stringify(listing).includes("+1555"));
       assert.deepEqual(await (await req("/api/state")).json(),oldBefore);
+    });
+    await t.test('invitation paperless permission defaults on, persists false and rejects non-booleans',async()=>{
+      const contact:any=await(await req('/api/contacts',{name:'Paperless permission',phone:'+15555550188'})).json();const person=contact.person;
+      const data={memberIds:[person.id],verificationContactId:person.id,addressedTo:'Paperless test'};
+      const created:any=await(await req('/api/invitations',data)).json();assert.ok(created.id);
+      const current=()=>db.prepare('SELECT * FROM invites WHERE id=?1').bind(created.id).first<any>();assert.equal((await current()).allow_paperless,1);
+      let row=await current();assert.equal((await req(`/api/invitations/${created.id}/details`,{...data,version:row.version,allowPaperless:false})).status,200);assert.equal((await current()).allow_paperless,0);
+      row=await current();assert.equal((await req(`/api/invitations/${created.id}/details`,{...data,version:row.version})).status,200);assert.equal((await current()).allow_paperless,0);
+      row=await current();assert.equal((await req(`/api/invitations/${created.id}/details`,{...data,version:row.version,allowPaperless:'false'})).status,400);
+      const state:any=await(await req('/api/state')).json();assert.equal(state.people.find((i:any)=>i.id===created.id).allow_paperless,0);
+      assert.equal((await req(`/api/invitations/${created.id}/details`,{...data,version:row.version,allowPaperless:true})).status,200);assert.equal((await current()).allow_paperless,1);
+      await db.prepare('DELETE FROM invites WHERE id=?1').bind(created.id).run();await db.prepare('DELETE FROM people WHERE id=?1').bind(person.id).run();
     });
     await t.test("each scrapbook isolates admin media, invitations, previews, and draft assignments",async()=>{
       for(const path of [`media/${photoId}/preview`,`media/${photoId}/original`,"preview?recipient=angela"])

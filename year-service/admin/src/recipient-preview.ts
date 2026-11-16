@@ -31,7 +31,7 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
    const data=await journal(invite?.id);data.adminPreview=true;data.giftWindow=window;data.shareSocials=!!invite?.share_socials;data.householdSize=invite?invitationMembers(invite).length:1;
    if(window.closed||!invite?.allow_mug||!edition?.allow_mug_orders){data.gift.enabled=false;data.gift.designs=[];}
    Object.assign(data.gift,{mode:'preview',orderingEnabled:false,livePricing:true,hasOrder:false,claim:null});
-   data.keepsake=canPrint?{enabled:true,mode:data.photos.filter((p:any)=>p.personal).length>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults!.revision,defaultSrc:base+`default/${defaults!.revision}/`}: {enabled:false};
+   data.keepsake=canPrint?{enabled:true,allowPaperless:invite?.allow_paperless!==0,mode:data.photos.filter((p:any)=>p.personal).length>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults!.revision,defaultSrc:base+`default/${defaults!.revision}/`}: {enabled:false};
    if(savedDigital)Object.assign(data.keepsake,{digitalOnly:true,digitalFrame:savedDigital.frame,digitalArtworkSrc:base+'print/digital/image'+query,mode:savedDigital.personalized&&data.photos.filter((p:any)=>p.personal).length>=3?'personal':'default',defaultRevision:savedDigital.default_revision,defaultSrc:base+'print/digital/default/'});
    if(canPrint)data.keepsake.defaultFrames=Object.fromEntries(Object.keys(defaults!.frames).map(frame=>[frame,base+`default/${defaults!.revision}/${frame}`+query]));
    return Response.json({...data,previewContext:query});

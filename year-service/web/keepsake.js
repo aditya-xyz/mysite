@@ -101,7 +101,7 @@ export function mountKeepsake(journal,section){
   function exportActions(){
     const digital=digitalFlow.canUse()||digitalOnly;
     if(fixed&&ordered)return '';
-    if(fixed&&!digital)return printFlow.buttonMarkup();
+    if((fixed||journal.keepsake.allowPaperless===false)&&!digital)return printFlow.buttonMarkup();
     const mobile=matchMedia('(pointer:coarse)').matches||innerWidth<=600;
     const useShare=mobile&&(digital||!shareFallback);
     const icon=useShare?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M6 11H4v10h16V11h-2"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></svg>';

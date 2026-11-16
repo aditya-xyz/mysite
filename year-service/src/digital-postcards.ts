@@ -17,13 +17,15 @@ export async function digitalContext(env:PrintEnv,i:InvitationAudience){
  const p=JSON.parse(edition.published_json) as Published,photos=visiblePhotos(p,i.id,await invitationAudience(env.DB,i)).filter(p=>p.recipients.length),personalized=claim?!!claim.personalized&&photos.length>=3:photos.length>=3;
  const members=JSON.stringify(householdMembers(i));
  const order=await env.DB.prepare(`SELECT o.id FROM print_orders o JOIN invites oi ON oi.id=o.invitation_id WHERE o.year=?1 AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown') AND (oi.id=?2 OR oi.person_id IN (SELECT value FROM json_each(?3)) OR EXISTS(SELECT 1 FROM json_each(oi.member_ids) a JOIN json_each(?3) b ON a.value=b.value)) LIMIT 1`).bind(i.edition_year,i.id,members).first();
+ const permission=await env.DB.prepare('SELECT allow_paperless FROM invites WHERE id=?1 AND edition_year=?2').bind(i.id,i.edition_year).first<{allow_paperless:number}>();
+ const allowPaperless=permission?.allow_paperless===1;
  const note=claim?.note||printedGreeting(i)+(personalized?p.printNote:p.defaultPrintNote?.trim()||p.printNote||'');
  if(!note.trim()||(!claim&&!(personalized?p.printNote:p.defaultPrintNote?.trim()||p.printNote)?.trim()))throw new PrintProblem(409,'The postcard note is not published yet.');
- return {edition,p,photos,claim,defaults,personalized,note,order};
+ return {edition,p,photos,claim,defaults,personalized,note,order,allowPaperless};
 }
 export async function digitalStatus(env:PrintEnv,i:InvitationAudience){
  const c=await digitalContext(env,i);
- return {eligible:!c.order,claimed:!!c.claim,personalized:c.personalized,note:c.note,authors:c.claim?.authors||c.p.authors,frame:c.claim?.frame,contentVersion:c.edition.published_version,defaultRevision:c.claim?.default_revision||c.defaults.revision,defaultSrc:'/api/print/digital/default/',artworkSrc:c.claim?'/api/print/digital/image':null};
+ return {eligible:!c.order&&(c.allowPaperless||!!c.claim),allowPaperless:c.allowPaperless,claimed:!!c.claim,personalized:c.personalized,note:c.note,authors:c.claim?.authors||c.p.authors,frame:c.claim?.frame,contentVersion:c.edition.published_version,defaultRevision:c.claim?.default_revision||c.defaults.revision,defaultSrc:'/api/print/digital/default/',artworkSrc:c.claim?'/api/print/digital/image':null};
 }
 export async function digitalImage(env:PrintEnv,i:InvitationAudience,frame?:string){
  const c=await digitalContext(env,i),key=frame?(c.claim?JSON.parse(c.claim.frames_json):c.defaults.frames)[frame]:c.claim?.artwork_key;
@@ -31,7 +33,7 @@ export async function digitalImage(env:PrintEnv,i:InvitationAudience,frame?:stri
  return new Response(file.body,{headers:{'Content-Type':'image/jpeg','Cache-Control':'no-store, private'}});
 }
 export async function claimDigitalPostcard(request:Request,env:PrintEnv,i:InvitationAudience){
- const c=await digitalContext(env,i);if(c.claim)return {...await digitalStatus(env,i),reused:true};if(c.order)throw new PrintProblem(409,'Your mailed postcard is already reserved.');
+ const c=await digitalContext(env,i);if(c.claim)return {...await digitalStatus(env,i),reused:true};if(!c.allowPaperless)throw new PrintProblem(403,'Paperless is not enabled for this invitation.');if(c.order)throw new PrintProblem(409,'Your mailed postcard is already reserved.');
  const length=Number(request.headers.get('Content-Length'));if(!length||length>3*1024*1024)throw new PrintProblem(413,'Use a postcard image under 3 MB.');
  const form=await request.formData(),file=form.get('artwork');let recipe:any;try{recipe=JSON.parse(String(form.get('recipe')));}catch{throw new PrintProblem(400,'Check your digital postcard.');}
  if(!recipe||typeof recipe!=='object'||recipe.confirmed!==true)throw new PrintProblem(400,'Confirm that your household permanently gives up its mailed postcard.');
@@ -44,7 +46,7 @@ export async function claimDigitalPostcard(request:Request,env:PrintEnv,i:Invita
  try{
   const inserted=await env.DB.prepare(`INSERT INTO digital_postcards(id,year,invitation_id,member_ids,personalized,frame,note,authors,frames_json,default_revision,artwork_key,recipe_json)
    SELECT ?1,i.edition_year,i.id,?2,?3,?4,?5,?6,?7,?8,?9,?10 FROM invites i JOIN editions e ON e.year=i.edition_year
-   WHERE i.id=?11 AND i.version=?12 AND i.allow_print=1 AND i.revoked_at IS NULL AND i.expires_at>?13 AND e.is_active=1 AND e.allow_print_orders=1 AND e.published_version=?14 AND ${giftReservationOpenSQL}
+   WHERE i.id=?11 AND i.version=?12 AND i.allow_print=1 AND i.allow_paperless=1 AND i.revoked_at IS NULL AND i.expires_at>?13 AND e.is_active=1 AND e.allow_print_orders=1 AND e.published_version=?14 AND ${giftReservationOpenSQL}
    AND EXISTS(SELECT 1 FROM keepsake_defaults k WHERE k.year=e.year AND k.revision=?8) RETURNING id`).bind(id,JSON.stringify(householdMembers(i)),Number(c.personalized),recipe.frame,c.note,c.p.authors,JSON.stringify(c.defaults.frames),c.defaults.revision,key,JSON.stringify(recipe),i.id,(i as any).version,now(),c.edition.published_version).first();
   if(!inserted)throw new Error('Reservation changed');
  }catch{
