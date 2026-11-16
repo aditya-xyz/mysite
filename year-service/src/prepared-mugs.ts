@@ -79,14 +79,14 @@ export async function syncPreparedMugs(env:PrintEnv,year:number){
    const variants=[...style.variants].sort((a,b)=>a.size==='15oz'?-1:b.size==='15oz'?1:0);
    for(const variant of variants){
     if(!variant.printWidth||!variant.printHeight)continue;
-    const plan=plans.find(p=>p.design_id===design.id&&p.font===font.id&&p.ink===inkFor(style.id)&&p.printWidth===variant.printWidth&&p.printHeight===variant.printHeight&&p.productId===style.productId);if(!plan||!sources.has(plan.id))continue;
+    const plan=plans.find(p=>p.design_id===design.id&&p.cutout_version===design.cutoutVersion&&p.caption===design.caption&&p.font===font.id&&p.ink===inkFor(style.id)&&p.printWidth===variant.printWidth&&p.printHeight===variant.printHeight&&p.productId===style.productId);if(!plan||!sources.has(plan.id))continue;
     for(const view of (style.mockupOptions?.some(o=>/^(right|handle on right)$/i.test(o))?['handle-left','handle-right']:['handle-left']) as ('front'|'handle-left'|'handle-right')[]){
     const imageId=await digest(JSON.stringify([LAYOUT,plan.id,variant.id,view]));if(ready.has(imageId)||covered.has(imageId))continue;
     const key=variant.printWidth+'x'+variant.printHeight;const list=groups.get(key)||[];list.push({...variant,style:style.id,imageId,view});groups.set(key,list);
     }
    }
    for(const targets of groups.values()){
-    const first=targets[0],plan=plans.find(p=>p.design_id===design.id&&p.font===font.id&&p.ink===inkFor(style.id)&&p.printWidth===first.printWidth&&p.printHeight===first.printHeight&&p.productId===style.productId)!,id=await digest(JSON.stringify([2,plan.id,style.productId,targets.map(t=>[t.id,t.view]).sort()]));
+    const first=targets[0],plan=plans.find(p=>p.design_id===design.id&&p.cutout_version===design.cutoutVersion&&p.caption===design.caption&&p.font===font.id&&p.ink===inkFor(style.id)&&p.printWidth===first.printWidth&&p.printHeight===first.printHeight&&p.productId===style.productId)!,id=await digest(JSON.stringify([2,plan.id,style.productId,targets.map(t=>[t.id,t.view]).sort()]));
     statements.push(env.DB.prepare("INSERT INTO mug_preview_jobs(id,year,source_id,product_id,print_width,print_height,mockup_group,variants_json,priority) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9) ON CONFLICT(id) DO UPDATE SET status=CASE WHEN status='failed' THEN 'queued' ELSE status END,next_check_at=CASE WHEN status='failed' THEN 0 ELSE next_check_at END,attempts=CASE WHEN status='failed' THEN 0 ELSE attempts END").bind(id,year,plan.id,style.productId,first.printWidth!,first.printHeight!,style.mockupGroup||null,JSON.stringify(targets),styles.indexOf(style)*10000+(first.size==='15oz'?0:1000)+mugFonts.indexOf(font)*100+designs.indexOf(design)));
    }
   }
