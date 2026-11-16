@@ -640,7 +640,7 @@ Google Cloud setup:
    to your key, and `GOOGLE_PLACES_ENABLED="true"`. Optionally set a separate
    `GOOGLE_PLACES_API_KEY`; otherwise the validation key must allow both APIs.
 5. Review quotas and billing alerts before real requests. Application
-   guards are 50 validation attempts/day and 1,000/month, plus 200 combined Places
+   guards are 100 validation attempts/day and 1,000/month, plus 200 combined Places
    search/details attempts/day and 2,000/month. Zero pauses the corresponding
    service. The guards count attempts conservatively, including provider failures;
    they reset by UTC day/calendar month. These guards are enforced by the admin Worker, separately from account
@@ -655,7 +655,7 @@ from year-service with Node22: `LONG_PREVIEW=1 node --env-file=admin/.dev.vars
 address manually; never submit the synthetic sample addresses to Google. Nothing
 calls Google on page load. Never deploy this fixture or its mock authentication.
 
-Street suggestions start after three characters and a350ms debounce. Keyboard
+Street suggestions start after three characters and a 200ms debounce. Keyboard
 arrows/Enter select, Escape dismisses suggestions, and manual entry works if the
 service is disabled or fails. Selection requests only `id,addressComponents` from
 Place Details Essentials and fills the form; it does not verify or save a contact.
@@ -898,12 +898,12 @@ Apple's emoji rendering.
 ### Shared guest delivery address
 
 Mugs and prints reuse the phone-verification contact’s current USPS-verified US
-address read-only. Missing or expired addresses use US Google Places suggestions,
+address, with an Edit address action. Missing, expired or edited addresses use US Google Places suggestions,
 Address Validation with USPS CASS, a canonical-address review, and explicit
 “Use address & save” approval. The server derives the contact from the session;
 clients cannot select another person or replace the verified result. The approved
 address is saved to People for future visits/years; verification metadata lasts
-28 days. Guests contact dad to change an already verified address.
+28 days. Editing a verified US address prefills the same form, disables ordering while editing, and requires a fresh review before replacing the saved address. Canceling leaves the existing address intact. India/Netherlands remain admin-managed.
 
 Address handling is live and shares the admin’s provider budgets. Only fulfillment
 is simulated (`ORDER_MODE=simulation`); no supplier, mail, or charge is initiated.

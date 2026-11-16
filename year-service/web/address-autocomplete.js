@@ -35,7 +35,7 @@ export function bindAddressAutocomplete({form,person,requestApi,simulated,onAddr
     suggestions.forEach((s,i)=>{const option=document.createElement('button');option.type='button';option.id='address-option-'+i;option.setAttribute('role','option');option.setAttribute('aria-selected','false');option.tabIndex=-1;option.textContent=s.text;option.onpointerdown=e=>e.preventDefault();option.onclick=()=>choose(i);list.append(option);});
     wrap.hidden=!suggestions.length;input.setAttribute('aria-expanded',String(!!suggestions.length));status.textContent=suggestions.length?`${suggestions.length} address suggestions. Use arrow keys to choose.`:'';
    }catch(error){if(!disposed&&stamp===revision&&error.name!=='AbortError')status.textContent='Suggestions unavailable. Enter the address manually.';}
-  },350);
+  },200);
  });
  input.addEventListener('keydown',event=>{
   if(event.key==='Escape'){const wasOpen=!wrap.hidden;clearTimeout(timer);controller?.abort();revision++;hide();if(wasOpen){event.preventDefault();event.stopPropagation();}return;}
