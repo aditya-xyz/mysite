@@ -49,3 +49,17 @@ and lighter irregular upper/side motifs. Keep the central rectangle x=8–92%,
 y=8–92% blank; tuck decorations outward into the narrow outer bands. Portrait
 4:5 opaque reusable frame. No dense garland, mirrored patterns, uniform rows,
 pinecones, conifers, stars, photos, text, dogs, logos, or watermark.
+
+## Winterlight v3 — balanced winter palette (current)
+
+Final assets: `web/frames/winterlight-v3.png` and
+`web/frames/winterlight-preview-v3.webp` (720×900, WebP quality 85).
+Built-in imagegen edited v2 with this final prompt: Preserve the loose
+asymmetric composition, winding lower vine, sparse upper/side accents, two small
+birds and blank ivory center. Change only the palette: make most leaves natural
+green in olive, sage, moss and forest shades, with fewer dusty blue, teal and
+silvery snowy leaves. Mix pearl-white, blue, cranberry and blush-pink berries.
+Give birds blush-pink breasts, warm taupe/brown backs, dusty blue-gray wing
+accents and cream bellies, with subtly different coloration. Blue and white
+are supporting accents; avoid monochrome blue or saturated red-green dominance.
+Keep the safe center, density, paper texture and delicate watercolor style.
