@@ -50,7 +50,7 @@ y=8–92% blank; tuck decorations outward into the narrow outer bands. Portrait
 4:5 opaque reusable frame. No dense garland, mirrored patterns, uniform rows,
 pinecones, conifers, stars, photos, text, dogs, logos, or watermark.
 
-## Winterlight v3 — balanced winter palette (current)
+## Winterlight v3 — balanced winter palette
 
 Final assets: `web/frames/winterlight-v3.png` and
 `web/frames/winterlight-preview-v3.webp` (720×900, WebP quality 85).
@@ -63,3 +63,19 @@ Give birds blush-pink breasts, warm taupe/brown backs, dusty blue-gray wing
 accents and cream bellies, with subtly different coloration. Blue and white
 are supporting accents; avoid monochrome blue or saturated red-green dominance.
 Keep the safe center, density, paper texture and delicate watercolor style.
+
+## Winterlight v4 — reference botanical corners (current)
+
+Final assets: `web/frames/winterlight-v4.png` and
+`web/frames/winterlight-preview-v4.webp` (720×900, WebP quality 85).
+Generated with built-in imagegen using the user's supplied botanical border
+as the style reference and v3 as the blank frame edit target.
+Final prompt: Replace decorations with reference-style sage holly leaves,
+blue-green eucalyptus, fine gray-green pine needles and dark cranberry berries.
+Remove all birds. Match the reference's lush layered density in both bottom
+corners with loose L-shaped botanical clusters hugging the outside edges.
+Keep the lower middle lighter, with much airier irregular sprigs along both
+sides and the top. Preserve warm ivory textured paper and the clear central
+photo/caption area. Keep foliage out of Pixel's space, with no text, photos,
+animals, pinecones, stars, logos, watermark, or perspective mockup. Portrait
+4:5 opaque reusable background.
