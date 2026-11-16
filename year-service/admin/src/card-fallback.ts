@@ -3,6 +3,11 @@ import {now} from '../../src/security.ts';
 import {cardFallbackPreview} from '../../src/card-fallback.ts';
 import {PrintProblem,type PrintEnv} from '../../src/printing.ts';
 export async function cardFallbackAdminRoute(request:Request,env:PrintEnv,path:string,year:number,actor:string,readBody:()=>Promise<Record<string,unknown>>){
+ if(path==='/api/card-fallback/schedule'&&request.method==='GET'){
+  const row=await env.DB.prepare(`SELECT p.*,CASE WHEN p.international_cutoff>unixepoch() AND p.us_cutoff>unixepoch() AND NOT EXISTS(SELECT 1 FROM card_fallback_jobs j WHERE j.year=p.year) THEN 1 ELSE 0 END AS editable FROM card_fallback_policies p WHERE p.year=?1`).bind(year).first<CardFallbackPolicy&{editable:number}>();
+  const {editable,...policy}=row||{editable:0};
+  return Response.json({policy:row?policy:null,policyEditable:!!editable,testMode:true,submissionEnabled:env.ORDER_MODE==='simulation'&&env.PRINT_ORDER_MODE==='handwrytten_test'});
+ }
  if(path==='/api/card-fallback'&&request.method==='GET')return Response.json(await cardFallbackPreview(env,year));
  if(path==='/api/card-fallback/dates'&&request.method==='POST'){
   const data=await readBody(),previous=data.previousPolicy as CardFallbackPolicy|undefined;

@@ -1322,14 +1322,18 @@ morning. Saving dates changes only this policy, never the People directory or
 existing invitations/orders. Changes from a stale tab are rejected; refresh and
 review the current dates. Dates lock after the first cutoff starts.
 
-**Check recipients** is read-only. It shows cards ready for fallback, unique
-existing orders and missing addresses; expand **View recipients** for names and
-reasons. Entries covered by the same existing card are grouped. No address and
-no order means no card is sent, with no manual exclusion toggle. Existing orders
-keep their normal print-history proofs and budget approvals. Failed preparation
-can be retried; submitted/uncertain orders cannot be re-sent this way.
+The recipient-check report is removed from the admin screen. The scheduler
+handles eligibility itself: no address and no existing order means no card.
+Print order history remains available for saved proofs and budget approvals.
 
-Edition-scoped endpoints: `GET /api/editions/:year/card-fallback`,
+To test the feature, run `npm run test:card-fallback` from `year-service` with
+Node 22+. The isolated fixtures use fake households and a simulated clock;
+existing orders, missing addresses, budget approval, retries, date changes and
+gift closure are checked without changing production data or submitting vendor
+orders. The read-only diagnostic API is retained for development/support.
+
+Edition-scoped endpoints: `GET /api/editions/:year/card-fallback/schedule` for
+the cutoff controls, `GET /api/editions/:year/card-fallback` for diagnostics,
 `POST /api/editions/:year/card-fallback/dates` with
 `{internationalLastDay,usLastDay,previousPolicy}`, and
 `POST /api/editions/:year/card-fallback/retry/:invitation`. All use the existing

@@ -11,7 +11,7 @@ import {orderBudgetApprovalRoute} from '../admin/src/order-budget-approval.ts';
 import {cardFallbackAdminRoute} from '../admin/src/card-fallback.ts';
 import {digest} from '../src/security.ts';
 // @ts-expect-error Shared admin presentation helpers.
-import {fallbackReport,lastChoiceDate} from '../admin/client/card-fallback.js';
+import {lastChoiceDate} from '../admin/client/card-fallback.js';
 // @ts-expect-error Shared browser markup and clock helper.
 import {giftMarkup} from '../web/pixelbook.js';
 // @ts-expect-error Shared browser clock helper.
@@ -162,7 +162,7 @@ test('fallback cards preserve eligibility, household uniqueness, frozen content 
    assert.equal(giftMarkup({giftWindow:{closed:true},keepsake:{enabled:true},gift:{enabled:true,designs:[]}}),'');
   });
   await t.test('admin dry run is read-only and safe retries cannot re-send submitted/unknown orders',async()=>{
-   await reset();await add('us');const response=await cardFallbackAdminRoute(new Request('https://admin.test/api/editions/2026/card-fallback'),env,'/api/card-fallback',2026,'owner@example.com',async()=>({}));assert.equal(response?.status,200);assert.equal(await count('card_fallback_jobs'),0);assert.equal(await count('print_orders'),0);
+   await reset();await add('us');const schedule=await cardFallbackAdminRoute(new Request('https://admin.test/api/editions/2026/card-fallback/schedule'),env,'/api/card-fallback/schedule',2026,'owner@example.com',async()=>({}));const config=await schedule?.json() as any;assert.equal(config.policy.year,2026);assert.equal(config.policyEditable,true);assert.equal(Object.hasOwn(config,'rows'),false);const response=await cardFallbackAdminRoute(new Request('https://admin.test/api/editions/2026/card-fallback'),env,'/api/card-fallback',2026,'owner@example.com',async()=>({}));assert.equal(response?.status,200);assert.equal(await count('card_fallback_jobs'),0);assert.equal(await count('print_orders'),0);
    await due();await tickCardFallback(env,at);await db.exec("UPDATE print_orders SET status='unknown'; UPDATE card_fallback_jobs SET state='failed'");
    await assert.rejects(cardFallbackAdminRoute(new Request('https://admin.test/api/editions/2026/card-fallback/retry/us',{method:'POST'}),env,'/api/card-fallback/retry/us',2026,'owner@example.com',async()=>({})),/Only failed preparation/);
   });
@@ -175,12 +175,11 @@ test('open pages close gifts exactly once at deadline and after a background-tab
  assert.equal(closed,0);clock=1999;callback();assert.equal(closed,0);clock=2000;visibility();assert.equal(closed,1);callback();assert.equal(closed,1);stop();assert.ok(canceled>0);
 });
 
-test('cutoff calendar dates follow Pacific daylight saving and report unique existing orders',()=>{
+test('cutoff calendar dates follow Pacific daylight saving',()=>{
  assert.equal(cutoffSchedule('2026-11-29',2026).closesAt,1796025600);assert.equal(lastChoiceDate(1796025600),'2026-11-29');
  const spring=cutoffSchedule('2026-03-07',2026);assert.equal(new Date(spring.closesAt*1000).toISOString(),'2026-03-08T08:00:00.000Z');assert.equal(new Date(spring.runAt*1000).toISOString(),'2026-03-08T13:00:00.000Z');
  const autumn=cutoffSchedule('2026-10-31',2026);assert.equal(new Date(autumn.closesAt*1000).toISOString(),'2026-11-01T07:00:00.000Z');assert.equal(new Date(autumn.runAt*1000).toISOString(),'2026-11-01T14:00:00.000Z');
- const report=fallbackReport([{invitationId:'a',name:'Household A',orderId:'same-order',decision:'submitted',address:{}},{invitationId:'b',name:'Household B',orderId:'same-order',decision:'submitted',address:{}},{invitationId:'c',name:'Missing address',decision:'skipped',address:null}]);
- assert.equal(report.counts.ordered,1);assert.equal(report.counts.missing,1);assert.equal(report.groups.length,2);assert.deepEqual(report.groups[0].names,['Household A','Household B']);
+
 });
 
 test('open pages pick up changed dates without placing orders',async()=>{

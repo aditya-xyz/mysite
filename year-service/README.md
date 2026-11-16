@@ -983,14 +983,23 @@ Dates lock once a cutoff starts or a decision is recorded, preventing reopening
 old gifts or re-sending a card. This saves only the policy row and audit event;
 people, addresses, invitations, published content and existing orders are unchanged.
 
-**Check recipients** reads current eligibility without creating jobs, proofs,
-quotes, baskets or orders. Counts and collapsed recipient details group entries
-covered by the same existing order. Missing addresses are automatically left out;
-there is no manual exclusion control. The old exclusion table is retained as
-historical data but no longer affects eligibility.
+The admin section shows only the cutoff controls and brief sending rules.
+Eligibility is evaluated automatically; no-address households are skipped
+without an additional review step. The old exclusion table is retained as
+historical data but no longer affects eligibility. The read-only diagnostic
+endpoint remains available for development and support.
+
+Test the behavior with `npm run test:card-fallback` using Node 22+. It creates
+isolated local D1/R2 fixtures and advances a simulated clock through each
+cutoff. It checks eligible default/custom recipients, missing addresses,
+existing orders, duplicate household invitations, retries after crashes,
+manual budget approval, Pacific dates, and gift closure. Vendor authentication
+in the approval test is mocked; no real contacts, dates or vendor orders are
+changed. No production deadline needs to be moved for testing.
+
 Existing orders remain in print history, tagged Automatic fallback; their saved
 proofs and normal budget approval controls remain available. Safe preparation
-errors retry three times and can be retried from admin after fixing the cause.
+errors retry three times and can be retried through the authenticated preparation-retry endpoint after fixing the cause.
 Vendor submission uncertainty is handled by the existing fulfillment review flow
 and is never automatically re-submitted.
 
