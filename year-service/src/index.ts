@@ -1,3 +1,4 @@
+import {translationPayload,localizeJournal} from './translations.ts';
 import {tickCardFallback} from './card-fallback.ts';
 import {giftWindow} from './gift-deadline.ts';
 import {tickPrintFulfillment} from './handwrytten-fulfillment.ts';
@@ -144,7 +145,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     const i = await invitation(request, env);
     const edition = await publishedEdition(env.DB,i.edition_year);
     if (!edition && i.edition_year !== 2026) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
-    return json({ year:i.edition_year,name: invitationName(i), verificationName:i.name, phoneHint: i.phone.slice(-4), smsEnabled: env.SMS_ENABLED === "true",
+    return json({ ...localizeJournal({photos:[]},await translationPayload(env.DB,i.edition_year,i.language)),year:i.edition_year,name: invitationName(i), verificationName:i.name, phoneHint: i.phone.slice(-4), smsEnabled: env.SMS_ENABLED === "true",
       ...(edition ? { title:edition.title,authors:edition.authors,intro:edition.intro } : {}) });
   }
   if (path === "/api/send" && request.method === "POST") {
@@ -250,7 +251,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     const i = await authenticated(request, env);
     const edition = await publishedEdition(env.DB,i.edition_year);
     if (edition) {
-      const data=clientEdition(edition,i.id,invitationName(i),i.edition_year,await invitationAudience(env.DB,i));
+      const data=localizeJournal(clientEdition(edition,i.id,invitationName(i),i.edition_year,await invitationAudience(env.DB,i)),await translationPayload(env.DB,i.edition_year,i.language));
       Object.assign(data,{householdSize:new Set(invitationMembers(i)).size});
       data.shareSocials=!!i.share_socials;
       Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,i.edition_year)});

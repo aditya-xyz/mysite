@@ -62,6 +62,7 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
     await db.batch((await readFile('migrations/0016_mug_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0017_immediate_print_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0035_card_fallback.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+    await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     let oldPerson='',newPerson='',version=1,inviteId='',newRaw='';
     await t.test('migration links existing invitations without changing tokens, sessions, or manifests',async()=>{
       const contacts=await (await req('contacts')).json() as {people:{id:string;name:string;version:number}[]};
@@ -103,6 +104,20 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
       assert.equal((await req('editions/2027/invitations',{personId:newPerson})).status,201);
       assert.equal((await req('editions/2026/invitations',{personId:'missing'})).status,404);
       assert.equal((await db.prepare('SELECT count(*) n FROM sessions').first<{n:number}>())!.n,2);
+    });
+    await t.test('invitation languages default to English and edits preserve links, members and sessions',async()=>{
+      const existing=await db.prepare('SELECT * FROM invites WHERE id=?1').bind(inviteId).first<any>();
+      assert.equal(existing.language,'en');
+      const settings={version:existing.version,memberIds:JSON.parse(existing.member_ids),verificationContactId:existing.person_id,addressedTo:existing.addressed_to||existing.name};
+      assert.equal((await req(`editions/2026/invitations/${inviteId}/details`,{...settings,language:'zh-CN'})).status,400);
+      assert.equal((await req(`editions/2026/invitations/${inviteId}/details`,{...settings,language:'zh-TW'})).status,200);
+      const changed=await db.prepare('SELECT * FROM invites WHERE id=?1').bind(inviteId).first<any>();
+      for(const key of ['token_hash','token_encrypted','member_ids','person_id','phone','allow_mug','allow_print'])assert.equal(changed[key],existing[key]);
+      assert.equal(changed.language,'zh-TW');
+      assert.equal((await req(`editions/2026/invitations/${inviteId}/details`,{...settings,version:changed.version})).status,200,'Older clients preserve selected language');
+      assert.equal((await db.prepare('SELECT language FROM invites WHERE id=?1').bind(inviteId).first<any>()).language,'zh-TW');
+      assert.equal((await req('editions/2026/translations/mr',undefined,undefined,'')).status,401);
+      assert.equal((await req('editions/2026/translations/mr',{version:0,sourceVersion:1,entries:{}},'https://other.test')).status,403);
     });
     await t.test('published person-based audiences preserve personal originals and year isolation',async()=>{
       assert.equal((await req('editions/2026/publish',{version})).status,200);

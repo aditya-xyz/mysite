@@ -1015,3 +1015,5 @@ section disappears at cutoff, including open pages and pages restored from a
 background tab. Open pages refresh saved deadline changes at least every minute
 and at the current deadline; reservation SQL also rechecks the current policy. Mugs are never ordered by this automation. Mug catalogs, styles,
 SMS settings, published content and existing orders are preserved.
+
+Recipient language is selected per invitation (English default, Marathi, Traditional Chinese/Taiwan). Translation drafts and published translations live separately in `edition_translations`; migration 0036 only adds that table and an English-defaulted invitation column. Story → Languages in admin provides source comparison, draft editing and explicit review/publication. Recipient payloads filter photo audiences before localization, and never expose other recipients’ translation entries. Changed English passages fall back to English until reviewed again. Gift artwork, mug captions and physical card notes remain English; order modes are unaffected.

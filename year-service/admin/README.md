@@ -1340,3 +1340,11 @@ the cutoff controls, `GET /api/editions/:year/card-fallback` for diagnostics,
 admin identity and origin checks. The former exclusions endpoint is removed.
 Live mailing stays disabled; simulation and vendor Test Mode are still required
 and the normal manual approvals remain.
+
+### Recipient languages and review
+
+Invitations default to English. Create/edit an invitation to choose Marathi (`mr`) or Taiwan-style Traditional Chinese (`zh-TW`). Language edits retain invitation URLs, members, permissions and sessions. They never send SMS.
+
+Under **Story → Languages → Review translations**, compare each English source with its translated draft. Groups cover site controls, opening/stories, photo zingers and image descriptions. Save drafts, inspect the full Pixelbook using an invitation in that language, then explicitly confirm review and publish that language. Either authorized administrator can review; a second approval is not required. Translation publication is separate from English scrapbook publication. Concurrent saves use version checks.
+
+Guests receive only published translations matching the exact current English source; missing or outdated passages fall back to English. Admin recipient previews include saved translation drafts. New/edited English content needs a new translation review. Names, shipping addresses, mug artwork/captions, printed card artwork and handwritten card notes stay English/as entered. Translation storage is separate from people, invitations and edition JSON. No runtime translation service or additional SMS/vendor orders are involved.

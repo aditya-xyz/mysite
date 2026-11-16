@@ -1,3 +1,5 @@
+import {translationsRoute} from './translations.ts';
+import {translationPayload,localizeJournal} from '../../src/translations.ts';
 import {cardFallbackAdminRoute} from './card-fallback.ts';
 import {orderBudgetApprovalRoute} from './order-budget-approval.ts';
 import {recipientPreviewRoute} from './recipient-preview.ts';
@@ -135,6 +137,7 @@ async function previewJournal(env:Env,year:number,url:URL){
     Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,year,`/api/editions/${year}/theme`)});
     if(invite&&(!invite.allow_mug||!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders)){data.gift.enabled=false;data.gift.designs=[];}
     data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`,viewerSrc:`/api/editions/${year}/media/${p.id}/viewer`}));
+    localizeJournal(data,await translationPayload(env.DB,year,invite?.language,true));
     data.gift.designs=data.gift.designs.map(d=>({...d,src:`/api/editions/${year}/media/${d.id}/cutout/${published.mugDesigns?.find(m=>m.id===d.id)?.cutoutVersion}`}));
     return data;
 }
@@ -215,6 +218,7 @@ async function route(request: Request, env: Env, actor: string) {
     year=Number(scoped[1]);path="/api"+scoped[2];
   }
   if (path.startsWith("/api/")) await edition(env,year);
+  if(scoped){const translation=await translationsRoute(request,env,path,year,actor,()=>body(request));if(translation)return translation;}
   if(scoped){const fallback=await cardFallbackAdminRoute(request,env,path,year,actor,()=>body(request));if(fallback)return fallback;}
   if(scoped){const approval=await orderBudgetApprovalRoute(request,env,path,year,actor,()=>body(request));if(approval)return approval;}
   if(scoped){const preview=await recipientPreviewRoute(request,env,year,path,invitationId=>{const previewUrl=new URL(url);if(invitationId){previewUrl.searchParams.delete('recipient');previewUrl.searchParams.set('invitation',invitationId);}return previewJournal(env,year,previewUrl);},()=>body(request));if(preview)return preview;}
@@ -229,7 +233,7 @@ async function route(request: Request, env: Env, actor: string) {
   }
   if (path === "/api/state" && request.method === "GET") {
     const row = await edition(env,year);
-    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,share_socials,allow_mug,allow_print,print_address_key,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
+    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,language,share_socials,allow_mug,allow_print,print_address_key,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
     return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,allowMugOrders:!!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders,printMode:simulatedOrders(request,env)?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
   }
@@ -311,6 +315,7 @@ async function route(request: Request, env: Env, actor: string) {
     if(data.shareSocials!==undefined && typeof data.shareSocials!=="boolean")return fail("Choose whether to share socials.");
     if(data.allowMug!==undefined&&typeof data.allowMug!=="boolean")return fail("Choose whether to allow a complimentary mug.");
     if(data.allowPrint!==undefined&&typeof data.allowPrint!=="boolean")return fail("Choose whether to allow a complimentary print.");
+    if(data.language!==undefined&&!['en','mr','zh-TW'].includes(data.language as string))return fail('Choose English, Marathi or Traditional Chinese.');
     const members=data.memberIds??[personId];
     if(!Array.isArray(members)||!members.length||members.length>20||members.some(id=>typeof id!=="string")||new Set(members).size!==members.length)
       return fail("Choose between 1 and 20 different people for the invitation.");
@@ -330,10 +335,10 @@ async function route(request: Request, env: Env, actor: string) {
     if(invitationRoute){
       if(!Number.isInteger(data.version))return fail("Missing invitation version.");
       const id=invitationRoute[1];
-      const saved=await env.DB.prepare(`UPDATE invites SET person_id=?1,name=?2,phone=?3,addressed_to=?4,member_ids=?5,share_socials=coalesce(?10,share_socials),allow_mug=coalesce(?11,allow_mug),allow_print=CASE WHEN ?12 IS NOT NULL THEN ?12 WHEN person_id<>?1 THEN 0 ELSE allow_print END,print_address_key=CASE WHEN ?12=1 THEN ?13 WHEN ?12=0 OR person_id<>?1 THEN NULL ELSE print_address_key END,version=version+1,
+      const saved=await env.DB.prepare(`UPDATE invites SET person_id=?1,name=?2,phone=?3,addressed_to=?4,member_ids=?5,language=coalesce(?14,language),share_socials=coalesce(?10,share_socials),allow_mug=coalesce(?11,allow_mug),allow_print=CASE WHEN ?12 IS NOT NULL THEN ?12 WHEN person_id<>?1 THEN 0 ELSE allow_print END,print_address_key=CASE WHEN ?12=1 THEN ?13 WHEN ?12=0 OR person_id<>?1 THEN NULL ELSE print_address_key END,version=version+1,
         challenge_expires_at=CASE WHEN person_id<>?1 OR member_ids<>?5 THEN 0 ELSE challenge_expires_at END
         WHERE id=?6 AND edition_year=?7 AND version=?8 AND EXISTS(SELECT 1 FROM people WHERE id=?1 AND version=?9) RETURNING id`)
-        .bind(contact.id,contact.name,contact.phone,addressedTo,JSON.stringify(members),id,year,data.version as number,contact.version,data.shareSocials===undefined?null:Number(data.shareSocials),data.allowMug===undefined?null:Number(data.allowMug),data.allowPrint===undefined?null:Number(data.allowPrint),printKey).first();
+        .bind(contact.id,contact.name,contact.phone,addressedTo,JSON.stringify(members),id,year,data.version as number,contact.version,data.shareSocials===undefined?null:Number(data.shareSocials),data.allowMug===undefined?null:Number(data.allowMug),data.allowPrint===undefined?null:Number(data.allowPrint),printKey,data.language===undefined?null:data.language as string).first();
       if(!saved)throw new Problem(409,"This invitation changed in another window. Refresh before editing again.");
       await audit(env,actor,"edit-invitation",id).run();
       return json({saved:true});
@@ -341,9 +346,9 @@ async function route(request: Request, env: Env, actor: string) {
     const count=await env.DB.prepare("SELECT count(*) n FROM invites WHERE edition_year=?1").bind(year).first<{n:number}>();
     if(count && count.n>=100)return fail("This scrapbook supports up to 100 invitations.");
     const id="person-"+token().slice(0,24),raw=token();
-    const created=await env.DB.prepare(`INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,edition_year,addressed_to,member_ids,share_socials,token_encrypted,allow_mug,allow_print,print_address_key)
-      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?11,?12,?13,?14,?15 FROM people WHERE id=?2 AND version=?10 AND phone IS NOT NULL ON CONFLICT(edition_year,person_id) WHERE person_id IS NOT NULL DO NOTHING RETURNING id`)
-      .bind(id,contact.id,await digest(raw),contact.name,contact.phone,now()+90*86400,year,addressedTo,JSON.stringify(members),contact.version,Number(!!data.shareSocials),await sealLink(raw,env.INVITATION_LINK_KEY,id,year),Number(!!data.allowMug),Number(!!data.allowPrint),printKey).first();
+    const created=await env.DB.prepare(`INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,edition_year,addressed_to,member_ids,share_socials,token_encrypted,allow_mug,allow_print,print_address_key,language)
+      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?11,?12,?13,?14,?15,?16 FROM people WHERE id=?2 AND version=?10 AND phone IS NOT NULL ON CONFLICT(edition_year,person_id) WHERE person_id IS NOT NULL DO NOTHING RETURNING id`)
+      .bind(id,contact.id,await digest(raw),contact.name,contact.phone,now()+90*86400,year,addressedTo,JSON.stringify(members),contact.version,Number(!!data.shareSocials),await sealLink(raw,env.INVITATION_LINK_KEY,id,year),Number(!!data.allowMug),Number(!!data.allowPrint),printKey,(data.language||'en') as string).first();
     if(!created)throw new Problem(409,"This verification contact already has an invitation here. Edit their existing invitation to include both people.");
     await audit(env,actor,"create-invitation",id).run();
     return json({id,personId:contact.id,url:invitationUrl(env,raw)},201);

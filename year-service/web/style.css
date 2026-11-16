@@ -174,3 +174,8 @@ h1,h2{font-weight:700}.signature,.recipient-greeting .recipient-name{font-weight
 
 /* Keep invitation credits out of the unauthenticated landing page. */
 footer[hidden],header .signature[hidden]{display:none}
+
+/* Native script fonts preserve Marathi shaping and Traditional Chinese glyphs. */
+html:lang(mr) body,html:lang(mr) button,html:lang(mr) input,html:lang(mr) select,html:lang(mr) textarea{font-family:"Noto Sans Devanagari","Devanagari Sangam MN",sans-serif}html:lang(zh-TW) body,html:lang(zh-TW) button,html:lang(zh-TW) input,html:lang(zh-TW) select,html:lang(zh-TW) textarea{font-family:"PingFang TC","Microsoft JhengHei",sans-serif}
+html:lang(mr) .pb-cover-note,html:lang(zh-TW) .pb-cover-note{line-height:1.6}
+html:lang(mr) h1,html:lang(mr) h2,html:lang(mr) h3,html:lang(mr) p,html:lang(mr) span,html:lang(zh-TW) h1,html:lang(zh-TW) h2,html:lang(zh-TW) h3,html:lang(zh-TW) p,html:lang(zh-TW) span{font-family:inherit}

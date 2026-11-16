@@ -1,3 +1,4 @@
+import {installLocalization} from './localization.js';
 import {watchGiftDeadline} from './gift-deadline.js';
 import {codeEntryMarkup,invitationEntryMarkup} from './auth-entry.js';
 import {installFocusModality} from './focus.js';
@@ -68,6 +69,7 @@ async function start() {
     if (/^[a-f0-9]{64}$/.test(raw)) { history.replaceState(null, '', location.pathname); const opened=await api('open', {token:raw}); if(opened.redirectUrl){location.replace(opened.redirectUrl);return;} if(opened.offline){showOffline();return;} }
     try { journal = await api('journal'); showJournal(); return; } catch(error) {if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}}
     const invite = await api('invitation');
+    installLocalization(invite);
     applyBrand(invite.authors,invite.year);
     renderFooter();
     app.innerHTML = invitationEntryMarkup(invite);
@@ -92,6 +94,7 @@ function layoutPhotoGrid(grid){
   spans.forEach(([card,span])=>{if(card.style.gridRowEnd!==span)card.style.gridRowEnd=span;});
 }
 function showJournal() {
+  installLocalization(journal);
   stopGiftDeadline?.();keepsake?.destroy();pixelGift?.destroy();scrapbookMotion?.destroy();
   renderFooter(journal.shareSocials===true);
   imageObserver?.disconnect();layoutObserver?.disconnect();
