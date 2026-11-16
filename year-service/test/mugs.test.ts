@@ -319,11 +319,16 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    await save(next);
    const saved:any=await (await admin('state')).json();assert.deepEqual(saved.draft.mugDesigns.map((d:any)=>d.id),next.mugDesigns.map(d=>d.id));
    assert.equal((await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<any>()).published_json,publishedBefore);
-   for(const mugDesigns of [next.mugDesigns.slice(1),next.mugDesigns.map((d,i)=>i===0?{...d,cutoutVersion:'b'.repeat(32)}:d),next.mugDesigns.map((d,i)=>i===0?{...d,alt:'Changed artwork'}:d)]){
+   for(const mugDesigns of [next.mugDesigns.map((d,i)=>i===0?{...d,cutoutVersion:'b'.repeat(32)}:d),next.mugDesigns.map((d,i)=>i===0?{...d,alt:'Changed artwork'}:d)]){
     assert.equal((await admin('draft',{version,draft:{...next,mugDesigns}})).status,400);
    }
+   const historyBefore=await db.prepare('SELECT * FROM mug_orders ORDER BY id').all();
+   const reduced={...next,mugDesigns:next.mugDesigns.slice(1)};await save(reduced);
+   assert.equal((await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<any>()).published_json,publishedBefore);
+   assert.deepEqual((await db.prepare('SELECT * FROM mug_orders ORDER BY id').all()).results,historyBefore.results);
+   for(const d of next.mugDesigns)assert.ok(await bucket.head(`2026/${d.id}/mugs/${cutoutVersion}.png`),'Saved cutout remains available');
    await publish();
-   const journal:any=await (await guest('journal')).json();assert.deepEqual(journal.gift.designs.map((d:any)=>d.id),next.mugDesigns.map(d=>d.id));
+   const journal:any=await (await guest('journal')).json();assert.deepEqual(journal.gift.designs.map((d:any)=>d.id),reduced.mugDesigns.map(d=>d.id));
   });
  }finally{await mf.dispose();}
 });

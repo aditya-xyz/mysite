@@ -281,3 +281,7 @@ dialog h2[tabindex="-1"]:focus{outline:none}
 @media(max-width:600px){.person-create-form [data-country-fields],.contact-address-comparison{grid-template-columns:1fr}}
 
 .recipient-preview-dialog{width:min(560px,calc(100vw - 32px))}.recipient-preview-dialog .preview-dialog-header{border:0}.recipient-preview-dialog .preview-dialog-header p:last-child{margin-top:20px;margin-bottom:0}
+
+/* Give preview preparation the same inset and rhythm as the mug collection. */
+.mug-preview-library{padding:24px;margin:0 0 20px}.mug-preview-library .row-head{align-items:flex-start;gap:20px;margin:0 0 16px}.mug-preview-library h2{margin:0 0 8px;font-size:18px}.mug-preview-library .hint{margin:0;line-height:1.7}.mug-preview-library [data-library-count]{font-variant-numeric:tabular-nums}.mug-preview-library [data-prepare-library]{flex:none;margin:0}.mug-removed-list>p{margin:0 0 8px}.mug-removed-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px}.mug-removed-list>div>span{overflow-wrap:anywhere}
+@media(max-width:600px){.mug-preview-library{padding:20px}.mug-preview-library .row-head{flex-wrap:wrap;gap:16px}.mug-preview-library [data-prepare-library]{width:100%}.mug-summary{align-items:flex-start;flex-wrap:wrap}.mug-removed-list>div{align-items:flex-start;flex-wrap:wrap}}

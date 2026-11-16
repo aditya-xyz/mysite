@@ -2,7 +2,7 @@ import {curatedMugChange,curatedMugIds} from '../src/mug-catalog.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error Browser helper is plain JavaScript.
-import {addMugPhoto} from '../admin/client/mug-editor.js';
+import {addMugPhoto,removeMugPhoto,restoreMugPhoto} from '../admin/client/mug-editor.js';
 // @ts-expect-error Browser presentation helper is plain JavaScript.
 import {hasMugChoices,giftMarkup,assetPath} from '../web/pixelbook.js';
 
@@ -32,7 +32,10 @@ test('version-pinned mug URLs remain usable and stay on this origin',()=>{
 test('curated artwork stays fixed while captions can change',()=>{
  const current=curatedMugIds.map(id=>({id,caption:'Original',alt:'A photo',cutoutVersion:'a'.repeat(32)}));
  assert.equal(curatedMugChange(current,current.map(d=>({...d,caption:'New caption'}))),false);
- assert.equal(curatedMugChange(current,current.slice(1)),true);
+ assert.equal(curatedMugChange(current,current.slice(1)),false);
+ assert.equal(curatedMugChange(current,[]),false);
+ assert.equal(curatedMugChange(current.slice(1),current,current),false);
+ assert.equal(curatedMugChange([],current.map((d,i)=>i===0?{...d,cutoutVersion:'b'.repeat(32)}:d),current),true);
  assert.equal(curatedMugChange(current,[...current].reverse()),false);
  assert.equal(curatedMugChange(current,[current[0],...current.slice(0,-1)]),true);
  for(const change of [{id:'other'},{alt:'Other'},{cutoutVersion:'b'.repeat(32)},{cutoutEditable:true}])assert.equal(curatedMugChange(current,current.map((d,i)=>i===0?{...d,...change}:d)),true);
@@ -54,4 +57,16 @@ test('the shared gift section preserves independent keepsake and mug visibility'
  journal.gift.enabled=false;html=giftMarkup(journal);assert.match(html,/keepsake-section/);assert.doesNotMatch(html,/data-open-gift/);
  journal.gift.enabled=true;journal.keepsake.enabled=false;html=giftMarkup(journal);assert.doesNotMatch(html,/keepsake-section/);assert.match(html,/data-open-gift/);
  journal.gift.enabled=false;assert.equal(giftMarkup(journal),'');
+});
+
+test('removing and undoing a mugshot only changes draft selection, preserving artwork and captions',()=>{
+ const designs=curatedMugIds.map(id=>({id,caption:'Saved caption '+id,alt:'Approved photo',cutoutVersion:'a'.repeat(32)}));
+ const state:any={draft:{photos:[{id:'gallery'}],mugDesigns:structuredClone(designs)}};
+ assert.equal(removeMugPhoto(state,designs[1].id),true);assert.equal(state.draft.mugDesigns.length,5);
+ assert.deepEqual(state.draft.photos,[{id:'gallery'}]);assert.deepEqual(state.removedMugDesigns[0].design,designs[1]);
+ assert.equal(removeMugPhoto(state,'missing'),false);
+ assert.equal(restoreMugPhoto(state,designs[1].id),true);assert.deepEqual(state.draft.mugDesigns,designs);assert.deepEqual(state.removedMugDesigns,[]);
+ assert.equal(restoreMugPhoto(state,'missing'),false);
+ removeMugPhoto(state,designs[0].id);removeMugPhoto(state,designs[1].id);
+ restoreMugPhoto(state,designs[0].id);restoreMugPhoto(state,designs[1].id);assert.deepEqual(state.draft.mugDesigns,designs);
 });

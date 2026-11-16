@@ -390,7 +390,7 @@ function bind(){
   bindOrdering();
   bindBulkPhotos();
   mountMugOrders({view,state,api,showModal,toast});
-  if(view==='mugs'){bindMugEditor({root:app,state,mark});mountMugPreviewLibrary({root:app,state,toast});}
+  if(view==='mugs'){bindMugEditor({root:app,state,mark,render});mountMugPreviewLibrary({root:app,state,toast});}
   app.querySelectorAll('[data-preview-edition]').forEach(b=>b.onclick=async()=>{await navigate('photos',true,Number(b.dataset.previewEdition));openPreview();});
   app.querySelectorAll('[data-photo-filter]').forEach(b=>b.onclick=()=>{photoFilter=b.dataset.photoFilter;draftSelection.clear();selectedPhotoId='';photoEditorOpen=false;render();});
   app.querySelectorAll('[data-select-photo]').forEach(b=>b.onclick=()=>{selectedPhotoId=b.dataset.selectPhoto;photoEditorOpen=true;render();if(innerWidth<=800)byId('photo-inspector')?.scrollIntoView({block:'start',behavior:'instant'});});
@@ -453,7 +453,7 @@ async function saveDraft(){
     const label=first.photo.caption.trim()||state.media.find(m=>m.id===first.photo.id)?.filename||'Untitled photo';
     throw new Error(`Photo ${first.index+1} (“${label}”) needs an accessibility description.${missingDescriptions.length>1?` ${missingDescriptions.length===2?'1 more photo also needs a description.':`${missingDescriptions.length-1} more photos also need descriptions.`}`:''}`);
   }
-  const saveGeneration=editGeneration;busy=true;updateBadge();try{const result=await api('draft',{draft:state.draft,version:state.version});state.version=result.version;if(result.printInvitations)state.draft.printInvitations=result.printInvitations;if(result.printAddressKeys)state.draft.printAddressKeys=result.printAddressKeys;await saveCaptionTranslations(state,(path,data)=>api(path,data));dirty=editGeneration!==saveGeneration;updateEditionSummary();toast('Draft saved. Your changes stay private until you publish.');const edited=state.draft.photos.find(p=>p.id===app.querySelector('[data-caption-translations]')?.dataset.captionTranslations);if(edited)refreshCaptionStatuses(state,app,edited);refreshStoryTranslationStatuses(state,app);}finally{busy=false;updateBadge();}
+  const saveGeneration=editGeneration;busy=true;updateBadge();try{const result=await api('draft',{draft:state.draft,version:state.version});state.version=result.version;if(result.printInvitations)state.draft.printInvitations=result.printInvitations;if(result.printAddressKeys)state.draft.printAddressKeys=result.printAddressKeys;await saveCaptionTranslations(state,(path,data)=>api(path,data));dirty=editGeneration!==saveGeneration;updateEditionSummary();toast('Draft saved. Your changes stay private until you publish.');const edited=state.draft.photos.find(p=>p.id===app.querySelector('[data-caption-translations]')?.dataset.captionTranslations);if(edited)refreshCaptionStatuses(state,app,edited);refreshStoryTranslationStatuses(state,app);state.removedMugDesigns=[];if(view==='mugs')render();}finally{busy=false;updateBadge();}
 }
 function showModal(html){modalContent.innerHTML=html;const title=modalContent.querySelector('h2');if(title){title.id='modal-title';title.tabIndex=-1;modal.setAttribute('aria-labelledby','modal-title');}if(!modal.open)modal.showModal();title?.focus({preventScroll:true});}
 let previewCloseTimer;

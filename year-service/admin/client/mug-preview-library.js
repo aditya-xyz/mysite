@@ -24,12 +24,12 @@ export function ensureMugLibrarySources(year,progress=()=>{}){
  })().finally(()=>active.delete(year));active.set(year,work);return work;
 }
 export function mountMugPreviewLibrary({root,state,toast}){
- const panel=document.createElement('section');panel.className='panel';
- panel.innerHTML='<div class="row-head"><div><h2>Saved mug previews</h2><p class="hint" data-library-count>Checking the preview library…</p></div><button class="secondary" data-prepare-library>Prepare previews</button></div><p class="hint" data-library-progress>Prepares every published photo, caption font and affordable mug option. Nightly sync adds new options. No orders or charges.</p>';
+ const panel=document.createElement('section');panel.className='panel mug-preview-library';
+ panel.innerHTML='<div class="row-head"><div><h2>Saved mug previews</h2><p class="hint" data-library-count>Checking the preview library…</p></div><button class="secondary" data-prepare-library>Prepare previews</button></div><p class="hint" data-library-progress>Previews use the published mugshots, caption fonts and available mug options. Save and publish collection changes before preparing previews. No orders or charges.</p>';
  root.querySelector('.mug-summary')?.after(panel);
  const progress=value=>{if(panel.isConnected)panel.querySelector('[data-library-progress]').textContent=value;};
  async function refresh(){
-  try{const value=await request(state.year);if(!panel.isConnected)return;panel.querySelector('[data-library-count]').textContent=`${value.sync?.ready_count||0} / ${value.sync?.desired_count||0} saved previews · ${value.plans.filter(p=>p.ready).length}/${value.plans.length} artwork files prepared`;}
+  try{const value=await request(state.year);if(!panel.isConnected)return;panel.querySelector('[data-library-count]').textContent=`${value.sync?.ready_count||0} of ${value.sync?.desired_count||0} previews ready · ${value.plans.filter(p=>p.ready).length} of ${value.plans.length} artwork files ready`;}
   catch(error){progress(error.message);}
  }
  panel.querySelector('[data-prepare-library]').onclick=async event=>{event.target.disabled=true;try{await ensureMugLibrarySources(state.year,progress);await refresh();toast('Caption artwork saved. Preview preparation continues in the background.');}catch(error){progress(error.message);}finally{if(panel.isConnected)event.target.disabled=false;}};
