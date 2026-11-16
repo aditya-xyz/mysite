@@ -51,6 +51,17 @@ test('reviewed invitation languages preserve English, privacy and existing data'
   assert.ok(!JSON.stringify(client).includes('A private joke'));assert.ok(!('translations' in client));assert.equal(JSON.stringify(published),original);assert.equal(published.printNote,'English card note');
   assert.deepEqual((await translationPayload(db,2026,'en')).translations,{});assert.equal(language('zh-CN'),'en');assert.equal(language('zh-TW'),'zh-TW');
  });
+ await t.test('inline zinger saves merge only selected captions and preserve notes, controls and published text',async()=>{
+  const fresh=await call('mr'),publishedBefore=JSON.stringify((await translationPayload(db,2026,'mr')).translations);
+  const key='photo:one:caption';
+  await call('mr',{patch:true,version:fresh.version,sourceVersion:10,entries:{[key]:{source:'Good dog.',value:'नवा विनोद'}}});
+  const saved=await call('mr');assert.equal(saved.entries[key].value,'नवा विनोद');
+  assert.deepEqual(saved.entries.note,fresh.entries.note);assert.deepEqual(saved.entries['photo:one:alt'],fresh.entries['photo:one:alt']);assert.deepEqual(saved.entries['ui:Continue'],fresh.entries['ui:Continue']);
+  assert.equal(JSON.stringify((await translationPayload(db,2026,'mr')).translations),publishedBefore);
+  await assert.rejects(()=>call('mr',{patch:true,version:fresh.version,sourceVersion:10,entries:{[key]:{source:'Good dog.',value:'Stale edit'}}}),/changed/);
+  await assert.rejects(()=>call('mr',{patch:true,version:saved.version,sourceVersion:10,entries:{note:{source:draft.note,value:'Not a zinger'}}}),/only update photo zingers/);
+  await assert.rejects(()=>call('mr',{patch:true,version:saved.version,sourceVersion:10,entries:{[key]:{source:'Wrong English',value:'Wrong source'}}}),/English source/);
+ });
  await t.test('English edits invalidate only matching passages; drafts never implicitly republish',async()=>{
   const payload=await translationPayload(db,2026,'mr');const j=localizeJournal({note:'Changed English note',photos:[],stories:[]},payload);assert.equal(j.note,'Changed English note');
   const fresh=await call('mr');await db.prepare('UPDATE editions SET draft_version=11 WHERE year=2026').run();

@@ -21,7 +21,11 @@ export async function translationsRoute(request:Request,env:{DB:D1Database},path
  }else{
   if(!data.entries||typeof data.entries!=='object'||Array.isArray(data.entries))problem(400,'Provide translation entries.');
   const submitted=data.entries as TranslationEntries;
-  for(const s of sources){const e=submitted[s.key];if(!e)continue;
+  const patch=data.patch===true;
+  if(patch)Object.assign(entries,drafts);
+  const checkedSources=patch?translationSources({...JSON.parse(edition!.draft_json),photos:(JSON.parse(edition!.draft_json) as Draft).photos.map(p=>({...p,hidden:false}))}).filter(s=>s.key.startsWith('photo:')&&s.key.endsWith(':caption')):sources;
+  if(patch&&Object.keys(submitted).some(key=>!checkedSources.some(s=>s.key===key)))problem(400,'Inline edits can only update photo zingers.');
+  for(const s of checkedSources){const e=submitted[s.key];if(!e)continue;
    if(e.source!==s.source||typeof e.value!=='string'||e.value.length>Math.max(2000,s.source.length*5))problem(400,'Check the translated text and its English source.');
    const placeholders=(value:string)=>[...value.matchAll(/\{[a-zA-Z]+\}/g)].map(m=>m[0]).sort().join(',');
    if(e.value.trim()&&placeholders(e.value)!==placeholders(s.source))problem(400,'Keep every {placeholder} exactly once in the translation.');
