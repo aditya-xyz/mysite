@@ -50,11 +50,13 @@ test('a household order created since the journal loaded also skips the selector
  await opening;assert.match(modal.innerHTML,/Pixel perfect/);
 });
 
-test('households without an order see the picker only after the status check',async t=>{
+test('new mugshot selections open directly without a household gift loading screen',async t=>{
  const {launch,modal,next}=fixture(t,{hasOrder:false});
- const fetch=mock.method(globalThis,'fetch',async()=>Response.json({claim:null}));t.after(()=>fetch.mock.restore());
- const opening=launch.onclick();assert.doesNotMatch(modal.innerHTML,/data-design=/);
- await opening;assert.match(modal.innerHTML,/data-design=/);assert.equal(next.disabled,false);
+ let resolve!:(value:Response)=>void;
+ const fetch=mock.method(globalThis,'fetch',async()=>new Promise<Response>(r=>resolve=r));t.after(()=>fetch.mock.restore());
+ const opening=launch.onclick();assert.equal(modal.open,false);assert.equal(launch.disabled,true);
+ assert.doesNotMatch(modal.innerHTML,/Loading your gift|your household’s gift/);
+ resolve(Response.json({claim:null}));await opening;assert.equal(modal.open,true);assert.match(modal.innerHTML,/data-design=/);assert.equal(next.disabled,false);assert.equal(launch.disabled,false);
 });
 
 test('existing gifts remain viewable after new ordering is disabled',async t=>{

@@ -120,7 +120,10 @@ export function mountPixelGift(journal,root){
     // The authorized journal already includes the saved gift; refresh it in the background.
     configuration=pixelMugOptions();selected=previewDesign;
     if(receipt)selectReceipt();else step=ordering||journal.gift.hasOrder?'loading':'pick';
-    render();modal.showModal();modal.querySelector('h2').focus();
+    // A new selection opens once its status is known, without a household-receipt flash.
+    const deferOpen=ordering&&!receipt&&!journal.gift.hasOrder;
+    if(deferOpen)launch.disabled=true;
+    else{render();modal.showModal();modal.querySelector('h2').focus();}
     try{
       if(!ordering&&!journal.gift.hasOrder&&!receipt){contextReady=true;step='pick';selected=previewDesign;render();modal.querySelector('h2').focus();return;}
       const displayedReceipt=receipt;
@@ -129,10 +132,11 @@ export function mountPixelGift(journal,root){
       if(livePricing&&!receipt){const catalog=await preloadCatalog();styles=catalog.styles;mockups.configure(catalog);configuration=preferredMugOptions(styles);}
       if(!modal.isConnected)return;
       if(receipt)selectReceipt();else{step='pick';selected=selected||previewDesign;requestKey=crypto.randomUUID();launch.textContent='pick your mugshot';}
+      if(deferOpen){render();modal.showModal();}
       if(!modal.open)return;contextReady=true;
-      if(!displayedReceipt||receiptKey(displayedReceipt)!==receiptKey(receipt))render();
+      if(!deferOpen&&(!displayedReceipt||receiptKey(displayedReceipt)!==receiptKey(receipt)))render();
       if(livePricing&&!receipt){warmSelected();for(const design of designs)mockups.preload(design,configuration);}
-    }catch(error){if(error.name!=='AbortError'){if(modal.open){if(!receipt){step='error';render();}modal.querySelector('.pb-gift-status').textContent=error.message;}if(!receipt){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}}
+    }catch(error){if(error.name!=='AbortError'){if(deferOpen&&modal.isConnected&&!modal.open){step='error';render();modal.showModal();}if(modal.open){if(!receipt){step='error';render();}modal.querySelector('.pb-gift-status').textContent=error.message;}if(!receipt){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}}
     finally{opening=false;launch.disabled=false;if(modal.open&&step==='pick')modal.querySelector('[data-gift-next]').disabled=!selected||!ordering||!contextReady;}
   };
   modal.addEventListener('close',()=>{controller?.abort();returnFocus?.focus({preventScroll:true});});
