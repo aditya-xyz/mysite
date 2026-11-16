@@ -6,6 +6,7 @@ import {digest,now,token} from './security.ts';
 import {invitationAudience,invitationName,invitationRecipientName,type InvitationAudience} from './invitations.ts';
 import {visiblePhotos,type Published,type Draft} from './edition.ts';
 import {imageDimensions} from './image-dimensions.ts';
+import {digitalPostcard,digitalMailingAllowedSQL} from './digital-postcards.ts';
 export interface PrintEnv {DB:D1Database;MEDIA:R2Bucket;PRINT_PROVIDER?:string;ORDER_MODE?:string;PRINTFUL_ENABLED?:string;PRINTFUL_API_TOKEN?:string;PRINTFUL_STORE_ID?:string;PRINT_ORDER_MODE?:string;HANDWRYTTEN_API_KEY?:string;HANDWRYTTEN_PREVIEWS_ENABLED?:string}
 export interface MailingAddress {line1:string;line2:string;city:string;state:string;postalCode:string;country:'US'|'IN'|'NL'}
 export class PrintProblem extends Error {status:number;retryAfter?:number;constructor(status:number,message:string,retryAfter?:number){super(message);this.status=status;this.retryAfter=retryAfter;}}
@@ -48,9 +49,11 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  const defaults=edition?.is_active&&edition.allow_print_orders&&i.allow_print?await keepsakeDefault(env,i.edition_year):null;
  const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json,(SELECT state FROM print_fulfillment f WHERE f.order_id=print_orders.id) AS fulfillment_state FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
  const window=await giftWindow(env.DB,i);
+ const digital=await digitalPostcard(env.DB,i);
  const mode=env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':simulatedOrders(request,env)?'local_mock':'disabled';
  let reason='';
  if(existing)reason='Your complimentary print has already been ordered.';
+ else if(digital)reason='Your household permanently chose a digital postcard.';
  else if(window.closed)reason='The gift deadline has passed.';
  else if(!edition?.is_active)reason='This scrapbook is no longer active.';
  else if(!edition.allow_print_orders)reason='Print orders are turned off for this scrapbook.';
@@ -62,11 +65,11 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  else if(mode==='disabled')reason='The print provider is not configured. No orders can be placed.';
  const confirmationKey=await digest(JSON.stringify(['folded-a2-portrait-v1',i.id,i.version,edition?.published_version,person?.version,person?.mailing_address,published?.printNote,published?.defaultPrintNote]));
  const needsAddress=!!reason&&['The mailing contact needs a verified mailing address.','The mailing address changed. Ask us to re-enable printing.'].includes(reason)&&mode!=='disabled';
- return {i,edition,person,published,photos,existing,mode,reason,confirmationKey,needsAddress,defaults,window};
+ return {i,edition,person,published,photos,existing,mode,reason,confirmationKey,needsAddress,defaults,window,digital};
 }
 export async function printStatus(request:Request,env:PrintEnv,invite:InvitationAudience){
  const c=await printContext(request,env,invite);
- return {eligible:!c.reason,canOrder:!c.reason||c.needsAddress,needsAddress:c.needsAddress,contentVersion:c.edition?.published_version,reason:c.reason,mode:c.mode,order:c.existing?printOrderView(c.existing):null,remaining:c.existing?0:1,cardCount:1,format:'folded',picturePreviews:'local',preview:guestFoldedPreview(foldedBackText(c.i.edition_year)),defaultRevision:c.defaults?.revision,
+ return {eligible:!c.reason,canOrder:!c.reason||c.needsAddress,digitalOnly:!!c.digital,needsAddress:c.needsAddress,contentVersion:c.edition?.published_version,reason:c.reason,mode:c.mode,order:c.existing?printOrderView(c.existing):null,remaining:c.existing||c.digital?0:1,cardCount:1,format:'folded',picturePreviews:'local',preview:guestFoldedPreview(foldedBackText(c.i.edition_year)),defaultRevision:c.defaults?.revision,
   ...(!c.reason?{confirmationKey:c.confirmationKey,addressVersion:c.person?.version}: {})};
 }
 export async function readPrintArtwork(request:Request,env:PrintEnv,c:Awaited<ReturnType<typeof printContext>>){
@@ -111,7 +114,7 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  WHERE i.id=?5 AND i.print_order_count=0 AND i.version=?6 AND i.revoked_at IS NULL AND i.expires_at>?7 AND e.is_active=1 AND e.allow_print_orders=1 AND e.published_version=?8
  AND p.id=?9 AND p.version=?10 AND p.address_verified=1 AND (p.address_verifier IN ('local_mock','google') OR (p.address_verifier='admin' AND json_extract(p.mailing_address,'$.country')='IN')) AND (p.address_verifier!='google' OR p.address_verified_until>?7)
  AND unixepoch()<?18 AND ${giftReservationOpenSQL}
- AND i.allow_print=1 AND i.print_address_key=p.address_verification_key
+ AND i.allow_print=1 AND i.print_address_key=p.address_verification_key AND ${digitalMailingAllowedSQL}
  AND EXISTS(SELECT 1 FROM keepsake_defaults k WHERE k.year=e.year AND k.revision=?12)
  AND NOT EXISTS(SELECT 1 FROM card_fallback_jobs j JOIN print_orders fo ON fo.id=j.order_id JOIN invites fi ON fi.id=j.invitation_id WHERE j.year=e.year AND fo.status IN ('preparing','simulated','submitted','unknown') AND (fi.id=i.id OR fi.person_id=i.person_id OR EXISTS(SELECT 1 FROM json_each(fi.member_ids) a JOIN json_each(i.member_ids) b ON a.value=b.value)))
  AND NOT EXISTS(SELECT 1 FROM print_orders WHERE invitation_id=i.id AND year=e.year AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')) ON CONFLICT DO NOTHING RETURNING id`)

@@ -55,3 +55,8 @@ year-service/admin/web/fonts/Asap-OFL.txt
 
 # Private full Pixelbook preview, generated from guest source.
 /year-service/admin/web/pixelbook-preview/
+
+# Guest startup bundle, generated from web/app.js before development and deploy.
+/year-service/web/app.bundle.js
+
+/year-service/web/app.styles.css

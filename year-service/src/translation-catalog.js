@@ -1,6 +1,7 @@
+import {digitalUi} from '../web/digital-copy.js';
 // Starter translation drafts. Admin review is required before publication.
 export const languages={en:'English',mr:'मराठी · Marathi','zh-TW':'繁體中文 · Traditional Chinese (Taiwan)'};
-export const uiDrafts=[
+const existingUiDrafts=[
 ["special delivery. from me.", "खास तुझ्यासाठी. माझ्याकडून.", "你的專屬郵件，寄件人是我。"],
 ["oh good,", "अरे वा,", "太好了，"],
 ["i made you a scrapbook. there are photos, there are memories, and yes, there is a lot of me.", "तुझ्यासाठी एक आठवणींचं पुस्तक बनवलंय. फोटो आहेत, आठवणी आहेत आणि अर्थातच, मी तर भरपूर आहे.", "我幫你做了一本回憶相簿。有照片、有回憶，沒錯，還有很多很多的我。"],
@@ -54,7 +55,7 @@ export const uiDrafts=[
 ["three favorite photos, made for your fridge.", "फ्रिजवर लावायला तीन आवडते फोटो.", "三張最愛的照片，剛好貼在冰箱上。"],
 ["make a postcard", "पोस्टकार्ड तयार करा", "製作明信片"],
 ["one complimentary postcard for {name}", "{name} यांच्यासाठी भेट म्हणून एक पोस्टकार्ड", "免費送給 {name} 的明信片（每戶一張）"],
-["View your postcard", "तुझं पोस्टकार्ड पाहा", "查看你的明信片"],
+["view your postcard", "तुझं पोस्टकार्ड पाहा", "查看你的明信片"],
 ["Your postcard order is saved. Here’s the one you chose.", "तुझ्या पोस्टकार्डची ऑर्डर जतन झाली आहे. हे तू निवडलेलं पोस्टकार्ड.", "你的明信片訂單已儲存，這就是你選的款式。"],
 ["Postcard ordered for {name}", "{name} यांच्यासाठी पोस्टकार्डची ऑर्डर झाली", "已為 {name} 訂購明信片"],
 ["Choose three from the photos picked for you.", "तुझ्यासाठी निवडलेल्या फोटोंमधून तीन निवड.", "從特別為你挑選的照片中選三張。"],
@@ -220,3 +221,5 @@ export const uiDrafts=[
 ["Card view", "कार्ड पाहा", "卡片檢視"],
 ["Folded card preview", "घडीच्या कार्डचं पूर्वावलोकन", "摺頁卡片預覽"]
 ];
+
+export const uiDrafts=[...existingUiDrafts,...digitalUi.filter(([source])=>!existingUiDrafts.some(([key])=>key===source))];

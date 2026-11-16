@@ -1,3 +1,5 @@
+import {sessionImages} from './session-images.js';
+import {readResource} from './read-resource.js';
 import {openMugCustomizer} from './mug-customizer.js';
 import {createMugMockups} from './mug-mockups.js';
 import {pixelMugOptions,preferredMugOptions,mugStyles,mugOptionsLabel} from './mug-options.js';
@@ -25,7 +27,7 @@ export function mountPixelGift(journal,root){
   const canConfirm=()=>delivery.ready&&!journal.adminPreview;
   const steps=()=>`<ol class="pb-order-steps" aria-label="Gift progress">${['your mugshot','the details','your address'].map((s,i)=>`<li ${['pick','review','address'].indexOf(step)===i?'aria-current="step"':''}><span>${i+1}</span>${s}</li>`).join('')}</ol>`;
   function pickMarkup(){
-    return `<p class="pb-dialog-intro">pick your favorite photo of me. i’ve made this very difficult.</p><div class="pb-designs" role="group" aria-label="Choose a mug design">${designs.map(d=>`<button type="button" class="pb-design" data-design="${esc(d.id)}" aria-pressed="${selected?.id===d.id}"><span class="pb-design-image"><img src="${esc(assetPath(d.src))}" alt="${esc(d.alt)}" loading="lazy"><span class="pb-design-check" aria-hidden="true">✓</span></span><span class="pb-design-name">${esc(d.name)}</span><span class="pb-design-caption">${esc(d.caption)}</span></button>`).join('')}</div><p class="pb-dialog-budget">${householdGiftLine}</p>`;
+    return `<p class="pb-dialog-intro">pick your favorite photo of me. i’ve made this very difficult.</p><div class="pb-designs" data-design-count="${designs.length}" role="group" aria-label="Choose a mug design">${designs.map(d=>`<button type="button" class="pb-design" data-design="${esc(d.id)}" aria-pressed="${selected?.id===d.id}"><span class="pb-design-image"><img data-session-src="${esc(assetPath(d.src))}" alt="${esc(d.alt)}" loading="eager" decoding="async"><span class="pb-design-check" aria-hidden="true">✓</span></span><span class="pb-design-name">${esc(d.name)}</span><span class="pb-design-caption">${esc(d.caption)}</span></button>`).join('')}</div><p class="pb-dialog-budget">${householdGiftLine}</p>`;
   }
   function addressMarkup(){return delivery.markup();}
   function warmReceipt(){
@@ -37,7 +39,7 @@ export function mountPixelGift(journal,root){
   }
   function selectReceipt(){
     configuration=receipt.configuration||configuration;selected=receipt.design||designs.find(d=>d.id===receipt.designId)||selected;
-    step='done';launch.textContent='view your household’s gift';warmReceipt();
+    step='done';launch.textContent='view your household’s gift';root.querySelector('#pb-gift .pb-present-copy>p').textContent='your morning coffee is about to become more pawesome';warmReceipt();
   }
   const receiptKey=value=>JSON.stringify([value?.designId,value?.status,value?.configuration,value?.design]);
   const previewMarkup=(design,value)=>{
@@ -59,7 +61,7 @@ export function mountPixelGift(journal,root){
       selected=designs.find(d=>d.id===b.dataset.design);
       modal.querySelectorAll('[data-design]').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.design===selected.id)));
       modal.querySelector('[data-gift-next]').disabled=!ordering||opening;
-      if(livePricing)warmSelected();
+      // Cutout selection does not need a decoded supplier mockup.
     });
     modal.querySelector('[data-customize-mug]')?.addEventListener('click',()=>{
       customizer=openMugCustomizer(selected,configuration,value=>{configuration=value;customizer=null;render();modal.querySelector('[data-customize-mug]').focus();},styles,(element,design,value)=>{mockups.update(element,design,value);warmOptions(design,value);},previewMarkup,(design,value)=>mockups.available(design,value));
@@ -67,6 +69,7 @@ export function mountPixelGift(journal,root){
     modal.querySelector('[data-gift-back]')?.addEventListener('click',()=>{if(step==='pick')modal.close();else{step=step==='address'?'review':'pick';render();}});
     modal.querySelector('[data-edit-address]')?.addEventListener('click',()=>{step='address';render();});
     modal.querySelector('[data-gift-next]')?.addEventListener('click',next);
+    sessionImages.bind(modal);
     if(step==='address')delivery.bind(modal);
     const savedImage=modal.querySelector('[data-saved-gift-image]');
     if(savedImage&&receiptPreview){receiptPreview.image.className=savedImage.className;receiptPreview.image.alt=savedImage.alt;savedImage.replaceWith(receiptPreview.image);}
@@ -76,6 +79,7 @@ export function mountPixelGift(journal,root){
   }
   async function request(path,data){
     controller?.abort();controller=new AbortController();
+    if(data===undefined)return readResource('/api/gift/'+path,{signal:controller.signal});
     const response=await fetch('/api/gift/'+path,{method:data===undefined?'GET':'POST',headers:data===undefined?{}:{'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)}),signal:controller.signal});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'Couldn’t save that. Please try again.');return result;
   }
@@ -94,24 +98,19 @@ export function mountPixelGift(journal,root){
     finally{busy=false;modal.removeAttribute('aria-busy');}
   }
   function warmOptions(design,options){
-    mockups.preload(design,options);if(!livePricing)return;
-    const style=styles.find(s=>s.id===options.style);
-    for(const color of style?.colors||[])if(!style.variants||style.variants.some(v=>v.size===options.size&&v.color===color))mockups.preload(design,{...options,color});
-    for(const other of styles){const v=other.variants?.find(v=>v.size===options.size)||other.variants?.[0];if(v)for(const font of ['clean','serif','handwritten'])mockups.preload(design,{style:other.id,size:v.size,color:v.color,font});}
-    for(const font of ['clean','serif','handwritten'])mockups.preload(design,{...options,font});
+    mockups.preload(design,options);
   }
   function warmSelected(){warmOptions(selected,configuration);}
   let opening=false,contextReady=false,catalogPromise=null,catalogLoadedAt=0;const catalogController=new AbortController();
   function preloadCatalog(){
     if(catalogPromise&&catalogLoadedAt&&Date.now()-catalogLoadedAt>25000){catalogPromise=null;catalogLoadedAt=0;}
-    catalogPromise??=fetch('/api/gift/catalog',{signal:catalogController.signal}).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load the saved mug collection.');catalogLoadedAt=Date.now();return result;}).catch(error=>{catalogPromise=null;throw error;});
+    catalogPromise??=readResource('/api/gift/catalog',{signal:catalogController.signal}).then(result=>{catalogLoadedAt=Date.now();return result;}).catch(error=>{catalogPromise=null;throw error;});
     return catalogPromise;
   }
-  function warmCatalog(){if(!journal.gift.livePricing||!ordering)return;preloadCatalog().then(catalog=>{if(modal.open)return;mockups.configure(catalog);const preferred=preferredMugOptions(catalog.styles);for(const design of designs)mockups.preload(design,preferred);}).catch(()=>{});}
+  function warmCatalog(){if(!journal.gift.livePricing||!ordering)return;preloadCatalog().then(catalog=>{if(modal.open)return;mockups.configure(catalog);}).catch(()=>{});}
   launch.addEventListener('pointerenter',warmCatalog,{once:true});launch.addEventListener('focus',warmCatalog,{once:true});
-  const warmTimer=setTimeout(warmCatalog,1500);
   let previewCount=0;
-  const catalogTimer=setInterval(()=>{if(!modal.open||!livePricing||receipt)return;preloadCatalog().then(catalog=>{styles=catalog.styles;mockups.configure(catalog);if(previewCount!==(catalog.previews?.length||0)){previewCount=catalog.previews?.length||0;customizer?.refresh(styles);warmSelected();}}).catch(()=>{});},30000);
+  const catalogTimer=setInterval(()=>{if(!modal.open||!livePricing||receipt)return;preloadCatalog().then(catalog=>{styles=catalog.styles;mockups.configure(catalog);if(previewCount!==(catalog.previews?.length||0)){previewCount=catalog.previews?.length||0;customizer?.refresh(styles);if(step==='review')warmSelected();}}).catch(()=>{});},30000);
   launch.onclick=async()=>{
     if(modal.open||busy||opening)return;opening=true;contextReady=false;returnFocus=document.activeElement;
     root.querySelector('.pb-gift-launch-error')?.remove();
@@ -135,11 +134,11 @@ export function mountPixelGift(journal,root){
       if(deferOpen){render();modal.showModal();}
       if(!modal.open)return;contextReady=true;
       if(!deferOpen&&(!displayedReceipt||receiptKey(displayedReceipt)!==receiptKey(receipt)))render();
-      if(livePricing&&!receipt){warmSelected();for(const design of designs)mockups.preload(design,configuration);}
+      // The chooser needs only small cutouts. Supplier mockups load when review opens.
     }catch(error){if(error.name!=='AbortError'){if(deferOpen&&modal.isConnected&&!modal.open){step='error';render();modal.showModal();}if(modal.open){if(!receipt){step='error';render();}modal.querySelector('.pb-gift-status').textContent=error.message;}if(!receipt){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}}
     finally{opening=false;launch.disabled=false;if(modal.open&&step==='pick')modal.querySelector('[data-gift-next]').disabled=!selected||!ordering||!contextReady;}
   };
   modal.addEventListener('close',()=>{controller?.abort();returnFocus?.focus({preventScroll:true});});
   warmReceipt();
-  return {destroy(){clearInterval(catalogTimer);clearTimeout(warmTimer);catalogController.abort();controller?.abort();customizer?.destroy();mockups.destroy();delivery.destroy();modal.remove();}};
+  return {destroy(){clearInterval(catalogTimer);catalogController.abort();controller?.abort();customizer?.destroy();mockups.destroy();delivery.destroy();modal.remove();}};
 }

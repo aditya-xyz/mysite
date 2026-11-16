@@ -5,6 +5,7 @@ import {mailingAddress,PrintProblem,foldedPreviewNote,foldedBackText} from '../.
 import {keepsakeDefault} from '../../src/keepsake-defaults.ts';
 import {preparedMugCatalog,preparedMugImage} from '../../src/prepared-mugs.ts';
 import {invitationMembers,type InvitationAudience} from '../../src/invitations.ts';
+import {digitalStatus,digitalImage,digitalPostcard} from '../../src/digital-postcards.ts';
 
 // Called only after adminIdentity. No guest cookie, reusable code or session is created.
 export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:number,path:string,journal:(invitationId?:string)=>Promise<any>,readBody:()=>Promise<Record<string,unknown>>){
@@ -21,12 +22,17 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
  const defaults=await keepsakeDefault(env,year);
  const window=invite?await giftWindow(env.DB,invite):{closed:false,closesAt:null,runAt:null};
  const canPrint=!window.closed&&!!(invite?.allow_print&&edition?.allow_print_orders&&defaults);
+ const savedDigital=canPrint&&invite&&['journal','print/status'].includes(action)?await digitalPostcard(env.DB,invite):null;
  if(request.method==='GET'){
+  if(action==='print/digital'&&invite){const data=await digitalStatus(env,invite);return Response.json({...data,defaultSrc:base+'print/digital/default/',defaultFrames:Object.fromEntries(['starry-night','evergreen','winterlight'].map(frame=>[frame,base+'print/digital/default/'+frame+query])),artworkSrc:data.artworkSrc?base+'print/digital/image'+query:null});}
+  const digital=/^print\/digital\/(image|default\/(starry-night|evergreen|winterlight))$/.exec(action);
+  if(digital&&invite)return digitalImage(env,invite,digital[2]);
   if(action==='journal'){
    const data=await journal(invite?.id);data.adminPreview=true;data.giftWindow=window;data.shareSocials=!!invite?.share_socials;data.householdSize=invite?invitationMembers(invite).length:1;
    if(window.closed||!invite?.allow_mug||!edition?.allow_mug_orders){data.gift.enabled=false;data.gift.designs=[];}
    Object.assign(data.gift,{mode:'preview',orderingEnabled:false,livePricing:true,hasOrder:false,claim:null});
    data.keepsake=canPrint?{enabled:true,mode:data.photos.filter((p:any)=>p.personal).length>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults!.revision,defaultSrc:base+`default/${defaults!.revision}/`}: {enabled:false};
+   if(savedDigital)Object.assign(data.keepsake,{digitalOnly:true,digitalFrame:savedDigital.frame,digitalArtworkSrc:base+'print/digital/image'+query,mode:savedDigital.personalized&&data.photos.filter((p:any)=>p.personal).length>=3?'personal':'default',defaultRevision:savedDigital.default_revision,defaultSrc:base+'print/digital/default/'});
    if(canPrint)data.keepsake.defaultFrames=Object.fromEntries(Object.keys(defaults!.frames).map(frame=>[frame,base+`default/${defaults!.revision}/${frame}`+query]));
    return Response.json({...data,previewContext:query});
   }
@@ -42,7 +48,7 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
    let address=null;try{if(person?.mailing_address)address=mailingAddress(JSON.parse(person.mailing_address));}catch{}
    return Response.json({previewOnly:true,verified:!!address&&addressVerificationCurrent(person),address:address&&addressVerificationCurrent(person)?address:null,country:address?.country||'US',recipientName:person?.name||'friend',version:person?.version||1,mode:addressMode(request,env),autocompleteAvailable:false});
   }
-  if(action==='print/status')return Response.json({previewOnly:true,eligible:canPrint,canOrder:canPrint,remaining:1,order:null,mode:'preview',cardCount:1,format:'folded',preview:{note:foldedPreviewNote,authors:'Pixel',backText:foldedBackText(year)}});
+  if(action==='print/status')return Response.json({previewOnly:true,eligible:canPrint&&!savedDigital,canOrder:canPrint&&!savedDigital,digitalOnly:!!savedDigital,remaining:savedDigital?0:1,order:null,mode:'preview',cardCount:1,format:'folded',preview:{note:foldedPreviewNote,authors:'Pixel',backText:foldedBackText(year)}});
   const imageDefault=/^default\/([a-f0-9]+)\/([^/]+)$/.exec(action);
   if(imageDefault&&canPrint&&defaults!.revision===imageDefault[1]){
    const key=defaults!.frames[imageDefault[2]],file=key?await env.MEDIA.get(key):null;

@@ -1,3 +1,5 @@
+import {sessionImages} from './session-images.js';
+import {readResource} from './read-resource.js';
 import {loadViewerPhoto} from './photo-image.js';
 import {loadingPaw} from './loading.js';
 import {installLocalization} from './localization.js';
@@ -20,6 +22,7 @@ let viewerPhotos=[],viewerIndex=-1,viewerReturnFocus,keepsake,pixelGift,scrapboo
 let preparedFile, selected, journal, saveMode = 'share', generation = 0, fullImageUrl, originalRequest, downloadPending=false, imageObserver, layoutObserver, closeTimer;
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path, data) {
+  if(data===undefined){try{return await readResource('/api/'+path);}catch(error){if([401,403].includes(error.status))sessionImages.clear();throw error;}}
   const response = await fetch('/api/' + path, data === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const result = await response.json();
   if (!response.ok) {const error=new Error(result.error || 'Please try again.');error.code=result.code;throw error;}
@@ -57,6 +60,7 @@ function renderFooter(shareSocials=false){
 }
 function sharedHeading(title){return !title||['A little of our year','A little of our year.'].includes(title.trim())?'the group project.':title;}
 function showOffline(){
+  sessionImages.clear();
   clearBrand();const footer=document.querySelector('footer');footer.hidden=true;footer.replaceChildren();
   app.innerHTML='<section class="entry"><p class="kicker">A private edition</p><h1>This scrapbook has<br><em>been taken offline.</em></h1><p>It’s unavailable to guests right now. Please check back later.</p><button class="text-button" id="retry">Check again</button></section>';
   document.querySelector('#retry').onclick=start;
@@ -68,8 +72,8 @@ async function start() {
   try {
     // Invitation secrets travel in the fragment, never the request URL or Referer.
     const raw = location.hash.slice(1);
-    if (/^[a-f0-9]{64}$/.test(raw)) { history.replaceState(null, '', location.pathname); const opened=await api('open', {token:raw}); if(opened.redirectUrl){location.replace(opened.redirectUrl);return;} if(opened.offline){showOffline();return;} }
-    try { journal = await api('journal'); showJournal(); return; } catch(error) {if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}}
+    if (/^[a-f0-9]{64}$/.test(raw)) { sessionImages.clear();history.replaceState(null, '', location.pathname); const opened=await api('open', {token:raw}); if(opened.redirectUrl){location.replace(opened.redirectUrl);return;} if(opened.offline){showOffline();return;} }
+    try { journal = await api('journal'); showJournal(); return; } catch(error) {if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}if(error.status!==401)throw error;}
     const invite = await api('invitation');
     installLocalization(invite);
     applyBrand(invite.authors,invite.year);
@@ -96,6 +100,8 @@ function layoutPhotoGrid(grid){
   spans.forEach(([card,span])=>{if(card.style.gridRowEnd!==span)card.style.gridRowEnd=span;});
 }
 function showJournal() {
+  sessionImages.configure(journal.mediaCacheScope,[...journal.photos.flatMap(photo=>[photo.src,photo.viewerSrc]),...(journal.gift?.designs||[]).map(design=>design.src),...Object.values(journal.themeAssets||{})],journal.mediaCacheExpiresAt);
+
   installLocalization(journal);
   stopGiftDeadline?.();keepsake?.destroy();pixelGift?.destroy();scrapbookMotion?.destroy();
   renderFooter(journal.shareSocials===true);
@@ -117,15 +123,14 @@ function showJournal() {
     const next=[...pending].filter(image=>image.isConnected).sort((a,b)=>distance(a)-distance(b));
     while(active<4&&next.length){
       const image=next.shift();pending.delete(image);imageObserver?.unobserve(image);active++;
-      const finish=()=>{active--;image.onload=null;image.onerror=null;scheduleLayout(image.closest('.grid'));pumpImages();};
-      image.onload=async()=>{
-        try{await image.decode();}catch{}
-        if(image.isConnected){image.classList.remove('pending-dimensions');image.classList.add('is-ready');scrapbookMotion?.photoReady(image.closest('.card'));}
-        finish();
-      };
-      image.onerror=()=>{image.classList.add('is-ready');scrapbookMotion?.photoReady(image.closest('.card'));finish();};
+      const src=image.dataset.src;delete image.dataset.src;let done=false,timer;
+      const finish=()=>{if(done)return;done=true;clearTimeout(timer);active--;image.onload=null;image.onerror=null;scheduleLayout(image.closest('.grid'));pumpImages();};
       image.fetchPriority=distance(image)===0?'high':'low';
-      image.src=image.dataset.src;delete image.dataset.src;
+      sessionImages.url(src).then(url=>{
+        if(!image.isConnected){finish();return;}
+        const ready=()=>{image.dataset.loadedSrc=src;image.classList.remove('pending-dimensions');image.classList.add('is-ready');scrapbookMotion?.photoReady(image.closest('.card'));finish();};
+        image.onload=ready;image.onerror=()=>{image.classList.add('is-ready');finish();};timer=setTimeout(()=>{image.removeAttribute('src');finish();},10000);image.src=url;
+      }).catch(()=>{image.classList.add('is-ready');scrapbookMotion?.photoReady(image.closest('.card'));finish();});
     }
   };
   const images=app.querySelectorAll('img[data-src]');
@@ -150,6 +155,7 @@ function showJournal() {
   document.fonts?.ready.then(()=>{if(grids[0]?.isConnected)grids.forEach(layoutPhotoGrid);});
   app.querySelectorAll('[data-photo]').forEach(button => button.onclick=()=>openPhoto(journal.photos.find(p=>p.id===button.dataset.photo)));
   pixelGift=mountPixelGift(journal,app);
+  sessionImages.bind(app);
   stopGiftDeadline=app.querySelector('.pb-presents')?watchGiftDeadline(journal.giftWindow,()=>{keepsake?.destroy();pixelGift?.destroy();app.querySelector('.pb-presents')?.remove();},{refresh:()=>api('gift/deadline')}):null;
   window.scrollTo(0,0);
 }
@@ -173,7 +179,7 @@ function showPhoto(photo,direction=0){
   if(!loader){loader=document.createElement('div');loader.className='photo-loading';loader.setAttribute('role','status');frame.append(loader);}
   loader.hidden=false;loader.innerHTML=loadingPaw()+'<span>Loading photo…</span>';
   document.querySelector('#photo-caption').textContent=photo.caption;
-  loadViewerPhoto(photo,{isCurrent:()=>current===generation&&!preparedFile,
+  loadViewerPhoto(photo,{resolveSource:source=>sessionImages.url(source),isCurrent:()=>current===generation&&!preparedFile,
     reveal(src,width,height){frame.style.setProperty('--photo-ratio',String(width/height));image.src=src;image.style.visibility='visible';loader.hidden=true;frame.removeAttribute('aria-busy');},
     fail(){frame.removeAttribute('aria-busy');loader.textContent='Couldn’t load this photo. ';const retry=document.createElement('button');retry.type='button';retry.textContent='Try again';retry.onclick=()=>showPhoto(photo);loader.append(retry);}
   });
@@ -292,4 +298,6 @@ dialog.addEventListener('cancel',event=>{event.preventDefault();closePhoto();});
 dialog.addEventListener('animationend',event=>{if(event.target===dialog&&event.animationName==='photo-exit'&&dialog.classList.contains('is-closing'))dialog.close();});
 dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closePhoto();}});
 dialog.addEventListener('close',()=>{clearTimeout(closeTimer);dialog.classList.remove('is-closing');resetPhotoDrag();generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;selected=null;swipeStart=null;pointers.clear();viewerPhotos=[];viewerIndex=-1;dialog.querySelector('img').removeAttribute('src');if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}const restore=viewerReturnFocus;viewerReturnFocus=null;restore?.focus({preventScroll:true});});
+window.addEventListener('pagehide',()=>sessionImages.clear());
+window.addEventListener('pageshow',event=>{if(event.persisted)start();});
 start();

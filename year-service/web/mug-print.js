@@ -4,7 +4,7 @@ import {mugPrintLayout} from './mug-layout.js';
 // contains pixels, not embedded font files; no gallery originals are requested.
 export async function renderMugPrint(design,configuration,variant){
  const canvas=document.createElement('canvas');canvas.width=variant.renderWidth||1800;canvas.height=Math.round(canvas.width*variant.printHeight/variant.printWidth);
- const context=canvas.getContext('2d'),image=variant.sourceImage||new Image();if(!variant.sourceImage){image.src=design.src;await image.decode();}
+ const context=canvas.getContext('2d'),image=variant.sourceImage||new Image();if(!variant.sourceImage){image.src=design.printSrc||design.src;await image.decode();}
  const family=mugFonts.find(f=>f.id===configuration.font)?.family||'Asap, sans-serif';
  await document.fonts.load(`600 32px ${family}`);
  const layout=mugPrintLayout(canvas.width,canvas.height,variant),h=layout.panelSize,padding=layout.top+h*.08,caption=String(design.caption||'');

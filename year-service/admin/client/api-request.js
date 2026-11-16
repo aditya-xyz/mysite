@@ -1,6 +1,17 @@
 export class ApiError extends Error{
   constructor(message,status=0,retryable=false){super(message);this.status=status;this.retryable=retryable;}
 }
+// A brief retry for read-only page loads; never replay saves or uploads.
+export async function readApiRequest(path,signal,fetcher=fetch,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))){
+ for(let attempt=0;;attempt++){
+  if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
+  try{return await sendApiRequest(path,undefined,signal,fetcher);}
+  catch(error){
+   if(attempt||signal?.aborted||!error.retryable||![0,408,502,503,504].includes(error.status)||error.retryAfterMs>5000)throw error;
+   await wait(Math.max(300,error.retryAfterMs||0));
+  }
+ }
+}
 export async function sendApiRequest(path,data,signal,fetcher=fetch,asBlob=false){
   const multipart=data instanceof FormData,raw=data instanceof Blob;
   let response;
@@ -19,7 +30,7 @@ export async function sendApiRequest(path,data,signal,fetcher=fetch,asBlob=false
   let result;try{result=await response.json();}catch(error){if(error.name==='AbortError')throw error;/* Edge error pages may be HTML or empty. */}
   if(!response.ok){
     const retryable=response.status===408||response.status===429||response.status>=500;
-    const message=result?.error||(retryable?`The upload service is temporarily unavailable (HTTP ${response.status}). Keep this tab open and retry.`:`The request failed (HTTP ${response.status}). Keep this tab open and try again.`);
+    const message=result?.error||(retryable?`The service is temporarily unavailable (HTTP ${response.status}). Keep this tab open and retry.`:`The request failed (HTTP ${response.status}). Keep this tab open and try again.`);
     const error=new ApiError(message,response.status,retryable);
     const after=response.headers.get('Retry-After');
     if(after){const seconds=Number(after);error.retryAfterMs=Number.isFinite(seconds)?Math.max(0,seconds*1000):Math.max(0,Date.parse(after)-Date.now());}

@@ -1,3 +1,4 @@
+import {readResource} from './read-resource.js';
 import {esc,householdOrderNote} from './pixelbook.js';
 import {foldedCardMarkup,bindFoldedCard} from './folded-card.js';
 import {createDeliveryAddress} from './delivery-address.js';
@@ -6,7 +7,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
  function prepareDelivery(){if(!preparedDelivery){preparedDelivery=createDeliveryAddress(()=>deliveryChanged());void preparedDelivery.load();}return preparedDelivery;}
  async function refresh(){
   controller?.abort();const current=controller=new AbortController();
-  try{const response=await fetch('/api/print/status',{signal:current.signal});if(!response.ok)throw new Error();const data=await response.json();if(closed||controller!==current)return;status=data;onChange(status);prepare();}catch{if(!closed&&controller===current&&!current.signal.aborted){status=null;onChange(status);}}
+  try{const data=await readResource('/api/print/status',{signal:current.signal});if(closed||controller!==current)return;status=data;if(status.eligible||status.canOrder)prepareDelivery();onChange(status);prepare();}catch{if(!closed&&controller===current&&!current.signal.aborted){status=null;onChange(status);}}
  }
  function previewData(){const data=getData();return {...data,recipe:{...data.recipe,frontDesign:data.personalized?frontDesign:'default'}};}
  function prepare(){} // Local artwork is already prepared by the editor.
@@ -62,5 +63,5 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   };
   dialog.showModal();dialog.querySelector('#print-title').focus({preventScroll:true});
  }
- return {buttonMarkup,prepare,bind:container=>{const b=container.querySelector('[data-print]');if(b)b.onclick=open;},refresh:()=>{closed=false;prepareDelivery();return refresh();},close:()=>{closed=true;controller?.abort();deliveryChanged=()=>{};preparedDelivery?.destroy();preparedDelivery=null;if(dialog?.open)dialog.close();}};
+ return {buttonMarkup,prepare,bind:container=>{const b=container.querySelector('[data-print]');if(b)b.onclick=open;},refresh:()=>{closed=false;return refresh();},close:()=>{closed=true;controller?.abort();deliveryChanged=()=>{};preparedDelivery?.destroy();preparedDelivery=null;if(dialog?.open)dialog.close();}};
 }

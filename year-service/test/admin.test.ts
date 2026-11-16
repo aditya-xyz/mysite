@@ -42,6 +42,8 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
     await db.batch((await readFile('migrations/0016_mug_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0017_immediate_print_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0035_card_fallback.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0037_digital_postcards.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0038_paperless_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     const expires=Math.floor(Date.now()/1000)+86400;
     await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',?1,'Angela','+15555550101',?2)").bind(await digest("a".repeat(64)),expires).run();
@@ -325,6 +327,28 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
       assert.equal((await guestReq("journal")).status,401);
       assert.equal((await guestReq("journal",nextSession)).status,200,"Changing 2026 invitations must not end 2027 sessions");
       const events=await db.prepare("SELECT count(*) n FROM admin_events").first<{n:number}>();assert.ok(events!.n>=9);
+    });
+    await t.test('admins reset an overlapping household paperless preference with version protection and history',async()=>{
+      await db.prepare("INSERT INTO people(id,name) VALUES('paper-lead','Paper Lead'),('paper-partner','Paper Partner')").run();
+      await db.prepare("INSERT INTO invites(id,person_id,name,phone,token_hash,expires_at,member_ids,allow_print) VALUES('paper-original','paper-lead','Paper Household','+15555550901','paper-original',?1,'[\"paper-lead\",\"paper-partner\"]',1),('paper-replacement','paper-partner','Paper Partner','+15555550902','paper-replacement',?1,'[\"paper-partner\"]',1)").bind(expires).run();
+      const claim=()=>db.prepare("INSERT INTO digital_postcards(id,year,invitation_id,member_ids,personalized,frame,note,authors,frames_json,default_revision,artwork_key,recipe_json) VALUES('paper-choice',2026,'paper-original','[\"paper-lead\",\"paper-partner\"]',0,'evergreen','Full saved note','Pixel','{}','v1','paper.jpg','{}')").run();
+      await claim();await bucket.put('paper.jpg','saved artwork');
+      await db.prepare("INSERT INTO card_fallback_jobs(invitation_id,year,household_key,cutoff_at,run_at,state,reason) VALUES('paper-original',2026,'paper',1,2,'skipped','This household permanently chose a digital postcard.')").run();
+      let view:any=await(await req('/api/state')).json();assert.equal(view.people.find((p:any)=>p.id==='paper-replacement').paperlessId,'paper-choice');
+      const endpoint='/api/invitations/paper-replacement/paperless/reset';
+      assert.equal((await req(endpoint,{version:1,claimId:'paper-choice'},undefined,'')).status,401);
+      assert.equal((await req(endpoint,{version:2,claimId:'paper-choice'})).status,409);
+      assert.equal((await req(endpoint,{version:1,claimId:'stale-choice'})).status,409);
+      assert.equal((await req('/api/editions/2027/invitations/paper-replacement/paperless/reset',{version:1,claimId:'paper-choice'})).status,409);
+      assert.equal((await db.prepare('SELECT count(*) n FROM digital_postcards WHERE id=\'paper-choice\'').first<any>()).n,1);
+      const result=await req(endpoint,{version:1,claimId:'paper-choice'});assert.equal(result.status,200,await result.clone().text());
+      const saved=await db.prepare("SELECT * FROM digital_postcard_resets WHERE reset_invitation_id='paper-replacement'").first<any>();assert.equal(saved.reset_by,adminEmail);assert.equal(JSON.parse(saved.claim_json).note,'Full saved note');assert.equal(await(await bucket.get('paper.jpg'))!.text(),'saved artwork');
+      assert.equal((await db.prepare("SELECT count(*) n FROM card_fallback_jobs WHERE invitation_id='paper-original'").first<any>()).n,0);
+      view=await(await req('/api/state')).json();assert.equal(view.people.find((p:any)=>p.id==='paper-original').paperlessId,null);assert.equal(view.people.find((p:any)=>p.id==='paper-replacement').version,2);
+      assert.equal((await req(endpoint,{version:1,claimId:'paper-choice'})).status,409);
+      assert.equal((await db.prepare("SELECT count(*) n FROM admin_events WHERE action='reset-paperless-preference'").first<any>()).n,1);
+      await db.prepare("INSERT INTO print_orders(id,invitation_id,year,request_key,status,address_json,recipient_name,note,authors,recipe_json,artwork_key,published_version) VALUES('paper-mailed','paper-replacement',2026,'paper-mailed','preparing','{}','Paper','n','a','{}','x',1)").run();
+      await assert.rejects(claim,/mailed postcard is already reserved/);
     });
   }finally{await mf.dispose();}
 });

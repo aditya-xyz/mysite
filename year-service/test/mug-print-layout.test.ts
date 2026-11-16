@@ -44,3 +44,15 @@ test('larger Pixel and captions fit every mug print area, including black 11oz',
   const [,cx,cy,maxWidth,fontSize]=texts[0];assert.ok(cx-maxWidth/2>=0&&cx+maxWidth/2<=2400,key);assert.ok(fontSize>=height*.06,key);assert.ok(cy>y+h&&cy+fontSize*1.2<=height,key);
  }}finally{(globalThis as any).document=previousDocument;}
 });
+
+
+test('printing loads the full-resolution source instead of its display thumbnail',async()=>{
+ const previousDocument=(globalThis as any).document,previousImage=(globalThis as any).Image,loaded:string[]=[];
+ (globalThis as any).Image=class{src='';naturalWidth=2400;naturalHeight=2000;async decode(){loaded.push(this.src);}};
+ const context={drawImage(){},measureText(){return {width:20};},fillText(){}};
+ (globalThis as any).document={fonts:{async load(){}},createElement(){return {width:0,height:0,getContext(){return context;},toBlob(fn:any){fn(new Blob(['print'],{type:'image/png'}));}};}};
+ try{
+  await renderMugPrint({src:'/small-display.webp',printSrc:'/full-resolution.png',caption:'hello'},{font:'clean',style:'enamel'},{productId:407,printWidth:2400,printHeight:720,renderWidth:2400});
+  assert.deepEqual(loaded,['/full-resolution.png','/pixel-santa.png']);
+ }finally{(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
+});

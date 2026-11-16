@@ -1,3 +1,4 @@
+import {digitalDictionary} from './digital-copy.js';
 // Exact, reviewed strings only. No network translation and no HTML injection.
 export function translateText(value,dictionary={}){
  if(value.includes('\n'))return value.split('\n').map(line=>translateText(line,dictionary)).join('\n');
@@ -20,19 +21,19 @@ export function translateText(value,dictionary={}){
 let observer;
 export function installLocalization(context){
  observer?.disconnect();
- const locale=context?.language||'en',dictionary=context?.uiTranslations||{};
+ const locale=context?.language||'en',dictionary={...digitalDictionary(locale),...context?.uiTranslations};
  document.documentElement.lang=locale;
  if(locale==='en')return;
  const excluded='script,style,textarea,input,canvas,address,[translate="no"],.admin-preview-banner,.fc-note,.fc-back,.pb-design-caption,.pb-design-name,.pb-mug-preview,.card>span,.card>img,#photo-caption,.prose,.letter,.pb-letter-copy>p:not(.pb-eyebrow):not(.pb-letter-greeting):not(.signoff)';
  const visit=root=>{
   if(root.nodeType===3){if(root.parentElement&&!root.parentElement.closest(excluded)){const result=root.parentElement.matches('[data-card-view="back"]')&&dictionary['Back of card']?dictionary['Back of card']:translateText(root.nodeValue,dictionary);if(result!==root.nodeValue)root.nodeValue=result;}return;}
   if(root.nodeType!==1||root.closest(excluded))return;
-  for(const attr of ['aria-label','title','placeholder'])if(root.hasAttribute(attr)){
+  for(const attr of ['aria-label','title','placeholder','alt'])if(root.hasAttribute(attr)){
    const text=root.getAttribute(attr),result=translateText(text,dictionary);if(result!==text)root.setAttribute(attr,result);
   }
   for(const child of [...root.childNodes])visit(child);
  };
  visit(document.body);
  observer=new MutationObserver(records=>{for(const record of records){if(record.type==='childList')record.addedNodes.forEach(visit);else if(record.type==='characterData')visit(record.target);else visit(record.target);}});
- observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-label','title','placeholder']});
+ observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-label','title','placeholder','alt']});
 }

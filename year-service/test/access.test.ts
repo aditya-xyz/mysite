@@ -10,6 +10,7 @@ test("invitation, SMS verification, and private media boundaries", async t => {
   const mf = new Miniflare(convertV4MiniflareOptions({
     modules: true, scriptPath: ".wrangler/test-bundle/index.js", compatibilityDate: "2026-08-06",
     d1Databases: ["DB"], r2Buckets: ["MEDIA"],
+    serviceBindings:{ASSETS:async()=>new Response("public shell")},
     bindings: { SMS_ENABLED: "true", TWILIO_API_KEY_SID: "SK" + "a".repeat(32), TWILIO_API_KEY_SECRET: "test-only-secret", TWILIO_VERIFY_SERVICE_SID: "VA" + "b".repeat(32) },
     outboundService: async (request: { url: string; text(): Promise<string> }) => {
       assert.equal(new URL(request.url).hostname, "verify.twilio.com");
@@ -107,6 +108,14 @@ test("invitation, SMS verification, and private media boundaries", async t => {
       assert.equal((await req("media/other-photo")).status,404);
       assert.equal((await req("media/other-photo/original")).status,404);
       assert.equal((await req("media/shared/original")).status,404);
+    });
+    await t.test('only explicitly versioned public shell assets are browser cacheable',async()=>{
+      for(const file of ['app.bundle.js','app.styles.css','theme.js','fonts/asap-variable.woff2']){
+        assert.match((await mf.dispatchFetch('https://example.com/'+file+'?v=0123456789abcdef')).headers.get('Cache-Control')!,/public.*immutable/);
+        assert.equal((await mf.dispatchFetch('https://example.com/'+file)).headers.get('Cache-Control'),'no-store, private');
+      }
+      assert.equal((await mf.dispatchFetch('https://example.com/')).headers.get('Cache-Control'),'no-store, private');
+      assert.equal((await req('media/personal?v=0123456789abcdef')).headers.get('Cache-Control'),'no-store, private');
     });
     await t.test("original bytes are preserved; protected responses cannot be cached", async () => {
       const response=await req("media/personal/original");assert.equal(response.status,200);

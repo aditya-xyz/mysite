@@ -6,6 +6,7 @@ import {generateKeyPair,exportJWK,SignJWT} from 'jose';
 import {digest} from '../src/security.ts';
 import type {Draft} from '../src/edition.ts';
 import {curatedMugIds} from '../src/mug-catalog.ts';
+import {mugDisplayKey} from '../src/mug-images.ts';
 
 test('configured mugs follow draft publication, minimum count, access and deletion protections',async t=>{
  const issuer='https://mugs-test.cloudflareaccess.com';
@@ -116,6 +117,19 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.equal((await admin('invitations/mug-invite/mug-permission',{allowMug:false,version:before.version})).status,409,'Stale settings cannot revoke a newer permission');
    const journal:any=await (await guest('journal')).json();assert.equal(journal.gift.enabled,true);assert.equal(journal.gift.orderingEnabled,false);assert.equal(journal.gift.designs.length,4);assert.deepEqual(journal.photos.map((p:any)=>p.id),['gallery']);
    assert.equal((await guest('mugs/mug-0')).status,200);assert.equal((await guest('mugs/mug-0')).headers.get('Content-Type'),'image/png');assert.equal((await guest('mugs/mug-4')).status,404);assert.equal((await guest('mugs/mug-0/original')).status,404);assert.equal((await guest('media/mug-0')).status,404);
+  });
+  await t.test('display copies stay authenticated and separate from full-resolution print sources',async()=>{
+   const displayPath=`mugs/mug-0/display?version=${cutoutVersion}`;
+   assert.equal((await guest(displayPath,false)).status,401);
+   assert.equal((await guest('mugs/mug-4/display')).status,404);
+   assert.equal((await guest('mugs/mug-0/display?version='+ 'b'.repeat(32))).status,404);
+   assert.equal((await guest(displayPath)).headers.get('Content-Type'),'image/png','Older versions fall back safely until prepared');
+   const bytes=new TextEncoder().encode('synthetic display WebP');await bucket.put(mugDisplayKey(2026,'mug-0',cutoutVersion),bytes);
+   const display=await guest(displayPath);assert.equal(display.status,200);assert.equal(display.headers.get('Content-Type'),'image/webp');assert.deepEqual(new Uint8Array(await display.arrayBuffer()),bytes);
+   const full=await guest('mugs/mug-0');assert.equal(full.headers.get('Content-Type'),'image/png');assert.deepEqual(Buffer.from(await full.arrayBuffer()),rgbaPNG);
+   const journal:any=await (await guest('journal')).json();assert.match(journal.gift.designs[0].src,/\/display\?version=/);assert.doesNotMatch(journal.gift.designs[0].printSrc,/\/display/);
+   const preview:any=await (await admin('preview')).json();assert.match(preview.gift.designs[0].src,/\/display$/);assert.doesNotMatch(preview.gift.designs[0].printSrc,/\/display/);
+   const path=`media/mug-0/cutout/${cutoutVersion}/display`;assert.equal((await admin(path,undefined,'')).status,401);assert.equal((await admin(path)).headers.get('Content-Type'),'image/webp');
   });
   await t.test('simulated mug orders are household-scoped, atomic, preserve proofs until reset, and call no providers',async()=>{
    const sim=(path:string,data?:unknown,origin='https://sim.test',auth=true)=>mf.dispatchFetch('https://sim.test/api/'+path,{method:data===undefined?'GET':'POST',headers:{Origin:origin,...(auth?{Cookie:'__Host-year_session='+raw}:{}),'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});

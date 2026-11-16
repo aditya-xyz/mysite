@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error Browser transport is plain JavaScript.
-import {sendApiRequest,ApiError} from '../admin/client/api-request.js';
+import {sendApiRequest,readApiRequest,ApiError} from '../admin/client/api-request.js';
 // @ts-expect-error Browser upload helper is plain JavaScript.
 import {retryUploadRequest,uploadPhoto} from '../admin/client/photo-upload.js';
 test('HTML 503 responses are retryable server errors, not expired sign-ins',async()=>{
@@ -50,4 +50,15 @@ test('an 84-photo batch continues after a transient failure on the ninth photo',
   };
   for(let i=0;i<84;i++)await uploadPhoto(new File(['synthetic'],'synthetic.jpg',{type:'image/jpeg'}),{preview:new Blob(['grid']),viewer:new Blob(['viewer'])},send,()=>{},async(ms:number)=>{delays.push(ms);});
   assert.equal(started,84);assert.equal(completed.size,84);assert.equal(failed,true);assert.deepEqual(delays,[1000]);
+});
+
+
+test('Studio read loads retry a transient 503 once without replaying writes or auth failures',async()=>{
+ let calls=0;const delays:number[]=[];
+ const result=await readApiRequest('editions',undefined,async(_path:string,init:any)=>{assert.equal(init.method,undefined);return ++calls===1?new Response('temporary',{status:503}):Response.json({ready:true});},async(ms:number)=>{delays.push(ms);});
+ assert.deepEqual(result,{ready:true});assert.equal(calls,2);assert.deepEqual(delays,[300]);
+ for(const status of [401,403,429]){calls=0;await assert.rejects(()=>readApiRequest('state',undefined,async()=>{calls++;return new Response('',{status});},async()=>{}));assert.equal(calls,1);}
+ calls=0;await assert.rejects(()=>readApiRequest('state',undefined,async()=>{calls++;return new Response('',{status:503});},async()=>{}));assert.equal(calls,2);
+ const controller=new AbortController();calls=0;await assert.rejects(()=>readApiRequest('state',controller.signal,async()=>{calls++;return new Response('',{status:503});},async()=>{controller.abort();}),{name:'AbortError'});assert.equal(calls,1);
+ calls=0;await assert.rejects(()=>sendApiRequest('draft',{},undefined,async()=>{calls++;return new Response('',{status:503});}));assert.equal(calls,1,'A write is never replayed');
 });

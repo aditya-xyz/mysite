@@ -4,6 +4,7 @@ import {invitationMembers,invitationName,invitationRecipientName,type Invitation
 import {printOrderLimitCents} from './handwrytten-fulfillment.ts';
 import {imageDimensions} from './image-dimensions.ts';
 import {digest,now} from './security.ts';
+import {digitalMailingAllowedSQL,type DigitalPostcard} from './digital-postcards.ts';
 
 type Candidate=InvitationAudience&{version:number;revoked_at:number|null;expires_at:number;mailing_address:string|null;person_name:string;person_version:number;print_order_count:number};
 interface Job {invitation_id:string;year:number;household_key:string;cutoff_at:number;run_at:number;state:string;reason:string;order_id:string|null;attempts:number}
@@ -14,12 +15,13 @@ const householdKey=(i:InvitationAudience)=>JSON.stringify(members(i).length?memb
 async function fallbackPlan(env:PrintEnv,year:number,at:number){
  const policy=await env.DB.prepare('SELECT * FROM card_fallback_policies WHERE year=?1').bind(year).first<CardFallbackPolicy>();
  if(!policy)return {policy:null,rows:[],edition:null,defaults:null};
- const [edition,defaults,invitations,jobs,orders]=await Promise.all([
+ const [edition,defaults,invitations,jobs,orders,digital]=await Promise.all([
   env.DB.prepare('SELECT published_json,published_version,is_active,allow_print_orders FROM editions WHERE year=?1').bind(year).first<any>(),
   env.DB.prepare('SELECT revision,frames_json FROM keepsake_defaults WHERE year=?1').bind(year).first<{revision:string;frames_json:string}>(),
   env.DB.prepare('SELECT i.*,p.mailing_address,p.name AS person_name,p.version AS person_version FROM invites i LEFT JOIN people p ON p.id=i.person_id WHERE i.edition_year=?1 ORDER BY i.id').bind(year).all<Candidate>(),
   env.DB.prepare('SELECT * FROM card_fallback_jobs WHERE year=?1').bind(year).all<Job>(),
-  env.DB.prepare("SELECT o.id,o.invitation_id,o.status,o.budget_review_required,f.state AS fulfillment_state,f.error AS fulfillment_error,o.handwrytten_quote_json FROM print_orders o LEFT JOIN print_fulfillment f ON f.order_id=o.id WHERE o.year=?1 AND o.status IN ('preparing','simulated','submitted','unknown')").bind(year).all<any>()
+  env.DB.prepare("SELECT o.id,o.invitation_id,o.status,o.budget_review_required,f.state AS fulfillment_state,f.error AS fulfillment_error,o.handwrytten_quote_json FROM print_orders o LEFT JOIN print_fulfillment f ON f.order_id=o.id WHERE o.year=?1 AND o.status IN ('preparing','simulated','submitted','unknown')").bind(year).all<any>(),
+  env.DB.prepare('SELECT * FROM digital_postcards WHERE year=?1').bind(year).all<DigitalPostcard>()
  ]);
  const published=edition?.published_json?JSON.parse(edition.published_json):null;
  const note=published?.defaultPrintNote?.trim()||published?.printNote?.trim()||'';
@@ -36,7 +38,8 @@ async function fallbackPlan(env:PrintEnv,year:number,at:number){
   if(existing){
    decision=job?.state==='failed'&&existing.id===job.order_id&&existing.status==='preparing'?'failed':existing.budget_review_required?'awaiting-approval':existing.status==='unknown'||['unknown','review'].includes(existing.fulfillment_state)?'needs-review':existing.status==='submitted'?'submitted':'ordered';
    reason=decision==='failed'?job!.reason:'A card order already exists for this household.';
-  }else if(job&&['saved','skipped','failed'].includes(job.state)){decision=job.state;reason=job.reason||'The cutoff decision has already been recorded.';}
+  }else if(digital.results.some(d=>d.invitation_id===invitation.id||overlap(audience,JSON.parse(d.member_ids)))){decision='skipped';reason='This household permanently chose a digital postcard.';}
+  else if(job&&['saved','skipped','failed'].includes(job.state)){decision=job.state;reason=job.reason||'The cutoff decision has already been recorded.';}
   else if(job&&job.household_key!==key)reason='Household membership changed after cutoff; admin review is required.';
   else if(invitation.revoked_at||invitation.expires_at<=at)reason='Invitation is inactive.';
   else if(!invitation.allow_print)reason='Card permission is off.';
@@ -107,7 +110,7 @@ export async function tickCardFallback(env:PrintEnv,at=now()){
     JOIN card_fallback_jobs j ON j.invitation_id=i.id AND j.year=e.year
     WHERE i.id=?10 AND i.version=?11 AND p.version=?12 AND e.published_version=?13
     AND i.revoked_at IS NULL AND i.expires_at>?14 AND i.allow_print=1 AND i.print_order_count=0 AND e.is_active=1 AND e.allow_print_orders=1
-    AND j.owner=?15 AND j.state='preparing' AND j.run_at<=?14
+    AND ${digitalMailingAllowedSQL} AND j.owner=?15 AND j.state='preparing' AND j.run_at<=?14
     AND EXISTS(SELECT 1 FROM keepsake_defaults d WHERE d.year=e.year AND d.revision=?8)
     AND NOT EXISTS(SELECT 1 FROM print_orders o JOIN invites other ON other.id=o.invitation_id WHERE o.year=e.year AND o.status IN ('preparing','simulated','submitted','unknown') AND
       (other.id=i.id OR other.person_id=i.person_id OR EXISTS(SELECT 1 FROM json_each(other.member_ids) a JOIN json_each(i.member_ids) b ON a.value=b.value)))

@@ -23,7 +23,7 @@ window.fetch=async(input,init)=>{
   if(!checked||!delivery)return json({error:'Check the address first.'},409);
   delivery={...delivery,verified:true,address:checked.address};checked=null;return json(delivery);
  }
- if(['journal','gift/deadline','gift/status','gift/catalog','print/status'].includes(action)&&(!init?.method||init.method==='GET'))return remote(action,init);
+ if((['journal','gift/deadline','gift/status','gift/catalog','print/status','print/digital'].includes(action)||/^print\/digital\/(image|default\/(starry-night|evergreen|winterlight))$/.test(action))&&(!init?.method||init.method==='GET'))return remote(action,init);
  return json({error:'Admin preview: orders, texts and contact changes are disabled.'},403);
 };
 const response=await remote('journal');

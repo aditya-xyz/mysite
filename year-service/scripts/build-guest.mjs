@@ -1,0 +1,15 @@
+import {build} from 'esbuild';
+import {readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const hash=bytes=>createHash('sha256').update(bytes).digest('hex').slice(0,16);
+await build({entryPoints:['web/app.js'],outfile:'web/app.bundle.js',bundle:true,platform:'browser',format:'esm',target:'es2022',minify:true,legalComments:'eof'});
+await build({entryPoints:['web/app.css'],outfile:'web/app.styles.css',bundle:true,minify:true,external:['/fonts/*'],legalComments:'eof'});
+let css=await readFile('web/app.styles.css','utf8');
+for(const font of ['asap-variable.woff2','caveat-400.ttf'])css=css.replaceAll('/fonts/'+font,'/fonts/'+font+'?v='+hash(await readFile('web/fonts/'+font)));
+await writeFile('web/app.styles.css',css);
+let html=await readFile('web/index.html','utf8');
+html=html.replace(/\s*<link rel="stylesheet" href="\/(?:style|keepsake|pixelbook|folded-card|loading)\.css"\s*\/>/g,'');
+if(!html.includes('/app.styles.css'))html=html.replace('</head>','  <link rel="stylesheet" href="/app.styles.css" />\n</head>');
+for(const file of ['app.bundle.js','app.styles.css','theme.js','fonts/asap-variable.woff2'])html=html.replace(new RegExp('/'+file.replaceAll('.','\\.')+'(?:\\?v=[a-f0-9]+)?','g'),'/'+file+'?v='+hash(await readFile('web/'+file)));
+await writeFile('web/index.html',html);
+console.log('Built one guest script and stylesheet, with content versions for public shell assets.');

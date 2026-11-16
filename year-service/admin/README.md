@@ -1352,3 +1352,14 @@ Guests receive only published translations matching the exact current English so
 ### Removing mugshots
 
 In Mugs, **Remove mugshot** removes an existing selection from the draft. **Undo removal** restores it before Save draft. Guests keep the published selection until publication; saved artwork and orders are not deleted. Fewer than four published selections hides the mug gift. New photos and transparent artwork are prepared separately; there is no new-photo upload control here. The preview preparation panel always describes the published collection.
+
+
+### Mug display sizes and transient reads
+
+Mugs and recipient previews now use separate lightweight, authenticated WebP display copies; printing and artwork preparation retain the original PNG. Existing versions without display copies fall back to their original artwork. Studio read-only API loads retry a transient network/408/502/503/504 failure once, honoring short Retry-After values. Saves and uploads are never replayed by this read retry, and sign-in failures are not retried. A service failure at startup reports that Studio could not load instead of implying the user must sign in again.
+
+Digital-only postcards use the same recipient cutoff and translation behavior. Recipient preview can show the full 9:16 personalized or 3:4 default JPG confirmation, but cannot confirm the permanent household mailing opt-out. Confirmed digital households are automatically excluded from the unclaimed-postcard batch and cannot reserve a mailed postcard. Default-only JPGs are frozen at confirmation; personalized recipients may keep making variants until cutoff. Migrations 0037 and 0038 are required for both Workers.
+
+Paperless confirmation uses a short fan-club message in English, Marathi and Traditional Chinese. At the invitation level, admins can reset the household preference. Migration 0038 preserves the full old choice and actor in `digital_postcard_resets`; saved artwork stays private. A reset removes only digital-related fallback skips, preserves orders, and leaves the cutoff and permissions in force. Stale invitation versions or preference IDs cannot reset a newer choice.
+
+Recipient previews use the same tab-memory display cache as the guest scrapbook. Its scope includes invitation, draft and publication revision, with a fifteen-minute preview expiry; it never persists private photos to browser storage. Paperless status reads “paperless fan club · unlimited downloads”, with matching Marathi and Traditional Chinese copy.

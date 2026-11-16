@@ -62,6 +62,8 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
     await db.batch((await readFile('migrations/0016_mug_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0017_immediate_print_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0035_card_fallback.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0037_digital_postcards.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0038_paperless_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     let oldPerson='',newPerson='',version=1,inviteId='',newRaw='';
     await t.test('migration links existing invitations without changing tokens, sessions, or manifests',async()=>{

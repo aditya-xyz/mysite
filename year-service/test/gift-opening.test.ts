@@ -6,7 +6,7 @@ import {mountPixelGift} from '../web/pixelbook-gift.js';
 function fixture(t: any,{hasOrder=true,orderingEnabled=true,claim=null as any,livePricing=false}={}){
  const previousDocument=(globalThis as any).document;
  const node=()=>({disabled:false,textContent:'',onclick:null as any,focus(){},setAttribute(){},addEventListener(){},after(){}});
- const launch=node(),heading=node(),status=node(),next=node(),history:string[]=[],images:any[]=[],displayedImages:any[]=[];
+ const description=node(),launch=node(),heading=node(),status=node(),next=node(),history:string[]=[],images:any[]=[],displayedImages:any[]=[];
  const listeners:Record<string,()=>void>={};
  const modal={open:false,isConnected:true,html:'',
   set innerHTML(value:string){this.html=value;history.push(value);status.textContent='';},get innerHTML(){return this.html;},
@@ -18,13 +18,13 @@ function fixture(t: any,{hasOrder=true,orderingEnabled=true,claim=null as any,li
  (globalThis as any).document={activeElement:launch,body:{append(){}},createElement(tag:string){if(tag==='dialog')return modal;if(tag==='img'){const image={...node(),src:'',decoded:false,async decode(){this.decoded=true;}};images.push(image);return image;}return node();}};
  const designs=Array.from({length:4},(_,i)=>({id:'mug-'+i,src:'/api/mugs/mug-'+i}));
  const gift=mountPixelGift({name:'Household',gift:{enabled:true,hasOrder,orderingEnabled,designs,claim,livePricing}},
-  {querySelector(selector:string){return selector==='[data-open-gift]'?launch:null;}});
+  {querySelector(selector:string){return selector==='[data-open-gift]'?launch:selector==='#pb-gift .pb-present-copy>p'?description:null;}});
  t.after(()=>{gift.destroy();(globalThis as any).document=previousDocument;});
- return {launch,modal,history,status,designs,next,images,displayedImages};
+ return {launch,modal,history,status,designs,next,images,displayedImages,description};
 }
 
 test('viewing an existing household gift never renders the selector, including on reopen',async t=>{
- const {launch,modal,history,designs,displayedImages}=fixture(t);
+ const {launch,modal,history,designs,displayedImages,description}=fixture(t);
  let resolve!:(value:Response)=>void;
  const fetch=mock.method(globalThis,'fetch',async(path:string)=>{assert.equal(path,'/api/gift/status');return new Promise<Response>(r=>resolve=r);});
  t.after(()=>fetch.mock.restore());
@@ -37,6 +37,7 @@ test('viewing an existing household gift never renders the selector, including o
   await opening;
   assert.match(modal.innerHTML,/Pixel perfect/);
   assert.match(displayedImages.at(-1).src,/mug-2/);
+  assert.equal(description.textContent,'your morning coffee is about to become more pawesome');
   modal.close();
  }
  assert.ok(history.every(html=>!html.includes('data-design=')));
@@ -118,4 +119,22 @@ test('a reset household gift becomes a fresh picker only after the server confir
  const fetch=mock.method(globalThis,'fetch',async()=>Response.json({claim:null}));t.after(()=>fetch.mock.restore());
  const opening=launch.onclick();assert.match(modal.innerHTML,/Pixel perfect/);
  await opening;assert.match(modal.innerHTML,/data-design=/);assert.equal(launch.textContent,'pick your mugshot');
+});
+
+test('browsing the gallery does not start background mug-preview downloads',async t=>{
+ t.mock.timers.enable({apis:['setTimeout','setInterval']});
+ const fetch=mock.method(globalThis,'fetch',async()=>{throw new Error('No mug network traffic before interaction');});
+ t.after(()=>fetch.mock.restore());
+ fixture(t,{hasOrder:false,livePricing:true});
+ t.mock.timers.tick(5000);await Promise.resolve();
+ assert.equal(fetch.mock.callCount(),0);
+});
+
+// @ts-expect-error Shared browser mug catalog.
+import {mugStyles,pixelMugOptions} from '../web/mug-options.js';
+test('the chooser and its catalog refresh do not download supplier mockups',async t=>{
+ t.mock.timers.enable({apis:['setTimeout','setInterval']});const calls:string[]=[];
+ const fetch=mock.method(globalThis,'fetch',async(path:any)=>{calls.push(String(path));return Response.json(String(path).endsWith('/status')?{claim:null,livePricing:true}:{styles:mugStyles,prepared:true,previews:[{id:'saved',designId:'mug-0',configuration:pixelMugOptions(),src:'/supplier.jpg'}]});});t.after(()=>fetch.mock.restore());
+ const {launch,modal}=fixture(t,{hasOrder:false,livePricing:true});await launch.onclick();assert.match(modal.innerHTML,/data-design=/);
+ t.mock.timers.tick(30000);await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(calls,['/api/gift/status','/api/gift/catalog']);
 });

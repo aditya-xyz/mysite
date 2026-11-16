@@ -21,7 +21,7 @@ export const visiblePhotos = (edition: Published, recipient: string, personId:st
 export function clientEdition(edition: Published, recipient: string, name: string, year: number, personId:string|string[]=recipient) {
   return { year, name, title: edition.title, authors: edition.authors, intro: edition.intro,
     note: edition.note, sharedTitle: edition.sharedTitle, stories: edition.stories, shareSocials:false,
-    gift:{enabled:publishedMugs(edition).length>=MIN_MUG_DESIGNS,orderingEnabled:false,designs:publishedMugs(edition).map((d,index)=>({id:d.id,name:`mugshot ${index+1}`,caption:d.caption,alt:d.alt,src:`/api/mugs/${d.id}${d.cutoutVersion?`?version=${d.cutoutVersion}`:''}`}))},
+    gift:{enabled:publishedMugs(edition).length>=MIN_MUG_DESIGNS,orderingEnabled:false,designs:publishedMugs(edition).map((d,index)=>({id:d.id,name:`mugshot ${index+1}`,caption:d.caption,alt:d.alt,src:`/api/mugs/${d.id}/display${d.cutoutVersion?`?version=${d.cutoutVersion}`:''}`,printSrc:`/api/mugs/${d.id}${d.cutoutVersion?`?version=${d.cutoutVersion}`:''}`}))},
     photos: visiblePhotos(edition, recipient, personId).map(p => ({ id: p.id, caption: p.caption, alt: p.alt,
       width:p.width,height:p.height,personal: p.recipients.length > 0, src: `/api/media/${p.id}`,viewerSrc:`/api/media/${p.id}/viewer`,
       canSave: p.recipients.length > 0 && !!p.original_key })) };

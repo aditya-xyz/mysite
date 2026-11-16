@@ -38,6 +38,8 @@ test('separate photo renditions and persistent original-download limits',async t
     await db.batch((await readFile('migrations/0016_mug_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0017_immediate_print_permissions.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.batch((await readFile('migrations/0035_card_fallback.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0037_digital_postcards.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.batch((await readFile('migrations/0038_paperless_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
     const expiry=Math.floor(Date.now()/1000)+86400;
     const contact=async(name:string,phone?:string)=>(await (await req('contacts',{name,phone})).json() as {person:{id:string}}).person.id;

@@ -1,3 +1,5 @@
+import {resetPaperless} from './paperless.ts';
+import {householdMembers} from '../../src/digital-postcards.ts';
 import {translationsRoute} from './translations.ts';
 import {translationPayload,localizeJournal} from '../../src/translations.ts';
 import {cardFallbackAdminRoute} from './card-fallback.ts';
@@ -100,17 +102,17 @@ async function snapshot(draft: Draft, env: Env, year: number): Promise<Published
   const media = await env.DB.prepare("SELECT * FROM media_objects WHERE year=?1 AND deleting=0").bind(year).all<Media>();
   const objects = new Map(media.results.map(m => [m.id,m]));
   const photos: PublishedPhoto[] = [];
-  for (const p of draft.photos.filter(p=>!p.hidden)) {
-    const m = objects.get(p.id); if (!m) return fail("An uploaded photo is missing. Save the draft again.");
-    photos.push({...p,...await previewDimensions(env.MEDIA,m.preview_key),preview_key:m.preview_key,viewer_key:m.viewer_key,original_key:m.original_key,filename:m.filename,mime:m.mime});
-  }
-  const mugDesigns:PublishedMugDesign[]=[];
-  for(const d of draft.mugDesigns||[]){
-    const media=objects.get(d.id);if(!media)return fail('A mug photo is missing. Save the draft again.');
-    if(!cutoutVersion(d.cutoutVersion))continue;
+  const visible=draft.photos.filter(p=>!p.hidden);
+  for(let offset=0;offset<visible.length;offset+=8)photos.push(...await Promise.all(visible.slice(offset,offset+8).map(async p=>{
+    const m=objects.get(p.id);if(!m)return fail("An uploaded photo is missing. Save the draft again.");
+    return {...p,...await previewDimensions(env.MEDIA,m.preview_key),preview_key:m.preview_key,viewer_key:m.viewer_key,original_key:m.original_key,filename:m.filename,mime:m.mime};
+  })));
+  const mugDesigns:PublishedMugDesign[]=(await Promise.all((draft.mugDesigns||[]).map(async d=>{
+    if(!objects.has(d.id))return fail('A mug photo is missing. Save the draft again.');
+    if(!cutoutVersion(d.cutoutVersion))return null;
     const key=cutoutKey(year,d.id,d.cutoutVersion);if(!await env.MEDIA.head(key))throw new Problem(409,'A mug cutout is missing. Regenerate it in Mugs.');
-    mugDesigns.push({...d,preview_key:key,mime:'image/png'});
-  }
+    return {...d,preview_key:key,mime:'image/png'};
+  }))).filter((d):d is NonNullable<typeof d>=>d!==null);
   return {...draft,photos,mugDesigns};
 }
 function detect(bytes: Uint8Array) {
@@ -136,11 +138,12 @@ async function previewJournal(env:Env,year:number,url:URL){
     if(invitationId && !invite)throw new Problem(404,"Invitation not found.");
     const data = invite ? clientEdition(published,invite.id,invitationName(invite),year,await invitationAudience(env.DB,invite)) : clientEdition(published,id,person?.name || "friend",year,person?.id);
     data.shareSocials=!!invite?.share_socials;
+    Object.assign(data,{mediaCacheScope:await digest(JSON.stringify(["preview",year,invite?.id||id,row.draft_version,row.publication_revision])),mediaCacheExpiresAt:now()+900});
     Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,year,`/api/editions/${year}/theme`)});
     if(invite&&(!invite.allow_mug||!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders)){data.gift.enabled=false;data.gift.designs=[];}
     data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`,viewerSrc:`/api/editions/${year}/media/${p.id}/viewer`}));
     localizeJournal(data,await translationPayload(env.DB,year,invite?.language,true));
-    data.gift.designs=data.gift.designs.map(d=>({...d,src:`/api/editions/${year}/media/${d.id}/cutout/${published.mugDesigns?.find(m=>m.id===d.id)?.cutoutVersion}`}));
+    data.gift.designs=data.gift.designs.map(d=>{const printSrc=`/api/editions/${year}/media/${d.id}/cutout/${published.mugDesigns?.find(m=>m.id===d.id)?.cutoutVersion}`;return {...d,src:printSrc+'/display',printSrc};});
     return data;
 }
 async function route(request: Request, env: Env, actor: string) {
@@ -236,8 +239,9 @@ async function route(request: Request, env: Env, actor: string) {
   if (path === "/api/state" && request.method === "GET") {
     const row = await edition(env,year);
     const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,language,share_socials,allow_mug,allow_print,print_address_key,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
+    const paperless=await env.DB.prepare('SELECT id,invitation_id,member_ids FROM digital_postcards WHERE year=?1').bind(year).all<{id:string;invitation_id:string;member_ids:string}>();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
-    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,allowMugOrders:!!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders,printMode:simulatedOrders(request,env)?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string)})),media:media.results});
+    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,allowMugOrders:!!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders,printMode:simulatedOrders(request,env)?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string),paperlessId:paperless.results.find(d=>d.invitation_id===p.id||JSON.parse(d.member_ids).some((member:string)=>householdMembers(p as unknown as InvitationAudience).includes(member)))?.id||null})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
     const data = await body(request), draft = await validDraft(data.draft,env,year);
@@ -382,6 +386,11 @@ async function route(request: Request, env: Env, actor: string) {
       .bind(name,phone,current.person_id).run();
     await audit(env,actor,changed?"change-phone":"edit-person",id).run();
     return json({saved:true,phoneChanged:changed});
+  }
+  const paperlessReset=/^\/api\/invitations\/([a-z0-9-]{1,100})\/paperless\/reset$/.exec(path);
+  if(paperlessReset&&request.method==='POST'){
+    const data=await body(request),result=await resetPaperless(env.DB,year,paperlessReset[1],data.version,data.claimId,actor);
+    await audit(env,actor,'reset-paperless-preference',paperlessReset[1]).run();return json(result);
   }
   const resetDownloads=/^\/api\/invitations\/([a-z0-9-]{1,100})\/downloads\/reset$/.exec(path);
   if(resetDownloads&&request.method==="POST"){

@@ -1,6 +1,8 @@
 import {translationPayload,localizeJournal} from './translations.ts';
 import {tickCardFallback} from './card-fallback.ts';
 import {giftWindow} from './gift-deadline.ts';
+import {mugImageResponse} from './mug-images.ts';
+import {digitalStatus,digitalImage,claimDigitalPostcard} from './digital-postcards.ts';
 import {tickPrintFulfillment} from './handwrytten-fulfillment.ts';
 import {reserveSmsSend,SmsBudgetError,type SmsBudgetEnv} from './sms-budget.ts';
 import {handwryttenPreviewStatus,handwryttenPreviewImage} from './handwrytten-previews.ts';
@@ -72,11 +74,12 @@ async function invitation(request: Request, env: Env) {
 async function authenticated(request: Request, env: Env) {
   const raw = cookie(request, SESSION);
   if (!validToken(raw)) throw new Failure(401, "Please verify your invitation to continue.");
-  const row = await env.DB.prepare(`SELECT i.* FROM invites i JOIN sessions s ON s.invite_id=i.id
+  const row = await env.DB.prepare(`SELECT i.*,s.expires_at AS session_expires_at,e.published_version AS media_publication_version,e.is_active AS scrapbook_active,e.taken_offline_at AS scrapbook_offline FROM invites i JOIN sessions s ON s.invite_id=i.id LEFT JOIN editions e ON e.year=i.edition_year
     WHERE s.token_hash=?1 AND s.expires_at>?2 AND i.expires_at>?2 AND i.revoked_at IS NULL`)
-    .bind(await digest(raw), now()).first<Invite>();
+    .bind(await digest(raw), now()).first<Invite&{session_expires_at:number;media_publication_version:number;scrapbook_active:number|null;scrapbook_offline:number|null}>();
   if (!row) throw new Failure(401, "Your session has ended. Please open your invitation again.");
-  await requireActive(env,row.edition_year);
+  if(row.scrapbook_offline)throw new Failure(409,"This scrapbook has been taken offline. Please check back later.",undefined,"SCRAPBOOK_OFFLINE");
+  if(!row.scrapbook_active)throw new Failure(409,"This scrapbook is no longer active. Please ask for a current invitation.");
   return row;
 }
 async function body(request: Request) {
@@ -238,6 +241,13 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
   if(path==='/api/print/previews'&&request.method==='POST'){await authenticated(request,env);throw new PrintProblem(410,'Postcard previews are now generated locally. Reopen your postcard.');}
   const pictureProof=/^\/api\/print\/previews\/([a-f0-9]{64})(?:\/(front|inside|back))?$/.exec(path);
   if(pictureProof&&request.method==='GET'){const invite=await authenticated(request,env);return pictureProof[2]?handwryttenPreviewImage(env,invite,pictureProof[1],pictureProof[2]):json(await handwryttenPreviewStatus(env,invite,pictureProof[1]));}
+  if(path==='/api/print/digital'){
+    const invite=await authenticated(request,env);
+    if(request.method==='GET')return json(await digitalStatus(env,invite));
+    if(request.method==='POST'){await limited(env,'digital-postcard:'+invite.id,20,600);return json(await claimDigitalPostcard(request,env,invite));}
+  }
+  const digital=/^\/api\/print\/digital\/(image|default\/(starry-night|evergreen|winterlight))$/.exec(path);
+  if(digital&&request.method==='GET')return digitalImage(env,await authenticated(request,env),digital[2]);
   if(path==='/api/print/status'&&request.method==='GET')return json(await printStatus(request,env,await authenticated(request,env)));
   if(path==='/api/print/orders'&&request.method==='POST'){const invite=await authenticated(request,env);await limited(env,'print-claim:'+invite.id,20,600);const result=await createPrintOrder(request,env,invite);if(env.PRINT_ORDER_MODE==='handwrytten_test'&&!result.reused)ctx.waitUntil(tickPrintFulfillment(env,result.order.id));return json(result);}
   const theme=/^\/api\/theme\/(welcome|gift|closing)$/.exec(path);
@@ -251,13 +261,11 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     const i = await authenticated(request, env);
     const edition = await publishedEdition(env.DB,i.edition_year);
     if (edition) {
-      const data=localizeJournal(clientEdition(edition,i.id,invitationName(i),i.edition_year,await invitationAudience(env.DB,i)),await translationPayload(env.DB,i.edition_year,i.language));
-      Object.assign(data,{householdSize:new Set(invitationMembers(i)).size});
-      data.shareSocials=!!i.share_socials;
-      Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,i.edition_year)});
-      Object.assign(data,{keepsake:await keepsakeManifest(env,i,data.photos.filter(p=>p.personal).length)});
-      Object.assign(data,{giftWindow:await giftWindow(env.DB,i)});
-      const giftStatus=await mugStatus(request,env,i);
+      const [audience,translation,themeAssets,window]=await Promise.all([invitationAudience(env.DB,i),translationPayload(env.DB,i.edition_year,i.language),themeAssetManifest(env.MEDIA,i.edition_year),giftWindow(env.DB,i)]);
+      const data=localizeJournal(clientEdition(edition,i.id,invitationName(i),i.edition_year,audience),translation);
+      Object.assign(data,{mediaCacheScope:await digest(JSON.stringify(["display",cookie(request,SESSION),i.id,i.version,i.media_publication_version,edition])),mediaCacheExpiresAt:Math.min(i.expires_at,i.session_expires_at),householdSize:new Set(invitationMembers(i)).size,shareSocials:!!i.share_socials,themeAssets,giftWindow:window});
+      const [keepsake,giftStatus]=await Promise.all([keepsakeManifest(env,i,data.photos.filter(p=>p.personal).length,window),mugStatus(request,env,i,window)]);
+      Object.assign(data,{keepsake});
       if(!giftStatus.eligible){data.gift.enabled=false;data.gift.designs=[];}
       const claim=giftStatus.claim;
       Object.assign(data.gift,{hasOrder:!!claim,claim:claim?{designId:claim.designId,status:claim.status,configuration:claim.configuration,design:claim.design}:null,orderingEnabled:giftStatus.eligible&&simulatedOrders(request,env),mode:giftStatus.mode,livePricing:printfulEnabled(env)});
@@ -273,13 +281,14 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     return json({ year:i.edition_year,householdSize:new Set(invitationMembers(i)).size,name: invitationName(i), verificationName:i.name,shareSocials:!!i.share_socials, photos: await Promise.all(photos.results.map(async p => ({ id: p.id, caption: p.caption, alt: p.alt,...await previewDimensions(env.MEDIA,p.preview_key),
       personal: p.invite_id !== null, src: `/api/media/${p.id}`,viewerSrc:`/api/media/${p.id}/viewer`, canSave: !!p.invite_id && !!p.original_key }))) });
   }
-  const mug=/^\/api\/mugs\/([a-z0-9-]+)$/.exec(path);
+  const mug=/^\/api\/mugs\/([a-z0-9-]+)(\/display)?$/.exec(path);
   if(mug&&request.method==='GET'){
     const invite=await authenticated(request,env),edition=await publishedEdition(env.DB,invite.edition_year);
     const design=edition&&await mugAllowed(env,invite)?publishedMugs(edition).find(d=>d.id===mug[1]):null;
     if(!design||(url.searchParams.has('version')&&url.searchParams.get('version')!==design.cutoutVersion))throw new Failure(404,'Mug photo not found.');
-    const file=await env.MEDIA.get(design.preview_key);if(!file)throw new Failure(404,'Mug photo not found.');
-    return new Response(file.body,{headers:{'Content-Type':design.mime==='image/png'?'image/png':'image/jpeg'}});
+    const image=await mugImageResponse(env.MEDIA,invite.edition_year,design,!!mug[2]);
+    if(!image)throw new Failure(404,'Mug photo not found.');
+    return image;
   }
   const media = /^\/api\/media\/([a-z0-9-]+)(\/(original|viewer))?$/.exec(path);
   if (media && request.method === "GET") {
@@ -318,11 +327,14 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
 
 export default {
   async fetch(request: Request, env: Env, ctx:ExecutionContext) {
+    const requestStarted=performance.now();
     let response: Response;
     try { response = await route(request, env, ctx); }
     catch (error) { response = error instanceof PrintProblem ? json({error:error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{})},error.status,error.retryAfter?{'Retry-After':String(error.retryAfter)}:undefined) : error instanceof Failure || error instanceof SmsBudgetError ? json({ error: error.message,...(error.code?{code:error.code}:{}),...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
     const headers = new Headers(response.headers);
-    headers.set("Cache-Control", "no-store, private");
+    headers.set("Server-Timing",`app;dur=${(performance.now()-requestStarted).toFixed(1)}`);
+    const assetUrl=new URL(request.url),versionedShell=/^\/(app\.bundle\.js|app\.styles\.css|theme\.js|fonts\/(asap-variable\.woff2|caveat-400\.ttf))$/.test(assetUrl.pathname)&&/^[a-f0-9]{16}$/.test(assetUrl.searchParams.get('v')||'')&&response.status===200;
+    headers.set("Cache-Control",versionedShell?"public, max-age=31536000, immutable":"no-store, private");
     headers.set("Referrer-Policy", "no-referrer");
     headers.set("X-Content-Type-Options", "nosniff");
     headers.set("X-Frame-Options", "DENY");

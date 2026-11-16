@@ -1,11 +1,12 @@
 import {curatedMugIds} from '../../src/mug-catalog.ts';
 import {UploadProblem} from './media-errors.ts';
 import {token} from '../../src/security.ts';
+import {mugImageResponse} from '../../src/mug-images.ts';
 interface Env {DB:D1Database;MEDIA:R2Bucket}
 export const cutoutVersion=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{32}$/.test(value);
 export const cutoutKey=(year:number,id:string,version:string)=>`${year}/${id}/mugs/${version}.png`;
 export async function mugCutoutRoute(request:Request,env:Env,actor:string,year:number,path:string){
- const match=/^\/api\/media\/([a-z0-9-]+)\/cutout(?:\/([a-f0-9]{32}))?$/.exec(path);if(!match)return null;
+ const match=/^\/api\/media\/([a-z0-9-]+)\/cutout(?:\/([a-f0-9]{32})(\/display)?)?$/.exec(path);if(!match)return null;
  const id=match[1],version=match[2];
  const media=await env.DB.prepare('SELECT id FROM media_objects WHERE id=?1 AND year=?2 AND deleting=0').bind(id,year).first();
  if(!media)throw new UploadProblem(404,'Photo not found.');
@@ -13,8 +14,9 @@ export async function mugCutoutRoute(request:Request,env:Env,actor:string,year:n
  const currentKey=`${year}/${id}/mugs/current.json`;
  if(request.method==='GET'){
   if(!version){const current=await env.MEDIA.get(currentKey);return Response.json(current?await current.json():{version:null});}
-  const file=await env.MEDIA.get(cutoutKey(year,id,version));if(!file)throw new UploadProblem(404,'Cutout not found.');
-  return new Response(file.body,{headers:{'Content-Type':'image/png'}});
+  const image=await mugImageResponse(env.MEDIA,year,{id,caption:'',alt:'',cutoutVersion:version,preview_key:cutoutKey(year,id,version),mime:'image/png'},!!match[3]);
+  if(!image)throw new UploadProblem(404,'Cutout not found.');
+  return image;
  }
  if(request.method!=='POST'||version)throw new UploadProblem(405,'Method not allowed.');
  // The owner's browser does the extraction. This endpoint never sends photos to an AI provider.

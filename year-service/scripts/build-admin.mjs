@@ -19,7 +19,7 @@ await copyFile('web/pixel-santa.png','admin/web/pixel-santa.png');
 await cp('web','admin/web/pixelbook-preview',{recursive:true});
 await build({entryPoints:['admin/client/recipient-preview.js'],outfile:'admin/web/pixelbook-preview/preview-entry.js',bundle:true,platform:'browser',format:'esm',target:'es2022',minify:true});
 let previewHTML=await readFile('web/index.html','utf8');
-previewHTML=previewHTML.replaceAll('src="/','src="/pixelbook-preview/').replaceAll('href="/','href="/pixelbook-preview/').replace('/pixelbook-preview/app.js','/pixelbook-preview/preview-entry.js');
+previewHTML=previewHTML.replaceAll('src="/','src="/pixelbook-preview/').replaceAll('href="/','href="/pixelbook-preview/').replace('/pixelbook-preview/app.bundle.js','/pixelbook-preview/preview-entry.js');
 previewHTML=previewHTML.replace('</head>','<link rel="stylesheet" href="/pixelbook-preview/admin-preview.css"></head>');
 await writeFile('admin/web/pixelbook-preview/index.html',previewHTML);
 await writeFile('admin/web/pixelbook-preview/admin-preview.css','.admin-preview-banner{position:sticky;top:0;z-index:15;display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:12px 24px;background:#2c5745;color:#fff;font:14px system-ui}.admin-preview-banner a{color:inherit;margin-left:auto}.admin-preview-banner span{font-size:12px}.admin-preview-banner+header{margin-top:12px}button:disabled{cursor:not-allowed}');
