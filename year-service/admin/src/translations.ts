@@ -23,8 +23,8 @@ export async function translationsRoute(request:Request,env:{DB:D1Database},path
   const submitted=data.entries as TranslationEntries;
   const patch=data.patch===true;
   if(patch)Object.assign(entries,drafts);
-  const checkedSources=patch?translationSources({...JSON.parse(edition!.draft_json),photos:(JSON.parse(edition!.draft_json) as Draft).photos.map(p=>({...p,hidden:false}))}).filter(s=>s.key.startsWith('photo:')&&s.key.endsWith(':caption')):sources;
-  if(patch&&Object.keys(submitted).some(key=>!checkedSources.some(s=>s.key===key)))problem(400,'Inline edits can only update photo zingers.');
+  const checkedSources=patch?translationSources({...JSON.parse(edition!.draft_json),photos:(JSON.parse(edition!.draft_json) as Draft).photos.map(p=>({...p,hidden:false}))}).filter(s=>['intro','note','sharedTitle'].includes(s.key)||s.key.startsWith('story:')||s.key.startsWith('photo:')&&s.key.endsWith(':caption')):sources;
+  if(patch&&Object.keys(submitted).some(key=>!checkedSources.some(s=>s.key===key)))problem(400,'Inline edits can only update story text and photo zingers.');
   for(const s of checkedSources){const e=submitted[s.key];if(!e)continue;
    if(e.source!==s.source||typeof e.value!=='string'||e.value.length>Math.max(2000,s.source.length*5))problem(400,'Check the translated text and its English source.');
    const placeholders=(value:string)=>[...value.matchAll(/\{[a-zA-Z]+\}/g)].map(m=>m[0]).sort().join(',');

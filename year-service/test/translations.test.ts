@@ -59,8 +59,20 @@ test('reviewed invitation languages preserve English, privacy and existing data'
   assert.deepEqual(saved.entries.note,fresh.entries.note);assert.deepEqual(saved.entries['photo:one:alt'],fresh.entries['photo:one:alt']);assert.deepEqual(saved.entries['ui:Continue'],fresh.entries['ui:Continue']);
   assert.equal(JSON.stringify((await translationPayload(db,2026,'mr')).translations),publishedBefore);
   await assert.rejects(()=>call('mr',{patch:true,version:fresh.version,sourceVersion:10,entries:{[key]:{source:'Good dog.',value:'Stale edit'}}}),/changed/);
-  await assert.rejects(()=>call('mr',{patch:true,version:saved.version,sourceVersion:10,entries:{note:{source:draft.note,value:'Not a zinger'}}}),/only update photo zingers/);
+  await assert.rejects(()=>call('mr',{patch:true,version:saved.version,sourceVersion:10,entries:{'ui:Continue':{source:'Continue',value:'Not inline content'}}}),/only update story text and photo zingers/);
   await assert.rejects(()=>call('mr',{patch:true,version:saved.version,sourceVersion:10,entries:{[key]:{source:'Wrong English',value:'Wrong source'}}}),/English source/);
+ });
+ await t.test('inline story drafts save both scripts without changing zingers, printed notes or approval',async()=>{
+  for(const [locale,value] of [['mr','आपल्या गोष्टी'],['zh-TW','我們的故事']]){
+   const fresh=await call(locale),before=await translationPayload(db,2026,locale);
+   const entries={note:{source:draft.note,value},intro:{source:draft.intro,value},sharedTitle:{source:draft.sharedTitle,value},'story:story-one:title':{source:'A trip',value},'story:story-one:body':{source:'We took a walk.',value}};
+   await call(locale,{patch:true,version:fresh.version,sourceVersion:10,entries});
+   const saved=await call(locale);for(const key of Object.keys(entries))assert.equal(saved.entries[key].value,value);
+   assert.deepEqual(saved.entries['photo:one:caption'],fresh.entries['photo:one:caption']);
+   assert.deepEqual((await translationPayload(db,2026,locale)).translations,before.translations);
+   assert.equal(JSON.parse((await db.prepare('SELECT draft_json FROM editions WHERE year=2026').first<any>()).draft_json).printNote,'English card note');
+   await assert.rejects(()=>call(locale,{patch:true,version:saved.version,sourceVersion:10,entries:{printNote:{source:'English card note',value}}}),/only update story text/);
+  }
  });
  await t.test('English edits invalidate only matching passages; drafts never implicitly republish',async()=>{
   const payload=await translationPayload(db,2026,'mr');const j=localizeJournal({note:'Changed English note',photos:[],stories:[]},payload);assert.equal(j.note,'Changed English note');

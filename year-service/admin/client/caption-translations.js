@@ -8,13 +8,14 @@ export function captionTranslationMarkup(state,photo){
   return `<label class="field"><span>${label}</span><textarea data-caption-language="${locale}" lang="${locale}" rows="2" maxlength="2500">${esc(e?.value||'')}</textarea><small class="hint" data-caption-status="${locale}">${esc(captionTranslationStatus(store,photo,locale))}</small></label>`;
  }).join('')+'<p class="hint">Save draft to keep these edits private. Approve translations from Review & publish when ready.</p>';
 }
-export function captionTranslationStatus(store,photo,locale){
- const key=`photo:${photo.id}:caption`,pending=store.pending[locale][key],data=store.locales[locale],e=pending||data.entries[key],published=data.publishedEntries[key];
- if(pending)return pending.source===photo.caption?'Unsaved translation draft':'English changed · Check this translation again';
+export function inlineTranslationStatus(store,key,source,locale){
+ const pending=store.pending[locale][key],data=store.locales[locale],e=pending||data.entries[key],published=data.publishedEntries[key];
+ if(pending)return pending.source===source?'Unsaved translation draft':'English changed · Check this translation again';
  if(!e?.value)return 'Needs translation';
- if(e.source!==photo.caption)return 'English changed · Needs review';
- return published?.source===photo.caption&&published.value===e.value?'Approved':'Draft · Needs review';
+ if(e.source!==source)return 'English changed · Needs review';
+ return published?.source===source&&published.value===e.value?'Approved':'Draft · Needs review';
 }
+export function captionTranslationStatus(store,photo,locale){return inlineTranslationStatus(store,`photo:${photo.id}:caption`,photo.caption,locale);}
 export async function loadCaptionTranslations(state,request){
  if(state.captionTranslations?.loaded)return;
  if(state.captionTranslations?.loading)return state.captionTranslations.loading;
@@ -24,6 +25,8 @@ export async function loadCaptionTranslations(state,request){
 }
 export async function saveCaptionTranslations(state,request){
  const store=state.captionTranslations;if(!store?.loaded)return;
+ const available=new Set(['intro','note','sharedTitle',...state.draft.stories.flatMap(s=>[`story:${s.id}:title`,`story:${s.id}:body`]),...state.draft.photos.map(p=>`photo:${p.id}:caption`)]);
+ for(const locale of Object.keys(store.pending))for(const key of Object.keys(store.pending[locale]))if(!available.has(key))delete store.pending[locale][key];
  for(const [locale] of captionLanguages){
   const pending=store.pending[locale],keys=Object.keys(pending);if(!keys.length)continue;
   const entries=structuredClone(pending),data=store.locales[locale];
