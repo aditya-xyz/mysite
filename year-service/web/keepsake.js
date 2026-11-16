@@ -19,7 +19,7 @@ export function mountKeepsake(journal,section){
   let frame=defaultKeepsakeFrame,ordered=journal.keepsake.order||null;
   const fixed=journal.keepsake.mode==='default',defaultSrc=()=>fixed&&ordered?ordered.artworkSrc:(journal.keepsake.defaultFrames?.[frame]||journal.keepsake.defaultSrc+frame);
   const entry=document.createElement('div');entry.className='pb-keepsake-content';section.classList.add('ks-entry');
-  entry.innerHTML=`<figure class="pb-keepsake-art pb-present-art"><img src="${esc(defaultSrc())}" width="1200" height="1500" loading="lazy" decoding="async" alt="A keepsake from our little pack to yours"></figure><div class="pb-present-copy"><h3 id="pb-keepsake-title">for your fridge.</h3><p>${fixed?'a little piece of our year, from our pack to yours.<br>pick a border. i handled the rest.':'three favorite photos, made for your fridge.<br>our pack’s pick inside. a little note, too.'}</p><button class="button" type="button">make a keepsake</button><p class="pb-gift-allowance">${fixed?'one complimentary keepsake':'one complimentary folded keepsake'} for ${esc(journal.name)}</p></div>`;
+  entry.innerHTML=`<figure class="pb-keepsake-art pb-present-art"><img src="${esc(defaultSrc())}" width="1200" height="1500" loading="lazy" decoding="async" alt="A postcard from our little pack to yours"></figure><div class="pb-present-copy"><h3 id="pb-keepsake-title">for your fridge.</h3><p>${fixed?'a little piece of our year, from our pack to yours.<br>pick a border. i handled the rest.':'three favorite photos, made for your fridge.'}</p><button class="button" type="button">make a postcard</button><p class="pb-gift-allowance">one complimentary postcard for ${esc(journal.name)}</p></div>`;
   section.append(entry);
   const launch=entry.querySelector('button'),modal=document.createElement('dialog');
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
@@ -29,9 +29,9 @@ export function mountKeepsake(journal,section){
   function updateEntry(){
     if(!fixed||!ordered)return;
     entry.querySelector('img').src=ordered.artworkSrc;
-    entry.querySelector('.pb-present-copy>p').textContent='Your keepsake order is saved. Here’s the one you chose.';
-    launch.textContent='View your keepsake';
-    entry.querySelector('.pb-gift-allowance').textContent=`Keepsake ordered for ${journal.name}`;
+    entry.querySelector('.pb-present-copy>p').textContent='Your postcard order is saved. Here’s the one you chose.';
+    launch.textContent='View your postcard';
+    entry.querySelector('.pb-gift-allowance').textContent=`Postcard ordered for ${journal.name}`;
   }
   function setOrdered(order){
     if(!fixed||!order?.artworkSrc)return;
@@ -74,7 +74,7 @@ export function mountKeepsake(journal,section){
     const signal=abort.signal;
     const promise=(async()=>{
       const response=await fetch(src,{signal});
-      if(!response.ok)throw new Error('Your keepsake could not load. Please try again.');
+      if(!response.ok)throw new Error('Your postcard could not load. Please try again.');
       const blob=await response.blob(),url=URL.createObjectURL(blob);urls.add(url);
       const image=new Image();image.src=url;
       try{await image.decode();}catch(error){URL.revokeObjectURL(url);urls.delete(url);throw error;}
@@ -106,11 +106,11 @@ export function mountKeepsake(journal,section){
   }
   function pickMarkup(){return `<p class="ks-description">Choose three from the photos picked for you.</p><div class="ks-picks">${photos.map(p=>{const n=chosen.indexOf(p.id);return `<button class="ks-pick" data-pick="${esc(p.id)}" aria-label="${esc(p.caption||p.alt)}" aria-pressed="${n>=0}"><img src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async"><span class="ks-badge" ${n<0?'hidden':''}>${n+1}</span></button>`;}).join('')}</div>`;}
   function frameMarkup(){return `<div class="ks-paper-tabs" role="group" aria-label="Frame style">${keepsakeFrames.map(({id:value,label})=>`<button class="ks-frame" data-frame="${value}" aria-pressed="${frame===value}"><span class="ks-swatch ${value}" aria-hidden="true"></span><span>${label}</span></button>`).join('')}</div>`;}
-  function editorMarkup(){if(fixed&&ordered?.format==='folded')return `<div class="ks-default-editor"><p class="ks-description">Ordered on: ${esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}))}</p>${foldedCardMarkup({frontSrc:ordered.artworkSrc,insideSrc:null,preview:ordered.preview,pictures:ordered.pictures,frontDesign:ordered.frontDesign})}</div>`;if(fixed)return `<div class="ks-default-editor"><p class="ks-description">${ordered?'Ordered on: '+esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})):'Pixel picked these for you. Choose your border.'}</p><div class="ks-preview-wrap"><img class="ks-default-image" data-default-image src="${esc(defaultSrc())}" alt="Pixel’s fixed keepsake: family photo above, dogs on the lower left and family on the lower right"></div></div>`;return `<div class="ks-editor-stage"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five keepsake: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Photo ${i+1}: drag vertically to reframe, drag onto another photo to swap" aria-describedby="ks-direct-help"></button>`).join('')}</div></div><p id="ks-direct-help" class="ks-crop-hint">Drag up or down to reframe. Drop onto another photo to swap.<br><span>Keyboard: Space to swap, arrows to choose, Space to confirm.</span></p><span class="ks-editor-announcement" role="status" aria-live="polite"></span></div>`;}
+  function editorMarkup(){if(fixed&&ordered?.format==='folded')return `<div class="ks-default-editor"><p class="ks-description">Ordered on: ${esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}))}</p>${foldedCardMarkup({frontSrc:ordered.artworkSrc,insideSrc:null,preview:ordered.preview,pictures:ordered.pictures,frontDesign:ordered.frontDesign})}</div>`;if(fixed)return `<div class="ks-default-editor"><p class="ks-description">${ordered?'Ordered on: '+esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})):'Pixel picked these for you. Choose your border.'}</p><div class="ks-preview-wrap"><img class="ks-default-image" data-default-image src="${esc(defaultSrc())}" alt="Pixel’s fixed postcard: family photo above, dogs on the lower left and family on the lower right"></div></div>`;return `<div class="ks-editor-stage"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five postcard: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Photo ${i+1}: drag vertically to reframe, drag onto another photo to swap" aria-describedby="ks-direct-help"></button>`).join('')}</div></div><p id="ks-direct-help" class="ks-crop-hint">Drag up or down to reframe. Drop onto another photo to swap.<br><span>Keyboard: Space to swap, arrows to choose, Space to confirm.</span></p><span class="ks-editor-announcement" role="status" aria-live="polite"></span></div>`;}
   function render(){
     editorCleanup?.();editorCleanup=null;cancelAnimationFrame(previewFrame);previewFrame=0;cardImages=[];
     revision++;file=null;busy=step==='edit';printFlow.prepare();
-    modal.innerHTML=`<div class="ks-shell"><div class="ks-top"><button class="ks-icon" data-back aria-label="${step==='pick'?'Close keepsake':'Back'}">${arrow}</button><h2 id="ks-title" tabindex="-1">${step==='pick'?'Make a little keepsake':'Your keepsake'}</h2><button class="ks-icon" data-close aria-label="Close keepsake">${cross}</button></div><div class="ks-body ${step==='pick'?'ks-select-body':'ks-edit-body'}">${step==='pick'?pickMarkup():editorMarkup()}<p class="ks-status" role="status" aria-live="polite"></p></div>${fixed&&ordered?'':`<div class="ks-bottom">${actions()}</div>`}</div>`;
+    modal.innerHTML=`<div class="ks-shell"><div class="ks-top"><button class="ks-icon" data-back aria-label="${step==='pick'?'Close postcard':'Back'}">${arrow}</button><h2 id="ks-title" tabindex="-1">${step==='pick'?'Make a little postcard':'Your postcard'}</h2><button class="ks-icon" data-close aria-label="Close postcard">${cross}</button></div><div class="ks-body ${step==='pick'?'ks-select-body':'ks-edit-body'}">${step==='pick'?pickMarkup():editorMarkup()}<p class="ks-status" role="status" aria-live="polite"></p></div>${fixed&&ordered?'':`<div class="ks-bottom">${actions()}</div>`}</div>`;
     modal.querySelector('[data-close]').onclick=close;
     modal.querySelector('[data-back]').onclick=()=>{if(step==='pick'||fixed)close();else{step='pick';render();modal.querySelector('h2').focus();}};
     modal.querySelectorAll('[data-pick]').forEach(button=>button.onclick=()=>{
@@ -185,15 +185,15 @@ export function mountKeepsake(journal,section){
       printCanvas.width=0;printCanvas.height=0;
       if(stamp!==revision||!modal.open)return;
       if(!blob)throw new Error('Your card couldn’t be prepared. Please try again.');
-      file=new File([blob],`a-little-keepsake-${journal.year||'our-year'}.jpg`,{type:'image/jpeg'});busy=false;updateExport();
+      file=new File([blob],`a-little-postcard-${journal.year||'our-year'}.jpg`,{type:'image/jpeg'});busy=false;updateExport();
     }catch(error){if(stamp!==revision||error.name==='AbortError')return;busy=false;updateExport();setStatus(error.message);const retry=document.createElement('button');retry.className='ks-text';retry.textContent='Try again';retry.onclick=paintCard;modal.querySelector('.ks-status').append(' ',retry);}
   }
   function exportFile(){
     const texture=frame==='santa'?'candy-cane':frame,timestamp=new Date().toISOString().replace(/[:.]/g,'-');
     return new File([file],`pixelbook-${journal.year||'our-year'}-${texture}-${timestamp}.jpg`,{type:'image/jpeg'});
   }
-  function download(){if(fixed||!file)return;const exported=exportFile(),url=URL.createObjectURL(exported);urls.add(url);const a=document.createElement('a');a.href=url;a.download=exported.name;document.body.append(a);a.click();a.remove();setStatus('Your keepsake is ready. Your browser chooses where it saves.');setTimeout(()=>{URL.revokeObjectURL(url);urls.delete(url);},60000);}
-  async function shareCard(){if(fixed||!file)return;const exported=exportFile();try{if(navigator.canShare?.({files:[exported]}))await navigator.share({files:[exported],title:'A little keepsake'});else{shareFallback=true;updateExport();setStatus('File sharing isn’t supported in this browser. You can save the image as a file instead.');}}catch(error){if(error.name!=='AbortError'){shareFallback=true;updateExport();setStatus('Sharing couldn’t open. You can save the image as a file instead.');}}}
+  function download(){if(fixed||!file)return;const exported=exportFile(),url=URL.createObjectURL(exported);urls.add(url);const a=document.createElement('a');a.href=url;a.download=exported.name;document.body.append(a);a.click();a.remove();setStatus('Your postcard is ready. Your browser chooses where it saves.');setTimeout(()=>{URL.revokeObjectURL(url);urls.delete(url);},60000);}
+  async function shareCard(){if(fixed||!file)return;const exported=exportFile();try{if(navigator.canShare?.({files:[exported]}))await navigator.share({files:[exported],title:'A little postcard'});else{shareFallback=true;updateExport();setStatus('File sharing isn’t supported in this browser. You can save the image as a file instead.');}}catch(error){if(error.name!=='AbortError'){shareFallback=true;updateExport();setStatus('Sharing couldn’t open. You can save the image as a file instead.');}}}
   launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();preloadFrames();shareFallback=false;step=fixed?'edit':'pick';render();modal.showModal();modal.querySelector('#ks-title').focus({preventScroll:true});if(!fixed||!ordered)printFlow.refresh();};
   return {destroy(){if(modal.open)modal.close();else cleanup();modal.remove();entry.remove();}};
 }

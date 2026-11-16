@@ -61,7 +61,7 @@ async function authorizedProof(env:PrintEnv,invite:InvitationAudience,id:string)
  const row=await env.DB.prepare('SELECT * FROM handwrytten_previews WHERE id=?1 AND invitation_id=?2 AND year=?3').bind(id,invite.id,invite.edition_year).first<Proof>();
  if(!row)throw new PrintProblem(404,'Picture preview not found.');
  const ordered=await env.DB.prepare("SELECT id FROM print_orders WHERE handwrytten_preview_id=?1 AND invitation_id=?2 AND year=?3 AND status IN ('preparing','simulated','submitted','unknown')").bind(id,invite.id,invite.edition_year).first();
- if(!ordered&&!await keepsakeAccess(env,invite))throw new PrintProblem(403,'Keepsakes are not enabled.');return row;
+ if(!ordered&&!await keepsakeAccess(env,invite))throw new PrintProblem(403,'Postcards are not enabled.');return row;
 }
 export async function handwryttenPreviewStatus(env:PrintEnv,invite:InvitationAudience,id:string){
  const row=await authorizedProof(env,invite,id);return row.status==='ready'?{status:'ready',pictures:handwryttenPictureView(id)}:{status:row.status,id};

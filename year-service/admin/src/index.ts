@@ -78,8 +78,8 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
   });
   const printNote=text(d.printNote??'','printed postcard note',350,false);
   if(printNote.split('\n').length>11)return fail('Use at most 10 line breaks in the postcard note.');
-  const defaultPrintNote=text(d.defaultPrintNote??'','default keepsake note',350,false);
-  if(defaultPrintNote.split('\n').length>11)return fail('Use at most 10 line breaks in the default keepsake note.');
+  const defaultPrintNote=text(d.defaultPrintNote??'','default postcard note',350,false);
+  if(defaultPrintNote.split('\n').length>11)return fail('Use at most 10 line breaks in the default postcard note.');
   const printSettings=await cleanPrintInvitations({...d,photos},env.DB,year);
   if(d.mugDesigns!==undefined&&(!Array.isArray(d.mugDesigns)||d.mugDesigns.length>MAX_MUG_DESIGNS))return fail(`Use at most ${MAX_MUG_DESIGNS} mug photos.`);
   const mugIds=new Set<string>();

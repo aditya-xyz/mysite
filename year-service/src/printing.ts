@@ -56,7 +56,7 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  else if(!edition.allow_print_orders)reason='Print orders are turned off for this scrapbook.';
  else if(!(photos.length>=3?published?.printNote:published?.defaultPrintNote?.trim()||published?.printNote)?.trim())reason='The folded card note is not published yet.';
  else if(!i.allow_print)reason='Printing is not enabled for this invitation.';
- else if(!defaults)reason='The default keepsake is being prepared.';
+ else if(!defaults)reason='The default postcard is being prepared.';
  else if(!addressVerificationCurrent(person)||!person?.mailing_address)reason='The mailing contact needs a verified mailing address.';
  else if(i.print_address_key!==person.address_verification_key)reason='The mailing address changed. Ask us to re-enable printing.';
  else if(mode==='disabled')reason='The print provider is not configured. No orders can be placed.';
@@ -71,27 +71,27 @@ export async function printStatus(request:Request,env:PrintEnv,invite:Invitation
 }
 export async function readPrintArtwork(request:Request,env:PrintEnv,c:Awaited<ReturnType<typeof printContext>>){
  const length=Number(request.headers.get('Content-Length'));
- if(!Number.isFinite(length)||length<=0||length>3*1024*1024)throw new PrintProblem(413,'Use a keepsake image under 3 MB.');
+ if(!Number.isFinite(length)||length<=0||length>3*1024*1024)throw new PrintProblem(413,'Use a postcard image under 3 MB.');
  const form=await request.formData(),artwork=form.get('artwork'),raw=form.get('recipe');
- if(!(artwork instanceof File)||artwork.type!=='image/jpeg'||typeof raw!=='string'||raw.length>5000)throw new PrintProblem(400,'Include the keepsake artwork and photo selection.');
+ if(!(artwork instanceof File)||artwork.type!=='image/jpeg'||typeof raw!=='string'||raw.length>5000)throw new PrintProblem(400,'Include the postcard artwork and photo selection.');
  let recipe:{photoIds:string[];crops:unknown;frame:string;requestKey:string;confirmationKey:string;addressVersion:number;mode?:string;defaultRevision?:string;format?:string;previewId?:string;frontDesign?:'personal'|'default'};
  try{recipe=JSON.parse(raw);}catch{throw new PrintProblem(400,'Check the print request.');}
- if(recipe?.format!=='folded')throw new PrintProblem(409,'Reopen your keepsake to preview the folded card.');
+ if(recipe?.format!=='folded')throw new PrintProblem(409,'Reopen your postcard to preview the folded card.');
  const personalized=c.photos.length>=3;
- if(!recipe||!Array.isArray(recipe.photoIds)||recipe.defaultRevision!==c.defaults!.revision)throw new PrintProblem(409,'The default keepsake changed. Reopen your keepsake.');
+ if(!recipe||!Array.isArray(recipe.photoIds)||recipe.defaultRevision!==c.defaults!.revision)throw new PrintProblem(409,'The default postcard changed. Reopen your postcard.');
  if(personalized){
   if(recipe.mode!=='personal'||recipe.photoIds.length!==3||new Set(recipe.photoIds).size!==3||recipe.photoIds.some(id=>!c.photos.some(p=>p.id===id)))throw new PrintProblem(403,'Choose three distinct authorized personal photos.');
- }else if(recipe.mode!=='default'||recipe.photoIds.length||Object.keys(recipe.crops||{}).length)throw new PrintProblem(403,'This keepsake has a fixed photo layout. Choose a border only.');
+ }else if(recipe.mode!=='default'||recipe.photoIds.length||Object.keys(recipe.crops||{}).length)throw new PrintProblem(403,'This postcard has a fixed photo layout. Choose a border only.');
  if(!['moss','classic','santa','starry-night','evergreen','winterlight'].includes(recipe.frame)||!recipe.crops||typeof recipe.crops!=='object')throw new PrintProblem(400,'Check the frame and crops.');
  const crops=recipe.crops as Record<string,{x:number;y:number;zoom:number}>;
  if(personalized&&recipe.photoIds.some(id=>{const p=crops[id];return !p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||!Number.isFinite(p.zoom)||p.x<0||p.x>1||p.y<0||p.y>1||p.zoom<1||p.zoom>2.5;}))throw new PrintProblem(400,'Check the photo crops.');
- if(recipe.frontDesign!==undefined&&!['personal','default'].includes(recipe.frontDesign))throw new PrintProblem(400,'Choose which keepsake goes on the front.');
+ if(recipe.frontDesign!==undefined&&!['personal','default'].includes(recipe.frontDesign))throw new PrintProblem(400,'Choose which postcard goes on the front.');
  recipe.frontDesign??=personalized?'personal':'default';
- if(!personalized&&recipe.frontDesign!=='default')throw new PrintProblem(403,'This keepsake only has the default design.');
- const defaultFile=await env.MEDIA.get(c.defaults!.frames[recipe.frame]);if(!defaultFile)throw new PrintProblem(409,'The default keepsake is unavailable.');
+ if(!personalized&&recipe.frontDesign!=='default')throw new PrintProblem(403,'This postcard only has the default design.');
+ const defaultFile=await env.MEDIA.get(c.defaults!.frames[recipe.frame]);if(!defaultFile)throw new PrintProblem(409,'The default postcard is unavailable.');
  const defaultBytes=new Uint8Array(await defaultFile.arrayBuffer());
  const bytes=personalized?new Uint8Array(await artwork.arrayBuffer()):defaultBytes,dimensions=imageDimensions(bytes);
- if(!dimensions||dimensions.width!==1200||dimensions.height!==1500)throw new PrintProblem(400,'Use the 1200 by 1500 keepsake image.');
+ if(!dimensions||dimensions.width!==1200||dimensions.height!==1500)throw new PrintProblem(400,'Use the 1200 by 1500 postcard image.');
  const frontBytes=recipe.frontDesign==='default'?defaultBytes:bytes,insideBytes=personalized?(recipe.frontDesign==='default'?bytes:defaultBytes):null;
  return {recipe,personalized,bytes,defaultBytes,frontBytes,insideBytes};
  }
@@ -152,6 +152,6 @@ export function printOrderView(order:PrintOrderProof){
 export async function printOrderArtwork(env:PrintEnv,invite:InvitationAudience,id:string,inside=false){
  const order=await env.DB.prepare("SELECT artwork_key,default_artwork_key FROM print_orders WHERE id=?1 AND invitation_id=?2 AND year=?3 AND status IN ('preparing','simulated','submitted','unknown')").bind(id,invite.id,invite.edition_year).first<{artwork_key:string;default_artwork_key:string|null}>();
  const file=order&&await env.MEDIA.get(inside?(order.default_artwork_key||order.artwork_key):order.artwork_key);
- if(!file)throw new PrintProblem(404,'Ordered keepsake not found.');
+ if(!file)throw new PrintProblem(404,'Ordered postcard not found.');
  return new Response(file.body,{headers:{'Content-Type':'image/jpeg','Cache-Control':'no-store, private'}});
 }

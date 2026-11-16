@@ -235,7 +235,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
   if(defaultKeepsake&&request.method==='GET')return keepsakeDefaultImage(env,await authenticated(request,env),defaultKeepsake[1],defaultKeepsake[2]);
   const printProof=/^\/api\/print\/orders\/(print-[a-z0-9-]+)\/(artwork|default-artwork)$/.exec(path);
   if(printProof&&request.method==='GET')return printOrderArtwork(env,await authenticated(request,env),printProof[1],printProof[2]==='default-artwork');
-  if(path==='/api/print/previews'&&request.method==='POST'){await authenticated(request,env);throw new PrintProblem(410,'Keepsake previews are now generated locally. Reopen your keepsake.');}
+  if(path==='/api/print/previews'&&request.method==='POST'){await authenticated(request,env);throw new PrintProblem(410,'Postcard previews are now generated locally. Reopen your postcard.');}
   const pictureProof=/^\/api\/print\/previews\/([a-f0-9]{64})(?:\/(front|inside|back))?$/.exec(path);
   if(pictureProof&&request.method==='GET'){const invite=await authenticated(request,env);return pictureProof[2]?handwryttenPreviewImage(env,invite,pictureProof[1],pictureProof[2]):json(await handwryttenPreviewStatus(env,invite,pictureProof[1]));}
   if(path==='/api/print/status'&&request.method==='GET')return json(await printStatus(request,env,await authenticated(request,env)));

@@ -18,8 +18,8 @@ export async function keepsakeManifest(env:PrintEnv,invite:InvitationAudience,pe
  return {enabled:true,mode:personalCount>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults.revision,defaultSrc:`/api/keepsake/default/${defaults.revision}/`};
 }
 export async function keepsakeDefaultImage(env:PrintEnv,invite:InvitationAudience,revision:string,frame:string){
- if(!await keepsakeAccess(env,invite))throw new PrintProblem(403,'Keepsakes are not enabled for this invitation and scrapbook.');
+ if(!await keepsakeAccess(env,invite))throw new PrintProblem(403,'Postcards are not enabled for this invitation and scrapbook.');
  const defaults=await keepsakeDefault(env,invite.edition_year),key=defaults?.revision===revision?defaults.frames[frame]:null;
- const file=key&&await env.MEDIA.get(key);if(!file)throw new PrintProblem(404,'Keepsake not found.');
+ const file=key&&await env.MEDIA.get(key);if(!file)throw new PrintProblem(404,'Postcard not found.');
  return new Response(file.body,{headers:{'Content-Type':'image/jpeg'}});
 }
