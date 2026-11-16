@@ -94,7 +94,7 @@ export function mountKeepsake(journal,section){
   function actions(){
     if(fixed&&ordered)return '';
     if(fixed&&digitalOnly)return `<div class="ks-export-actions">${exportActions()}</div>`;
-    if(!fixed&&digitalOnly&&step==='edit')return `<button class="ks-primary" data-preview ${file&&!busy?'':'disabled'}>Preview postcard ${arrow}</button>`;
+    if(!fixed&&digitalOnly&&step==='edit')return `<button class="ks-primary" data-preview ${file&&!busy?'':'disabled'}>preview postcard ${arrow}</button>`;
     if(step==='pick')return `<span class="ks-count" role="status">${chosen.length} of 3 selected</span><button class="ks-primary" data-continue ${chosen.length===3?'':'disabled'}>Continue ${arrow}</button>`;
     return frameMarkup()+`<div class="ks-export-actions">${exportActions()}</div>`;
   }

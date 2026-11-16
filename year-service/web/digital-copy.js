@@ -9,7 +9,7 @@ export const digitalUi=[
 ['Previous photos','आधीचे फोटो','上一頁照片'],
 ['Next photos','पुढचे फोटो','下一頁照片'],
 ['make a little postcard','एक छानसं पोस्टकार्ड तयार कर','做張小小的明信片'],
-['Preview postcard','पोस्टकार्डची झलक पाहा','預覽明信片'],
+['preview postcard','पोस्टकार्डची झलक पाहा','預覽明信片'],
 ['Your postcard is ready. Tap Share to save or send it.','तुमचं पोस्टकार्ड तयार आहे. जतन किंवा पाठवण्यासाठी शेअरवर टॅप करा.','明信片準備好了。點一下「分享」即可儲存或傳送。'],
 ['Your postcard is ready. Tap Share, then Save Image to add it to Photos.','तुमचं पोस्टकार्ड तयार आहे. शेअरवर टॅप करा, मग फोटोमध्ये ठेवण्यासाठी प्रतिमा जतन करा निवडा.','明信片準備好了。點一下「分享」，再選「儲存影像」，就能存進「照片」。'],
 ['Image sharing isn’t available in this browser.','या ब्राउझरमध्ये प्रतिमा शेअर करण्याची सुविधा उपलब्ध नाही.','這個瀏覽器目前無法分享圖片。'],
