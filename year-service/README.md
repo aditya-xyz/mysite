@@ -928,3 +928,27 @@ address as admin-confirmed, not Google-verified, and both gift flows accept that
 India-only status. Address edits still invalidate the prior permission binding.
 US and Netherlands verification are unchanged. Existing unverified records need
 an explicit admin save/check; this release does not rewrite stored contacts.
+
+## Winter keepsake frames and matched folded artwork
+
+The frame picker now offers **Starry Night** (default), **Evergreen**, then
+**Winterlight**. Versioned public assets in `web/frames` contain only frame art;
+original photos, captions and Pixel are composed separately. Evergreen has small
+pinecone clusters only at upper right and lower left. New IDs are recorded in
+recipes; legacy Moss/Classic/Candy cane IDs and frozen order artwork are retained.
+
+The default keepsake renderer is `scripts/render-keepsake-defaults.mjs`. Supply
+three approved local photo paths/crops in ignored `.private/keepsake-defaults/inputs.json`
+and set `PIXELBOOK_CANVAS_MODULE` to an installed `@napi-rs/canvas` module path.
+Its immutable revision hashes the inputs, frame assets, layout and approved copy.
+The provisioner uploads the three new variants and retains legacy R2 references;
+it does not change edition publication, gift permissions or existing orders.
+
+Handwrytten folded design v4 uses cover size 74 / inside logo size 100. Their
+percentages refer to different placement areas. A real Test Mode preview with
+identical Starry Night artwork measured 320×400px on the cover and 321×402px on the
+inside left, on 408×528px panel proofs. The local folded-card preview uses the same
+approximately 78.5% panel width. Back signature and note settings are unchanged.
+Existing ready vendor proofs are not overwritten. The calibration used only
+image upload, custom-design and picture-proof endpoints: no order, basket, payment
+or mailing request was made. Both Worker order modes remain test/simulation.

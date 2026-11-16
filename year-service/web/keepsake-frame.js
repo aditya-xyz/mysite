@@ -1,5 +1,6 @@
 import {CARD_WIDTH,CARD_HEIGHT} from './keepsake-layout.js';
-export function drawKeepsakeFrame(ctx,frame){
+export function drawKeepsakeFrame(ctx,frame,background){
+  if(background){ctx.drawImage(background,0,0,CARD_WIDTH,CARD_HEIGHT);return '#fff6e8';}
   const paper=frame==='moss'?'#e3e8d5':frame==='santa'?'#fffaf1':'#fff';
   ctx.fillStyle=paper;ctx.fillRect(0,0,CARD_WIDTH,CARD_HEIGHT);
   if(frame==='santa'){

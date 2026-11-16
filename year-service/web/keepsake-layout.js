@@ -1,5 +1,5 @@
 export const CARD_WIDTH=1200,CARD_HEIGHT=1500;
-export const cardSlots=[{x:48,y:48,width:1104,height:650},{x:48,y:714,width:544,height:480},{x:608,y:714,width:544,height:480}];
+export const cardSlots=[{x:108,y:120,width:984,height:570},{x:108,y:706,width:484,height:370},{x:608,y:706,width:484,height:370}];
 export function personalPhotos(photos){
   const seen=new Set();
   return photos.filter(p=>p.personal===true&&!seen.has(p.id)&&seen.add(p.id));

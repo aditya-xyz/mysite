@@ -1299,3 +1299,16 @@ navy15oz and the Handwrytten destination-aware quote was $5.89. Its unsent test
 draft was removed under the shared basket lock. No live order was submitted and
 no production contact was created. Catalog choices and budget approvals remain
 unchanged.
+
+New keepsake frame order is Starry Night (default), Evergreen, Winterlight.
+Evergreen uses the approved smaller diagonal pinecone clusters. New frame IDs
+identify new artwork; legacy saved recipes, snapshots and ready vendor proofs
+remain unchanged. Private default variants use an immutable artwork revision.
+
+Folded design v4 matches visible cover/inside artwork using calibrated provider
+settings 74/100 (approximately 320×400 versus 321×402px in real API proofs).
+Identical percentages would not produce identical physical image sizes. The
+ordinary review uses matching insets as well. Real Test Mode calibration created
+custom designs/proofs only; it never called order, basket or payment endpoints.
+The back signature, handwriting, order caps, manual budget approval, mug catalog
+and recipient/address behavior are unchanged.

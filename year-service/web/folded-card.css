@@ -46,3 +46,7 @@
 /* Match the vendor picture-page insets without fetching a vendor render. */
 .fc-spread .fc-art:not(.fc-vendor-inside){padding:0}
 .fc-spread .fc-art:not(.fc-vendor-inside) img{width:78%}
+
+/* New design proofs use the same ~78.5% panel width on front and inside left. */
+.fc-art:not(.fc-vendor-art):not(.fc-vendor-inside){padding:0}
+.fc-art:not(.fc-vendor-art):not(.fc-vendor-inside) img{width:78.5%;height:auto}

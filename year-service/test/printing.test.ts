@@ -55,7 +55,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('invite','contact',?1,'Test Recipient','+15555550100',?2,?3)").bind(await digest('a'.repeat(64)),expires,JSON.stringify(['contact','partner'])).run();
   await db.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?1,'invite',?2)").bind(await digest(session),expires).run();
   const defaultRevision='d'.repeat(32),defaultJPEG=new Uint8Array([255,216,255,192,0,11,8,5,220,4,176,1,1,17,0,255,217]);
-  await db.prepare('INSERT INTO keepsake_defaults(year,revision,frames_json) VALUES(2026,?1,?2)').bind(defaultRevision,JSON.stringify({moss:'default-moss.jpg',classic:'default-classic.jpg',santa:'default-santa.jpg'})).run();
+  await db.prepare('INSERT INTO keepsake_defaults(year,revision,frames_json) VALUES(2026,?1,?2)').bind(defaultRevision,JSON.stringify({moss:'default-moss.jpg',classic:'default-classic.jpg',santa:'default-santa.jpg','starry-night':'default-santa.jpg',evergreen:'default-moss.jpg',winterlight:'default-classic.jpg'})).run();
   for(const frame of ['moss','classic','santa'])await bucket.put('default-'+frame+'.jpg',new Uint8Array([...defaultJPEG,frame.length]));
   const address={line1:'123 Example Lane',line2:'Unit 2',city:'Portland',state:'OR',postalCode:'97201',country:'US'};
   const photos=[['one',['contact']],['two',['partner']],['three',['contact','partner']],['shared',[]]].map(([id,recipients])=>({id,recipients,caption:id,alt:id,preview_key:id+'.jpg',original_key:null,filename:id+'.jpg',mime:'image/jpeg',width:1200,height:1500}));
@@ -282,7 +282,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    const route='editions/2026/print-orders/'+receipt.id+'/prepare-proof';assert.equal((await admin(route,{})).status,409);
    assert.equal(vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')).length,vendorCalls.slice(0,before).filter(c=>c.path.endsWith('/uploadCustomLogo')).length);
    hwMode=1;const proof=await admin(route,{});assert.equal(proof.status,200,await proof.clone().text());
-   const card=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).at(-1)!.body;assert.equal(card.cover_size_percent,90);assert.equal(card.main_type,'text');assert.equal(card.main_text,'');assert.equal(card.main_logo_id,undefined);
+   const card=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).at(-1)!.body;assert.equal(card.cover_size_percent,74);assert.equal(card.main_type,'text');assert.equal(card.main_text,'');assert.equal(card.main_logo_id,undefined);
    const payload=JSON.parse((await db.prepare('SELECT handwrytten_order_json FROM print_orders').first<any>()).handwrytten_order_json);assert.equal(payload.addresses[0].message,greeted('The real default note 🐾'));assert.equal(payload.font_size,13);
    const manifest=(await (await proofGuest('journal')).json() as any).keepsake;assert.equal(manifest.order.pictures,undefined);assert.equal(manifest.order.preview.note,foldedPreviewNote);
   });
@@ -398,6 +398,14 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    const saved=await admin('contacts/contact/address',{version:person.version,address:{...address,line1:'987 Sample Way'},verify:false});assert.equal(saved.status,200);const r=await saved.json() as any;assert.equal(r.person.address_verified,0);
    const verified=await admin('contacts/contact/address',{version:r.person.version,address,verify:true});assert.equal(verified.status,200);const result=await verified.json() as any;assert.equal(result.simulated,true);assert.equal(result.person.address_verifier,'local_mock');assert.ok(result.person.address_verification_key);
    assert.equal((await status()).eligible,false,'Reverification cannot restore an old print permission automatically');
+  });
+  await t.test('all new frame IDs can be viewed and frozen on an order without changing historical recipes',async()=>{
+   for(const frame of ['starry-night','evergreen','winterlight']){
+    await reset();assert.equal((await guest(`keepsake/default/${defaultRevision}/${frame}`)).status,200);
+    const form=await order(),recipe=JSON.parse(form.get('recipe') as string);recipe.frame=frame;form.set('recipe',JSON.stringify(recipe));
+    const result=await guest('print/orders',form);assert.equal(result.status,200,await result.clone().text());
+    const saved=await db.prepare('SELECT recipe_json FROM print_orders').first<any>();assert.equal(JSON.parse(saved.recipe_json).frame,frame);
+   }
   });
   await t.test('admin-confirmed India address can save a test keepsake without Google',async()=>{
    await reset();const india={line1:'504 Building 1 Sample Phase 8',line2:'Sample Road 2',city:'Thane',state:'Maharashtra',postalCode:'400610',country:'IN'};

@@ -34,6 +34,8 @@ export async function prepareHandwryttenCard(env:HandwryttenEnv,artwork:File,nam
 }
 
 
+// Measured on the provider's 408px-wide folded-panel proofs: approximately 320×400px on both sides.
+export const handwryttenArtPlacement={cover:74,inside:100} as const;
 export const handwryttenPrintFont={font:'hwMadeline',font_size:13,auto_font_size:true} as const;
 // Only prepares an immutable design. No message, address, basket or payment is sent.
 export async function prepareHandwryttenFoldedCard(env:HandwryttenEnv,input:{front:File;inside?:File;back:File;backId?:number;cardId?:number;name:string;onBack:(id:number)=>Promise<void>;onCard:(id:number)=>Promise<void>}){
@@ -52,8 +54,8 @@ export async function prepareHandwryttenFoldedCard(env:HandwryttenEnv,input:{fro
   let backId=input.backId;if(!backId){backId=await upload(input.back,'logo');await input.onBack(backId);}
   const frontId=await upload(input.front,'cover'),insideId=input.inside?await upload(input.inside,'logo'):null;
   const card=await api(env,'/cards/createCustomCard',{
-   name:input.name.slice(0,100),dimension_id:4,cover_id:frontId,cover_size_percent:90,
-   ...(insideId?{main_type:'logo',main_logo_id:insideId,main_logo_size_percent:100}:{main_type:'text',main_text:'',main_font_id:1,main_font_size:12,main_font_color:'#244637',main_align:'center'}),
+   name:input.name.slice(0,100),dimension_id:4,cover_id:frontId,cover_size_percent:handwryttenArtPlacement.cover,
+   ...(insideId?{main_type:'logo',main_logo_id:insideId,main_logo_size_percent:handwryttenArtPlacement.inside}:{main_type:'text',main_text:'',main_font_id:1,main_font_size:12,main_font_color:'#244637',main_align:'center'}),
    header_type:'text',header_text:'',header_font_id:1,header_font_size:12,header_font_color:'#244637',header_align:'center',
    footer_type:'text',footer_text:'',footer_font_id:1,footer_font_size:12,footer_font_color:'#244637',footer_align:'center',
    back_type:'logo',back_logo_id:backId,back_size_percent:40,back_text:'',back_font_id:1,back_font_size:14,back_font_color:'#244637',back_align:'center',back_vertical_align:'bottom'

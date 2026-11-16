@@ -1,3 +1,4 @@
+import {keepsakeFrames,defaultKeepsakeFrame,frameBackground} from './keepsake-frames.js';
 import {foldedCardMarkup,bindFoldedCard} from './folded-card.js';
 import {bindKeepsakeEditor} from './keepsake-editor.js';
 import {drawKeepsakeFrame} from './keepsake-frame.js';
@@ -15,7 +16,7 @@ function fittedText(ctx,text,x,y,maxWidth,size,font){
 export function mountKeepsake(journal,section){
   const photos=personalPhotos(journal.photos);
   if(!section||!journal.keepsake?.enabled)return {destroy(){}};
-  let frame='santa',ordered=journal.keepsake.order||null;
+  let frame=defaultKeepsakeFrame,ordered=journal.keepsake.order||null;
   const fixed=journal.keepsake.mode==='default',defaultSrc=()=>fixed&&ordered?ordered.artworkSrc:(journal.keepsake.defaultFrames?.[frame]||journal.keepsake.defaultSrc+frame);
   const entry=document.createElement('div');entry.className='pb-keepsake-content';section.classList.add('ks-entry');
   entry.innerHTML=`<figure class="pb-keepsake-art pb-present-art"><img src="${esc(defaultSrc())}" width="1200" height="1500" loading="lazy" decoding="async" alt="A keepsake from our little pack to yours"></figure><div class="pb-present-copy"><h3 id="pb-keepsake-title">for your fridge.</h3><p>${fixed?'a little piece of our year, from our pack to yours.<br>pick a border. i handled the rest.':'three favorite photos, made for your fridge.<br>our pack’s pick inside. a little note, too.'}</p><button class="button" type="button">make a keepsake</button><p class="pb-gift-allowance">${fixed?'one complimentary keepsake':'one complimentary folded keepsake'} for ${esc(journal.name)}</p></div>`;
@@ -82,7 +83,7 @@ export function mountKeepsake(journal,section){
 
   }
   function pickMarkup(){return `<p class="ks-description">Choose three from the photos picked for you.</p><div class="ks-picks">${photos.map(p=>{const n=chosen.indexOf(p.id);return `<button class="ks-pick" data-pick="${esc(p.id)}" aria-label="${esc(p.caption||p.alt)}" aria-pressed="${n>=0}"><img src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async"><span class="ks-badge" ${n<0?'hidden':''}>${n+1}</span></button>`;}).join('')}</div>`;}
-  function frameMarkup(){return `<div class="ks-paper-tabs" role="group" aria-label="Frame style">${[['moss','Moss'],['classic','Classic'],['santa','Candy cane']].map(([value,label])=>`<button class="ks-frame" data-frame="${value}" aria-pressed="${frame===value}"><span class="ks-swatch ${value}" aria-hidden="true"></span><span>${label}</span></button>`).join('')}</div>`;}
+  function frameMarkup(){return `<div class="ks-paper-tabs" role="group" aria-label="Frame style">${keepsakeFrames.map(({id:value,label})=>`<button class="ks-frame" data-frame="${value}" aria-pressed="${frame===value}"><span class="ks-swatch ${value}" aria-hidden="true"></span><span>${label}</span></button>`).join('')}</div>`;}
   function editorMarkup(){if(fixed&&ordered?.format==='folded')return `<div class="ks-default-editor"><p class="ks-description">Ordered on: ${esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}))}</p>${foldedCardMarkup({frontSrc:ordered.artworkSrc,insideSrc:null,preview:ordered.preview,pictures:ordered.pictures,frontDesign:ordered.frontDesign})}</div>`;if(fixed)return `<div class="ks-default-editor"><p class="ks-description">${ordered?'Ordered on: '+esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})):'Pixel picked these for you. Choose your border.'}</p><div class="ks-preview-wrap"><img class="ks-default-image" data-default-image src="${esc(defaultSrc())}" alt="Pixel’s fixed keepsake: family photo above, dogs on the lower left and family on the lower right"></div></div>`;return `<div class="ks-editor-stage"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five keepsake: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Photo ${i+1}: drag vertically to reframe, drag onto another photo to swap" aria-describedby="ks-direct-help"></button>`).join('')}</div></div><p id="ks-direct-help" class="ks-crop-hint">Drag up or down to reframe. Drop onto another photo to swap.<br><span>Keyboard: Space to swap, arrows to choose, Space to confirm.</span></p><span class="ks-editor-announcement" role="status" aria-live="polite"></span></div>`;}
   function render(){
     editorCleanup?.();editorCleanup=null;cancelAnimationFrame(previewFrame);previewFrame=0;cardImages=[];
@@ -121,15 +122,15 @@ export function mountKeepsake(journal,section){
   }
   function updateExport(){printFlow.prepare();const bottom=modal.querySelector('.ks-export-actions');if(bottom&&step==='edit'){bottom.innerHTML=exportActions();bottom.querySelector('[data-save]')?.addEventListener('click',download);bottom.querySelector('[data-share]')?.addEventListener('click',shareCard);printFlow.bind(bottom);}}
   function drawCard(canvas,loaded){
-    const ctx=canvas.getContext('2d');canvas.dataset.paper=drawKeepsakeFrame(ctx,frame);
+    const ctx=canvas.getContext('2d');canvas.dataset.paper=drawKeepsakeFrame(ctx,frame,loaded[4]);
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
     currentPhotos().forEach((p,i)=>drawPhoto(ctx,loaded[i],cardSlots[i],crops.get(p.id)));
-    ctx.fillStyle=frame==='moss'?'#20392f':frame==='santa'?'#793b32':'#272727';ctx.textAlign='center';
-    fittedText(ctx,'a few of our favorite humans',530,1300,890,64,'700 $px Asap, sans-serif');
-    fittedText(ctx,`${(journal.authors||'Aditya & Angela').toLowerCase()} · ${journal.year||''}`,530,1363,890,30,'$px Asap, sans-serif');
-    ctx.font='24px Georgia, serif';ctx.fillText('♥',530,1420);
-    const pixel=loaded[3],height=176,width=height*pixel.width/pixel.height;
-    ctx.drawImage(pixel,1090-width/2,1248,width,height);
+    ctx.fillStyle='#793b32';ctx.textAlign='center';
+    fittedText(ctx,'a few of our favorite humans',500,1190,790,60,'700 $px Asap, sans-serif');
+    fittedText(ctx,`${(journal.authors||'Aditya & Angela').toLowerCase()} · ${journal.year||''}`,500,1255,790,30,'$px Asap, sans-serif');
+    ctx.font='24px Georgia, serif';ctx.fillText('♥',500,1310);
+    const pixel=loaded[3],height=160,width=height*pixel.width/pixel.height;
+    ctx.drawImage(pixel,1000-width/2,1170,width,height);
   }
   async function paintCard(keepPreview=false){
     const assemble=assembleNext;assembleNext=false;
@@ -145,9 +146,9 @@ export function mountKeepsake(journal,section){
     canvas.parentElement.querySelector('.ks-assembly')?.remove();
     if(!keepPreview)drawKeepsakeFrame(canvas.getContext('2d'),frame);
     try{
-      const selected=currentPhotos(),wanted=new Set([...selected.map(p=>p.viewerSrc||p.src),'/pixel-santa.png']);
+      const selected=currentPhotos(),wanted=new Set([...selected.map(p=>p.viewerSrc||p.src),'/pixel-santa.png',...keepsakeFrames.map(f=>f.src)]);
       images.forEach((promise,src)=>{if(!wanted.has(src)){images.delete(src);promise.then(image=>image.close?.()).catch(()=>{});}});
-      const loaded=await Promise.all([...selected.map(p=>loadImage(p.viewerSrc||p.src)),loadImage('/pixel-santa.png')]);
+      const loaded=await Promise.all([...selected.map(p=>loadImage(p.viewerSrc||p.src)),loadImage('/pixel-santa.png'),loadImage(frameBackground(frame))]);
       if(stamp!==revision||!modal.open)return;
       // Typography is optional: a missing or slow font must not block the photos/export.
       let fontTimer;
@@ -156,7 +157,7 @@ export function mountKeepsake(journal,section){
       if(stamp!==revision||!modal.open)return;
       cardImages=loaded;
       drawCard(canvas,loaded);
-      if(assemble)assembleKeepsake(canvas,cardSlots);
+      if(assemble)assembleKeepsake(canvas,cardSlots,loaded[4]);
       const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.94));
       if(stamp!==revision||!modal.open)return;
       if(!blob)throw new Error('Your card couldn’t be prepared. Please try again.');

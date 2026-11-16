@@ -227,7 +227,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
   }
   const mugProof=/^\/api\/gift\/orders\/(mug-[a-z0-9]+)\/(artwork|mockup)$/.exec(path);
   if(mugProof&&request.method==='GET')return mugOrderArtwork(env,await authenticated(request,env),mugProof[1],mugProof[2]==='mockup');
-  const defaultKeepsake=/^\/api\/keepsake\/default\/([a-f0-9]{32,64})\/(moss|classic|santa)$/.exec(path);
+  const defaultKeepsake=/^\/api\/keepsake\/default\/([a-f0-9]{32,64})\/(moss|classic|santa|starry-night|evergreen|winterlight)$/.exec(path);
   if(defaultKeepsake&&request.method==='GET')return keepsakeDefaultImage(env,await authenticated(request,env),defaultKeepsake[1],defaultKeepsake[2]);
   const printProof=/^\/api\/print\/orders\/(print-[a-z0-9]+)\/(artwork|default-artwork)$/.exec(path);
   if(printProof&&request.method==='GET')return printOrderArtwork(env,await authenticated(request,env),printProof[1],printProof[2]==='default-artwork');

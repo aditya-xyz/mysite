@@ -117,10 +117,11 @@ export function mountScrapbookMotion(root){
   return {photoReady,destroy(){destroyed=true;heroImage?.removeEventListener('load',heroLoaded);heroImage?.removeEventListener('error',heroFailed);hero?.classList.remove('pb-hero-awaiting');clearTimeout(timer);clearTimeout(swapTimer);observer?.disconnect();giftObserver?.disconnect();root.removeEventListener('focusin',giftFocused);gifts.forEach(gift=>gift.classList.remove('pb-gift-awaiting'));animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));stack?.removeEventListener('click',onClick);reduced.removeEventListener('change',preferenceChanged);document.removeEventListener('visibilitychange',schedule);window.removeEventListener('scroll',wag);}};
 }
 
-export function assembleKeepsake(canvas,slots){
+export function assembleKeepsake(canvas,slots,frameBackground){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches||!canvas.animate)return;
   const wrap=canvas.parentElement,overlay=document.createElement('div');
   overlay.className='ks-assembly';overlay.setAttribute('aria-hidden','true');
+  if(frameBackground){const base=document.createElement('canvas');base.width=canvas.width;base.height=canvas.height;base.getContext('2d').drawImage(frameBackground,0,0,canvas.width,canvas.height);Object.assign(base.style,{inset:'0',width:'100%',height:'100%'});overlay.append(base);}
   const footerTop=Math.max(...slots.map(s=>s.y+s.height));
   const regions=[...slots,{x:0,y:footerTop,width:canvas.width,height:canvas.height-footerTop}];
   const animations=regions.map((slot,i)=>{

@@ -79,7 +79,7 @@ export async function readPrintArtwork(request:Request,env:PrintEnv,c:Awaited<Re
  if(personalized){
   if(recipe.mode!=='personal'||recipe.photoIds.length!==3||new Set(recipe.photoIds).size!==3||recipe.photoIds.some(id=>!c.photos.some(p=>p.id===id)))throw new PrintProblem(403,'Choose three distinct authorized personal photos.');
  }else if(recipe.mode!=='default'||recipe.photoIds.length||Object.keys(recipe.crops||{}).length)throw new PrintProblem(403,'This keepsake has a fixed photo layout. Choose a border only.');
- if(!['moss','classic','santa'].includes(recipe.frame)||!recipe.crops||typeof recipe.crops!=='object')throw new PrintProblem(400,'Check the frame and crops.');
+ if(!['moss','classic','santa','starry-night','evergreen','winterlight'].includes(recipe.frame)||!recipe.crops||typeof recipe.crops!=='object')throw new PrintProblem(400,'Check the frame and crops.');
  const crops=recipe.crops as Record<string,{x:number;y:number;zoom:number}>;
  if(personalized&&recipe.photoIds.some(id=>{const p=crops[id];return !p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||!Number.isFinite(p.zoom)||p.x<0||p.x>1||p.y<0||p.y>1||p.zoom<1||p.zoom>2.5;}))throw new PrintProblem(400,'Check the photo crops.');
  if(recipe.frontDesign!==undefined&&!['personal','default'].includes(recipe.frontDesign))throw new PrintProblem(400,'Choose which keepsake goes on the front.');

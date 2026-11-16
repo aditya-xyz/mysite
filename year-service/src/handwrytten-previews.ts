@@ -4,7 +4,7 @@ import {prepareHandwryttenFoldedCard} from './handwrytten.ts';
 import {handwryttenBrandPNG,handwryttenBrandYear} from './handwrytten-brand.ts';
 import {digest,now} from './security.ts';
 import type {InvitationAudience} from './invitations.ts';
-export const handwryttenPreviewVersion='handwrytten-folded-v3-placement';
+export const handwryttenPreviewVersion='handwrytten-folded-v4-matched-art';
 interface Proof {id:string;invitation_id:string;year:number;status:string;card_id:number|null;front_key:string|null;inside_key:string|null;back_key:string|null;updated_at:number}
 export function handwryttenPictureView(id:string){return {provider:'handwrytten',id,frontSrc:`/api/print/previews/${id}/front`,insideSrc:`/api/print/previews/${id}/inside`,backSrc:`/api/print/previews/${id}/back`};}
 // Admin proofs always read immutable order artwork rather than current editor/defaults.
