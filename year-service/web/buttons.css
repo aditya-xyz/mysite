@@ -147,3 +147,9 @@
 :root #photo .photo-control:not(.close){background:rgb(10 15 13 / .28);border-color:#ffffff25;box-shadow:none;color:#fff;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 :root #photo .photo-control:not(.close):hover:not(:disabled),:root #photo .photo-control:not(.close):focus-visible{background:rgb(10 15 13 / .46);box-shadow:none;filter:none}
 @media(prefers-reduced-transparency:reduce){:root #photo .photo-control:not(.close){background:#202723;-webkit-backdrop-filter:none;backdrop-filter:none}}
+
+/* A neutral dark lens keeps the white close glyph visible on bright photos. */
+:root #photo .photo-control.close::before{background:rgb(8 13 11 / .62);border:1px solid #ffffff60;box-shadow:0 1px 5px #0005;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+:root #photo .photo-control.close{color:#fff}
+:root #photo .photo-control.close svg{filter:drop-shadow(0 1px 1px #000b)}
+:root #photo .photo-control.close:hover::before,:root #photo .photo-control.close:focus-visible::before{background:rgb(8 13 11 / .78)}

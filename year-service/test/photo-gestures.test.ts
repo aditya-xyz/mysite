@@ -11,7 +11,7 @@ function viewer(){
  const handlers=new Map<string,(event:any)=>void>(),steps:number[]=[],animations:unknown[]=[],drags:number[]=[];let closed=0;
  const photoStage={style:{transform:'',opacity:''},getAnimations:()=>[],animate:(frames:unknown)=>animations.push(frames),setPointerCapture:()=>{},addEventListener:(name:string,handler:(event:any)=>void)=>handlers.set(name,handler)};
  const viewport={scale:1,addEventListener:()=>{}};
- runInNewContext(wiring,{photoStage,photoSlide:{cancel:()=>{},drag:(dx:number)=>drags.push(dx),settle:()=>{}},dialog:{classList:{toggle:()=>{}}},window:{visualViewport:viewport},matchMedia:()=>({matches:false}),swipeStep,dismissDrag,adjacentIndex:(i:number,s:number,n:number)=>Math.max(0,Math.min(n-1,i+s)),viewerIndex:1,viewerPhotos:[1,2,3],movePhoto:(step:number)=>steps.push(step),closePhoto:()=>closed++});
+ runInNewContext(wiring,{photoStage,photoSlide:{begin:()=>{},cancel:()=>{},drag:(dx:number)=>drags.push(dx),settle:()=>{}},dialog:{style:{removeProperty(){},setProperty(){}},classList:{toggle:()=>{}}},window:{visualViewport:viewport},matchMedia:()=>({matches:false}),swipeStep,dismissDrag,adjacentIndex:(i:number,s:number,n:number)=>Math.max(0,Math.min(n-1,i+s)),viewerIndex:1,viewerPhotos:[1,2,3],movePhoto:(step:number)=>steps.push(step),closePhoto:()=>closed++});
  const pointer=(type:string,x:number,y:number,id=1,pointerType='touch')=>handlers.get(type)!({clientX:x,clientY:y,pointerId:id,pointerType,button:0,target:{closest:(selector:string)=>selector==='.photo-image'?{}:null}});
  return {pointer,photoStage,steps,animations,drags,viewport,closed:()=>closed};
 }

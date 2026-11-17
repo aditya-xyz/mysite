@@ -1,27 +1,32 @@
-// A clipped image layer keeps navigation controls still while decoded photos slide.
+// Three decoded display images travel together; no canvas capture on the swipe path.
 export function createPhotoSlide(frame,image){
- const viewport=document.createElement('div');viewport.className='photo-slide-viewport';image.replaceWith(viewport);viewport.append(image);
- let animation=[],overlay=null,offset=0;
- function release(){overlay?.remove();if(overlay){overlay.width=0;overlay.height=0;}overlay=null;}
- function cancel(keepOffset=false){animation.forEach(a=>a.cancel());animation=[];release();if(!keepOffset){offset=0;image.style.transform='';}}
- function drag(dx,atEdge=false){cancel();if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;const limit=frame.getBoundingClientRect().width*.85;offset=Math.max(-limit,Math.min(limit,dx))*(atEdge ? .25 : 1);image.style.transform=`translateX(${offset}px)`;}
- function settle(){const from=offset;cancel();if(from&&!matchMedia('(prefers-reduced-motion: reduce)').matches){animation=[image.animate([{transform:`translateX(${from}px)`},{transform:'translateX(0)'}],{duration:260,easing:'cubic-bezier(.2,.8,.25,1)'})];animation[0].finished.catch(()=>{});}}
- function reveal(src,width,height,direction=0){
-  const from=offset;cancel();
-  const reduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if(direction&&!reduced&&image.naturalWidth&&image.style.visibility!=='hidden'&&image.animate){
-   const r=image.getBoundingClientRect(),ratio=Math.min(2,globalThis.devicePixelRatio||1);
-   if(r.width&&r.height){
-    const snapshot=document.createElement('canvas');snapshot.width=Math.min(1200,Math.ceil(r.width*ratio));snapshot.height=Math.ceil(snapshot.width*r.height/r.width);
-    try{const context=snapshot.getContext('2d');if(context){context.drawImage(image,0,0,snapshot.width,snapshot.height);overlay=snapshot;}}catch{}
-   }
-  }
-  frame.style.setProperty('--photo-ratio',String(width/height));image.src=src;image.style.visibility='visible';
-  if(!overlay)return;
-  const outgoing=overlay;outgoing.className='photo-slide-outgoing';outgoing.setAttribute('aria-hidden','true');viewport.append(outgoing);
-  const options={duration:320,easing:'cubic-bezier(.22,.75,.25,1)'},sign=direction>0?1:-1;
-  animation=[image.animate([{transform:from?`translateX(calc(${sign*100}% + ${from}px))`:`translateX(${sign*100}%)`},{transform:'translateX(0)'}],options),outgoing.animate([{transform:`translateX(${from}px)`},{transform:`translateX(${-sign*100}%)`}],options)];
-  Promise.all(animation.map(a=>a.finished)).then(()=>{if(overlay===outgoing){animation=[];release();}}).catch(()=>{if(overlay===outgoing)release();});
+ const viewport=document.createElement('div'),rail=document.createElement('div');
+ viewport.className='photo-slide-viewport';rail.className='photo-slide-rail';image.replaceWith(viewport);viewport.append(rail);rail.append(image);
+ const sides=new Map(),prepared=new Set();
+ for(const direction of [-1,1]){const side=document.createElement('img');side.className='photo-slide-neighbor';side.alt='';side.draggable=false;side.setAttribute('aria-hidden','true');side.style.left=`${direction*100}%`;rail.append(side);sides.set(direction,side);}
+ let animation=null,offset=0,width=0,complete=null;
+ const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const position=value=>{offset=value;rail.style.transform=`translate3d(${value}px,0,0)`;};
+ function clearNeighbors(){prepared.clear();for(const side of sides.values())side.removeAttribute('src');}
+ function cancel(keepOffset=false){const done=complete;complete=null;animation?.cancel();animation=null;done?.();if(!keepOffset){position(0);width=0;}rail.style.willChange='';}
+ function begin(){cancel();width=frame.getBoundingClientRect().width;rail.style.willChange='transform';}
+ function drag(dx,atEdge=false){if(reduced())return;if(!width)begin();position(Math.max(-width*.95,Math.min(width*.95,dx))*(atEdge ? .25 : 1));}
+ function travel(to,done){
+  if(reduced()||!rail.animate||to===offset){position(to);done();rail.style.willChange='';return Promise.resolve();}
+  const from=offset;rail.style.willChange='transform';
+  const current=rail.animate([{transform:`translate3d(${from}px,0,0)`},{transform:`translate3d(${to}px,0,0)`}],{duration:Math.max(140,280*Math.min(1,Math.abs(to-from)/(width||1))),easing:'cubic-bezier(.2,.75,.25,1)',fill:'forwards'});
+  animation=current;complete=done;
+  return current.finished.then(()=>{if(animation===current){complete=null;animation=null;done();current.cancel();rail.style.willChange='';}},()=>{});
  }
- return {reveal,cancel,drag,settle};
+ function settle(){return travel(0,()=>{position(0);width=0;});}
+ function ready(direction){const side=sides.get(direction);return prepared.has(direction)&&side?.getAttribute('src')&&side.complete&&side.naturalWidth?{src:side.src,width:side.naturalWidth,height:side.naturalHeight}:null;}
+ function neighbor(direction,src,canNavigate=true){sides.get(direction).src=src;if(canNavigate)prepared.add(direction);else prepared.delete(direction);}
+ function reveal(src,naturalWidth,naturalHeight,direction=0){
+  const from=offset;cancel(true);position(from);width=frame.getBoundingClientRect().width;
+  const commit=()=>{image.src=src;image.style.visibility='visible';frame.style.setProperty('--photo-ratio',String(naturalWidth/naturalHeight));position(0);width=0;clearNeighbors();};
+  if(!direction||reduced()||!image.getAttribute('src')||image.style.visibility==='hidden'){commit();return Promise.resolve();}
+  neighbor(direction,src);
+  return travel(-Math.sign(direction)*width,commit);
+ }
+ return {reveal,cancel,begin,drag,settle,neighbor,ready,clearNeighbors};
 }

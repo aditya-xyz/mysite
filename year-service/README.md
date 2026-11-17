@@ -1110,6 +1110,8 @@ mailing data remain unchanged.
 
 ## Photo viewer navigation
 
-Photo navigation waits for the display image to decode, then slides the image layer in the navigation direction. Controls stay anchored, and temporary outgoing image snapshots are released after completion or cancellation. Reduced-motion navigation updates immediately. Display caching and full-resolution permissions are unchanged.
+Photo navigation waits for the display image to decode, then slides the image layer in the navigation direction. Controls stay anchored, using one transform on a three-image strip; no outgoing canvas snapshots are captured. Reduced-motion navigation updates immediately. Display caching and full-resolution permissions are unchanged.
 
-Photo swipes track the finger with edge resistance, spring back when canceled or too short, and continue from the release offset on navigation. The footer appears only after journal authentication succeeds. Viewer action buttons use translucent neutral backgrounds.
+Only the immediate previous and next authorized display renditions are prefetched and decoded through the existing session cache. Adjacent photos peek in during the drag. Mobile carousel geometry stays fixed across aspect ratios. Photo swipes track the finger with edge resistance, spring back when canceled or too short, and continue from the release offset on navigation. The footer appears only after journal authentication succeeds. Viewer action buttons use translucent neutral backgrounds.
+
+Dismissal drags shrink and move the photo while revealing the scrapbook. Releasing a completed dismissal (or closing) returns it to its currently visible gallery thumbnail; offscreen targets use a small fade instead. Reduced motion closes immediately. The close control uses a dark neutral frosted circle and white glyph for contrast on light images.

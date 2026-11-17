@@ -190,4 +190,21 @@ html:lang(mr) h1,html:lang(mr) h2,html:lang(mr) h3,html:lang(mr) p,html:lang(mr)
 
 /* Clip only image motion; arrows, pagination and close controls stay anchored. */
 #photo .photo-slide-viewport{position:absolute;inset:0;overflow:hidden;border-radius:3px;pointer-events:none}
-#photo .photo-slide-viewport>img,#photo .photo-slide-outgoing{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;object-fit:contain;pointer-events:none}
+#photo .photo-slide-rail,#photo .photo-slide-rail>img{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;object-fit:contain;pointer-events:none}
+
+#photo .photo-slide-rail{overflow:visible;transform:translate3d(0,0,0)}
+#photo .photo-slide-neighbor{border-radius:3px}
+/* Keep the mobile carousel geometry fixed while differently shaped photos travel. */
+@media(pointer:coarse),(max-width:600px){#photo .photo-image{width:calc(100vw - var(--photo-side-space));height:calc(100dvh - var(--photo-vertical-space));aspect-ratio:auto}}
+
+@media(pointer:coarse),(max-width:600px){#photo #photo-caption{min-height:3.2em}}
+
+/* Interactive Photos-style dismissal reveals the scrapbook underneath. */
+#photo::backdrop{animation:none;opacity:var(--photo-backdrop-progress,1);transition:opacity 200ms ease-out}
+#photo.is-photo-dragging::backdrop{transition:none}
+#photo.is-returning{animation:none;transform:none;overflow:visible;pointer-events:none}
+#photo.is-returning::backdrop{animation:photo-backdrop-out 300ms ease-out both;--photo-backdrop-opacity:var(--photo-backdrop-progress,1)}
+#photo.is-returning .photo-stage,#photo.is-returning #photo-caption,#photo.is-returning #save-status{visibility:hidden}
+#photo .photo-dismiss-proxy{position:fixed;display:block;max-width:none;max-height:none;margin:0;object-fit:contain;transform-origin:center;pointer-events:none;will-change:transform,opacity}
+
+@media(prefers-reduced-motion:reduce){#photo::backdrop{transition:none}}
