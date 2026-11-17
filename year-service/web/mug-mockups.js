@@ -1,6 +1,6 @@
 import {renderMugPrint} from './mug-print.js';
 export function createMugMockups(){
- const records=new Map(),timers=new Set(),controllers=new Set(),urls=new Set();let catalog=null,disposed=false;let prepared=null,view='handle-left';const preloadQueue=[];let preloadActive=0;
+ const records=new Map(),timers=new Set(),controllers=new Set(),urls=new Set();let catalog=null,disposed=false;let prepared=null,view='handle-left';const angleControls=new WeakMap();const preloadQueue=[];let preloadActive=0;
  const key=(design,options,angle='handle-left')=>JSON.stringify([design.id,design.caption,options.style,options.size,options.color,options.font,angle]);
  const selectedView=(design,options)=>prepared?.has(key(design,options,view))?view:'handle-left';
  const savedFor=(design,options)=>prepared?.get(key(design,options,selectedView(design,options)));
@@ -25,12 +25,30 @@ export function createMugMockups(){
     const image=document.createElement('img');image.className='pb-printful-mockup';image.src=record.imageUrl;image.alt=record.view==='handle-right'?'Printful preview of Santa Pixel and pixelbook ’26, handle on right':'Printful preview of your selected mugshot and caption, handle on left';
     const caption=document.createElement('figcaption');caption.textContent='Printful mockup · final placement may vary';
     if(prepared){
-     const controls=document.createElement('div');controls.className='pb-mockup-views';controls.role='group';controls.ariaLabel='Mug preview angle';
-     for(const [angle,label] of [['handle-left','Handle left'],['handle-right','Handle right']]){
-      const button=document.createElement('button');button.type='button';button.className='pb-mockup-view';button.textContent=label;button.ariaPressed=String(record.view===angle);button.disabled=!prepared.has(key(record.design,record.configuration,angle));
-      button.onclick=()=>{view=angle;update(element,record.design,record.configuration);element.querySelector(`[aria-pressed="true"]`)?.focus?.({preventScroll:true});};controls.append(button);
+     let cached=angleControls.get(element);
+     if(!cached){
+      const controls=document.createElement('div');controls.className='pb-mockup-views pb-segments';controls.role='group';controls.ariaLabel='Mug preview angle';
+      const buttons=[['handle-left','Handle left'],['handle-right','Handle right']].map(([angle,label])=>{const button=document.createElement('button');button.type='button';button.className='pb-mockup-view';button.textContent=label;controls.append(button);return {angle,button};});
+      cached={controls,buttons};angleControls.set(element,cached);
      }
-     element.replaceChildren(image,controls,caption);
+     for(const {angle,button} of cached.buttons){
+      button.ariaPressed=String(record.view===angle);button.disabled=!prepared.has(key(record.design,record.configuration,angle));
+      button.onclick=()=>{view=angle;update(element,record.design,record.configuration);button.focus?.({preventScroll:true});};
+     }
+     const previous=element.querySelector('img.pb-printful-mockup');
+     if(previous?.tagName==='IMG'&&cached.controls.isConnected){
+      const animate=!matchMedia('(prefers-reduced-motion: reduce)').matches;
+      let ghost;
+      if(animate){
+       element.querySelectorAll('.pb-mockup-crossfade').forEach(node=>node.remove());
+       const r=previous.getBoundingClientRect(),parent=element.getBoundingClientRect();
+       ghost=previous.cloneNode();ghost.className='pb-mockup-crossfade';ghost.alt='';ghost.setAttribute('aria-hidden','true');
+       const style=getComputedStyle(previous);
+       Object.assign(ghost.style,{left:(r.left-parent.left)+'px',top:(r.top-parent.top)+'px',width:r.width+'px',height:r.height+'px',objectFit:style.objectFit,objectPosition:style.objectPosition,clipPath:style.clipPath});
+      }
+      previous.replaceWith(image);
+      if(ghost){element.append(ghost);const options={duration:240,easing:'ease-in-out'};image.animate([{opacity:0},{opacity:1}],options);ghost.animate([{opacity:1},{opacity:0}],options).finished.then(()=>ghost.remove()).catch(()=>ghost.remove());}
+     }else element.replaceChildren(image,cached.controls,caption);
     }else element.replaceChildren(image,caption);
     element.dataset.mockupImage=record.imageUrl;
    }else{

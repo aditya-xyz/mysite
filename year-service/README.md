@@ -1081,3 +1081,9 @@ Guest actions share `web/buttons.css`: softly rounded rectangles, moss gradients
 and a static inset highlight, with quieter secondary actions and dark-theme support.
 Photo selection tiles retain their own styling. The guest bundle and Studio’s
 recipient preview use the same button treatment.
+
+One-choice border, card-view and mug-angle controls use a shared sliding highlight;
+photo grids remain independent choices. Mug angles crossfade already-decoded
+supplier previews while preserving the mounted controls. Reduced-motion users
+get immediate changes. Mobile actions are shorter, and the print action shows
+only “A Christmas gift” using its existing translations.

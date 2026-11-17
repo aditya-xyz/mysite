@@ -71,3 +71,36 @@ test('saved views default to handle-left and switch to handle-right without gene
   assert.deepEqual(calls,['/api/gift/previews/handle-left','/api/gift/previews/handle-right'],'Toggling views reuses decoded saved images and never generates a mockup');
  }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
 });
+
+test('angle changes retain their controls, crossfade decoded previews and respect reduced motion',async()=>{
+ const saved={document:(globalThis as any).document,Image:(globalThis as any).Image,matchMedia:(globalThis as any).matchMedia,getComputedStyle:(globalThis as any).getComputedStyle};
+ const animations:any[]=[];let reduced=false;
+ const node=(tag:string):any=>({tagName:tag.toUpperCase(),className:'',children:[] as any[],isConnected:true,style:{},dataset:{},
+  append(...items:any[]){for(const item of items){item.parent=this;this.children.push(item);}},
+  replaceChildren(...items:any[]){this.children=[];this.append(...items);},
+  querySelector(selector:string){return selector==='img.pb-printful-mockup'?this.children.find((n:any)=>n.tagName==='IMG'&&n.className==='pb-printful-mockup'):null;},
+  querySelectorAll(){return this.children.filter((n:any)=>n.className==='pb-mockup-crossfade');},
+  getBoundingClientRect(){return {left:0,top:0,width:200,height:200};},
+  cloneNode(){return {...node(tag),src:this.src};},setAttribute(){},focus(){},
+  replaceWith(next:any){const i=this.parent.children.indexOf(this);next.parent=this.parent;this.parent.children[i]=next;},
+  remove(){if(this.parent)this.parent.children=this.parent.children.filter((n:any)=>n!==this);},
+  animate(frames:any,options:any){animations.push({frames,options});return {finished:Promise.resolve()};}
+ });
+ (globalThis as any).document={createElement:node};
+ (globalThis as any).Image=class{src='';async decode(){}};
+ (globalThis as any).matchMedia=()=>({matches:reduced});
+ (globalThis as any).getComputedStyle=()=>({objectFit:'contain',objectPosition:'50% 50%',clipPath:'none'});
+ const fetch=mock.method(globalThis,'fetch',async()=>new Response(new Blob(['synthetic PNG'],{type:'image/png'})));
+ const client=createMugMockups(),figure=node('figure'),design={id:'photo',caption:'hello'},configuration={style:'classic',size:'11oz',color:'white',font:'clean'};
+ try{
+  client.configure({prepared:true,styles:[],previews:['handle-left','handle-right'].map(view=>({id:view,designId:design.id,caption:design.caption,configuration,view,src:'/api/gift/previews/'+view}))});
+  client.update(figure,design,configuration);await settle();
+  const controls=figure.children[1];controls.children[1].onclick();await settle();
+  assert.equal(figure.children[1],controls,'The highlight can slide because its control stays mounted');
+  assert.equal(controls.children[1].ariaPressed,'true');assert.equal(animations.length,2);
+  assert.ok(animations.every(a=>a.options.duration===240));
+  assert.equal(figure.querySelectorAll('.pb-mockup-crossfade').length,0,'The old overlay is released after fading');
+  reduced=true;controls.children[0].onclick();await settle();
+  assert.equal(controls.children[0].ariaPressed,'true');assert.equal(animations.length,2,'Reduced motion skips both fade animations');
+ }finally{client.destroy();fetch.mock.restore();Object.assign(globalThis,saved);}
+});

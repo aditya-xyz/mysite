@@ -10,7 +10,7 @@
 }
 :root[data-palette=night]{--pb-soft-shadow:inset 0 1px 0 #ffffff18,inset 0 -1px 0 #0002,0 1px 2px #0003}
 /* Root/body scope keeps the shared treatment above older screen-specific styles. */
-:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){
+:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){
  border:1px solid var(--pb-action-border);
  border-radius:8px;
  background:var(--pb-action-fill);
@@ -31,15 +31,56 @@
  color:var(--pb-action-ink);
  box-shadow:var(--pb-action-shadow);
 }
-:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control):hover:not(:disabled){filter:brightness(1.06);translate:none}
-:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control):active:not(:disabled){filter:brightness(.97);box-shadow:inset 0 1px 3px #142b1933}
+:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control):hover:not(:disabled){filter:brightness(1.06);translate:none}
+:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control):active:not(:disabled){filter:brightness(.97);box-shadow:inset 0 1px 3px #142b1933}
 :root .text-button{padding-inline:12px}
 @media(prefers-reduced-motion:reduce){
- :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){transition:none}
+ :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){transition:none}
 }
 /* Keep the three frame choices in one compact rectangular group on phones. */
 :root #keepsake .ks-paper-tabs{border-radius:10px}
 @media(max-width:600px){
  :root #keepsake .ks-paper-tabs{width:100%;max-width:100%;flex-wrap:nowrap}
  :root #keepsake .ks-paper-tabs .ks-frame{flex:1;min-width:0;justify-content:center;padding-inline:6px;gap:4px;font-size:11px}
+}
+
+/* A softer curve with continuous corners on browsers that support them. */
+:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){border-radius:12px;corner-shape:superellipse(1.25)}
+:root :is(body,#keepsake,#photo) .pb-segments{
+ --pb-segment-count:3;--pb-segment-index:0;
+ position:relative;isolation:isolate;display:flex;flex-wrap:nowrap;gap:0;padding:4px;
+ border:1px solid var(--line);border-radius:12px;corner-shape:superellipse(1.25);
+ background:color-mix(in srgb,var(--surface) 55%,var(--paper));
+}
+:root :is(body,#keepsake,#photo) .pb-segments:has(>button:nth-child(2)[aria-pressed=true]){--pb-segment-index:1}
+:root :is(body,#keepsake,#photo) .pb-segments:has(>button:nth-child(3)[aria-pressed=true]){--pb-segment-index:2}
+:root :is(body,#keepsake,#photo) .pb-segments::before{
+ content:'';position:absolute;z-index:-1;left:4px;top:4px;bottom:4px;
+ width:calc((100% - 8px)/var(--pb-segment-count));
+ transform:translateX(calc(var(--pb-segment-index)*100%));
+ border:1px solid var(--pb-action-border);border-radius:10px;corner-shape:superellipse(1.25);
+ background:var(--pb-action-fill);box-shadow:var(--pb-action-shadow);
+ transition:transform 260ms cubic-bezier(.22,.75,.25,1);
+}
+:root :is(body,#keepsake,#photo) .pb-segments>button[aria-pressed]{
+ position:relative;flex:1;min-width:0;margin:0;border:1px solid transparent;
+ background:transparent;box-shadow:none;color:var(--muted);padding-inline:12px;
+ transition:color 180ms ease;white-space:nowrap;
+}
+:root :is(body,#keepsake,#photo) .pb-segments>button[aria-pressed=true]{color:var(--pb-action-ink)}
+:root :is(body,#keepsake,#photo) .pb-mockup-views.pb-segments{--pb-segment-count:2;width:min(100%,240px);align-self:center;margin-inline:auto}
+.pb-mug-preview{position:relative}
+.pb-mockup-crossfade{position:absolute;display:block;pointer-events:none;margin:0;border:0}
+@media(max-width:700px){
+ :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary){min-height:44px;padding-block:9px}
+ :root :is(body,#keepsake,#photo) .ks-gift{min-height:44px;padding-block:9px;text-align:center;font-size:14px;gap:8px;white-space:nowrap}
+ :root #keepsake .ks-gift svg{width:20px;height:20px}
+ :root :is(body,#keepsake,#photo) .pb-segments>button[aria-pressed]{min-height:36px;padding-block:6px}
+ :root #keepsake .ks-paper-tabs .ks-frame{padding-inline:5px;gap:4px;font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){
+ :root :is(body,#keepsake,#photo) .pb-segments::before,:root :is(body,#keepsake,#photo) .pb-segments>button[aria-pressed]{transition:none}
+}
+@media(max-width:600px){
+ .ks-print-dialog .fc-preview{--fc-mobile-height:clamp(100px,calc(100dvh - 512px),222px)}
 }

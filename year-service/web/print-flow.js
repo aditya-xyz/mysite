@@ -11,7 +11,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
  }
  function previewData(){const data=getData();return {...data,recipe:{...data.recipe,frontDesign:data.personalized?frontDesign:'default'}};}
  function prepare(){} // Local artwork is already prepared by the editor.
- function buttonMarkup(){return (status?.eligible||status?.canOrder)?`<button class="ks-print ks-gift" aria-label="Order complimentary print" data-print ${getData().file?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18v4H3zm2 4v9h14v-9M12 8v13M12 8C5 8 4 2 8 3c3 0 4 5 4 5Zm0 0c7 0 8-6 4-5-3 0-4 5-4 5Z"/></svg><span>Print, on us<small>A Christmas gift</small></span></button>`:'';}
+ function buttonMarkup(){return (status?.eligible||status?.canOrder)?`<button class="ks-print ks-gift" aria-label="Order complimentary print" data-print ${getData().file?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18v4H3zm2 4v9h14v-9M12 8v13M12 8C5 8 4 2 8 3c3 0 4 5 4 5Zm0 0c7 0 8-6 4-5-3 0-4 5-4 5Z"/></svg><span>A Christmas gift</span></button>`:'';}
  async function open(){
   if(dialog||closed||!(status?.eligible||status?.canOrder))return;
   let data=previewData();if(!data.file)return;
