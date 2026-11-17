@@ -1,5 +1,5 @@
 import {digitalUi} from '../web/digital-copy.js';
-// Starter translation drafts. Admin review is required before publication.
+// Optional translation drafts; source-matched text publishes with the scrapbook.
 export const languages={en:'English',mr:'मराठी · Marathi','zh-TW':'繁體中文 · Traditional Chinese (Taiwan)'};
 const existingUiDrafts=[
 ["special delivery. from me.", "खास तुझ्यासाठी. माझ्याकडून.", "你的專屬郵件，寄件人是我。"],

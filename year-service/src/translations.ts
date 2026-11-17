@@ -11,7 +11,7 @@ export function translationSources(d:Draft):TranslationSource[]{
  for(const [source] of uiDrafts as string[][])add('ui:'+source,source,'Site controls & Pixel’s voice');
  for(const key of ['intro','note','sharedTitle'] as const)add(key,d[key],'Opening & story');
  for(const s of d.stories||[]){add(`story:${s.id}:title`,s.title,'Opening & story');add(`story:${s.id}:body`,s.body,'Opening & story');}
- for(const p of d.photos||[]){if(p.hidden)continue;add(`photo:${p.id}:caption`,p.caption,'Photo zingers');add(`photo:${p.id}:alt`,p.alt,'Photo descriptions');}
+ for(const p of d.photos||[]){if(p.hidden)continue;add(`photo:${p.id}:caption`,p.caption,'Photo zingers');}
  return entries;
 }
 export function starterTranslations(locale:Language):TranslationEntries{
@@ -19,11 +19,12 @@ export function starterTranslations(locale:Language):TranslationEntries{
  for(const [source,mr,zh] of uiDrafts as string[][])entries['ui:'+source]={source,value:locale==='mr'?mr:zh};
  return entries;
 }
+export const withoutAccessibilityTranslations=(entries:TranslationEntries):TranslationEntries=>Object.fromEntries(Object.entries(entries).filter(([key])=>!/^photo:.*:alt$/.test(key)));
 export async function translationPayload(db:D1Database,year:number,requested:unknown,preview=false){
  const locale=language(requested);
  if(locale==='en')return {language:locale,translations:{} as TranslationEntries};
  const row=await db.prepare('SELECT draft_json,published_json FROM edition_translations WHERE year=?1 AND language=?2').bind(year,locale).first<{draft_json:string;published_json:string|null}>();
- return {language:locale,translations:JSON.parse((preview?row?.draft_json:row?.published_json)||'{}') as TranslationEntries};
+ return {language:locale,translations:withoutAccessibilityTranslations(JSON.parse((preview?row?.draft_json:row?.published_json)||'{}'))};
 }
 export function translated(entries:TranslationEntries,key:string,source:string){const e=entries[key];return e?.source===source&&e.value?.trim()?e.value:source;}
 // Only recipient presentation is localized. Printing uses the original edition and its English note.
@@ -31,7 +32,7 @@ export function localizeJournal<T extends {intro?:string;note?:string;sharedTitl
  const entries=payload.translations;
  for(const key of ['intro','note','sharedTitle'] as const)if(journal[key])journal[key]=translated(entries,key,journal[key]!);
  journal.stories=journal.stories?.map(s=>({...s,title:translated(entries,`story:${s.id}:title`,s.title),body:translated(entries,`story:${s.id}:body`,s.body)}));
- journal.photos=journal.photos.map(p=>({...p,caption:translated(entries,`photo:${p.id}:caption`,p.caption),alt:translated(entries,`photo:${p.id}:alt`,p.alt)}));
+ journal.photos=journal.photos.map(p=>({...p,caption:translated(entries,`photo:${p.id}:caption`,p.caption)}));
  // Never send the full translation draft (including other recipients’ captions) to a guest.
  const ui:Record<string,string>=Object.create(null);
  for(const [source] of uiDrafts as string[][]){const e=entries['ui:'+source];if(e?.source===source&&e.value?.trim())ui[source]=e.value;}

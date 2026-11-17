@@ -1,6 +1,6 @@
 import {resetPaperless} from './paperless.ts';
 import {householdMembers} from '../../src/digital-postcards.ts';
-import {translationsRoute,photoTranslationPublication} from './translations.ts';
+import {translationsRoute,translationPublication} from './translations.ts';
 import {translationPayload,localizeJournal} from '../../src/translations.ts';
 import {cardFallbackAdminRoute} from './card-fallback.ts';
 import {orderBudgetApprovalRoute} from './order-budget-approval.ts';
@@ -272,7 +272,7 @@ async function route(request: Request, env: Env, actor: string) {
     const invitations=await env.DB.prepare("SELECT m.value AS person_id FROM invites i,json_each(i.member_ids) m WHERE i.edition_year=?1 AND i.revoked_at IS NULL AND i.expires_at>?2").bind(year,now()).all<{person_id:string}>();
     const active=new Set(invitations.results.map(i=>i.person_id));
     if(draft.photos.some(p=>!p.hidden && p.recipients.some(id=>!active.has(id))))return fail("Invite every selected photo recipient to this scrapbook before publishing.");
-    const [,publication] = await env.DB.batch([photoTranslationPublication(env.DB,year,published,row.draft_version,row.publication_revision,actor),env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch(),is_active=1,taken_offline_at=NULL,publication_revision=publication_revision+1 WHERE year=?3 AND draft_version=?2 AND publication_revision=?4 RETURNING published_version,publication_revision")
+    const [,publication] = await env.DB.batch([translationPublication(env.DB,year,published,row.draft_version,row.publication_revision,actor),env.DB.prepare("UPDATE editions SET published_json=?1,published_version=draft_version,published_at=unixepoch(),is_active=1,taken_offline_at=NULL,publication_revision=publication_revision+1 WHERE year=?3 AND draft_version=?2 AND publication_revision=?4 RETURNING published_version,publication_revision")
       .bind(JSON.stringify(published),row.draft_version,year,row.publication_revision)]);
     const result=publication.results[0] as {published_version:number;publication_revision:number}|undefined;
     if (!result) throw new Problem(409,"The draft changed while publishing. Review it again.");
