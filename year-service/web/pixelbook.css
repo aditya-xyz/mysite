@@ -381,3 +381,6 @@ header .theme-toggle{min-width:44px;min-height:44px}
  .pb-gift-dialog:has(.pb-designs) .pb-design-caption{font-size:12px;line-height:1.35;min-height:2.7em}
  .pb-gift-dialog:has(.pb-designs) .pb-dialog-budget{font-size:13px;padding-block:8px;margin-block:6px}
 }
+
+/* Keep address actions distinct in both gift flows. */
+.delivery-panel .delivery-actions{gap:12px;margin:16px 0 4px}.delivery-panel .delivery-actions .button{margin:0}.delivery-panel .delivery-secondary{background:transparent;color:var(--ink);border:1px solid var(--line);min-height:48px;padding:12px 22px}.delivery-panel .delivery-secondary:hover:not(:disabled){background:var(--surface)}
