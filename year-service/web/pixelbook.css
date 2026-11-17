@@ -361,13 +361,16 @@ header .theme-toggle{min-width:44px;min-height:44px}
  .entry.pb-invite-entry{gap:24px}
 }
 
+/* Four mugshots use a compact two-by-two selector on every screen. */
+.pb-gift-dialog:has(.pb-designs[data-design-count="4"]){width:min(720px,calc(100vw - 32px))}
+@media(max-width:700px){.pb-gift-dialog:has(.pb-designs[data-design-count="4"]){width:calc(100vw - 20px)}}
 /* Fit the curated mugshots between the heading and the order controls. */
 @media(min-width:701px) and (min-height:600px), (max-width:700px) and (min-height:700px){
  .pb-gift-dialog[open]:has(.pb-designs){display:flex;flex-direction:column;height:min(840px,calc(100dvh - 40px))}
  .pb-gift-dialog:has(.pb-designs)>:not(.pb-dialog-body){flex-shrink:0}
  .pb-gift-dialog:has(.pb-designs) .pb-dialog-body{display:flex;flex-direction:column;flex:1;min-height:0;padding-top:14px}
  .pb-gift-dialog:has(.pb-designs) .pb-dialog-intro{flex-shrink:0;margin-bottom:12px}
- .pb-designs{flex:1;min-height:0;grid-template-columns:repeat(2,minmax(0,280px));grid-template-rows:repeat(2,minmax(0,1fr));justify-content:center;gap:12px 24px}
+ .pb-designs{flex:1;min-height:0;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));justify-content:center;gap:12px 24px}
  .pb-designs[data-design-count="5"],.pb-designs[data-design-count="6"]{grid-template-columns:repeat(3,minmax(0,280px));justify-content:start}
  .pb-design{display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0}
  .pb-design-image{aspect-ratio:auto;min-height:0}

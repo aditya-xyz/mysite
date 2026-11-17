@@ -1057,3 +1057,7 @@ Supplied source-matched recipient translations publish in the same transaction a
 Migration 0040 retires Marathi and Traditional Chinese photo accessibility descriptions, removing only `photo:*:alt` entries from translation drafts and publications. Original English descriptions, captions, invitations and photos remain intact. Translation settings is an optional editor with no approval checkbox or language-publish action. Its blank fields use English; all supplied, source-matched translations publish with the scrapbook.
 
 Approved maximum postcard placement (November 16): new Handwrytten folded designs use front 100%, inside-left 100%, with preview version v5. The front fills the trim and the inside retains the provider’s fixed logo inset. Ordinary folded-card previews use the measured corresponding geometry; ready vendor proofs and frozen existing orders remain unchanged.
+
+The four-design mug chooser uses a compact two-by-two grid on desktop and mobile.
+Its desktop dialog is capped at 720px, with full-width tiles inside the available
+body space. Shared guest styles also apply to Studio’s recipient preview.
