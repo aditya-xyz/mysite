@@ -1071,3 +1071,8 @@ the mug picker’s rounded styling and outer margins. Saved US addresses place E
 address beside the mailing label in both gift flows. Postcard address entry and
 editing use a separate form step; accepting the verified address restores the
 postcard preview and mailing controls without losing the chosen artwork.
+
+Mug selection and customization also fit the dynamic mobile viewport below 700px
+height, so expanding browser bars do not disable their fitted layouts. Gift-flow
+buttons display in lowercase through scoped styling, preserving translated copy
+and option values across English, Marathi and Traditional Chinese.
