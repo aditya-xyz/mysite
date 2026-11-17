@@ -47,7 +47,14 @@ export function createMugMockups(){
        Object.assign(ghost.style,{left:(r.left-parent.left)+'px',top:(r.top-parent.top)+'px',width:r.width+'px',height:r.height+'px',objectFit:style.objectFit,objectPosition:style.objectPosition,clipPath:style.clipPath});
       }
       previous.replaceWith(image);
-      if(ghost){element.append(ghost);const options={duration:240,easing:'ease-in-out'};image.animate([{opacity:0},{opacity:1}],options);ghost.animate([{opacity:1},{opacity:0}],options).finished.then(()=>ghost.remove()).catch(()=>ghost.remove());}
+      if(ghost){
+       element.append(ghost);
+       const direction=record.view==='handle-right'?1:-1,baseline=getComputedStyle(image).transform,base=baseline&&baseline!=='none'?baseline:'';
+       const turn=(degrees,scale=1)=>`perspective(900px) rotateY(${degrees}deg) scale(${scale}) ${base}`;
+       const options={duration:440,easing:'cubic-bezier(.2,.75,.25,1)'};
+       image.animate([{opacity:0,transform:turn(direction*38,.96)},{opacity:.85,transform:turn(direction*10,.99),offset:.55},{opacity:1,transform:turn(0)}],options);
+       ghost.animate([{opacity:1,transform:'perspective(900px) rotateY(0deg)'},{opacity:.8,transform:`perspective(900px) rotateY(${-direction*10}deg)`,offset:.35},{opacity:0,transform:`perspective(900px) rotateY(${-direction*32}deg) scale(.96)`}],options).finished.then(()=>ghost.remove()).catch(()=>ghost.remove());
+      }
      }else element.replaceChildren(image,cached.controls,caption);
     }else element.replaceChildren(image,caption);
     element.dataset.mockupImage=record.imageUrl;

@@ -100,8 +100,6 @@ const existingUiDrafts=[
 ["Close photo", "फोटो बंद करा", "關閉照片"],
 ["Previous photo", "मागचा फोटो", "上一張照片"],
 ["Next photo", "पुढचा फोटो", "下一張照片"],
-["Drag up or down to reframe. Drop onto another photo to swap.", "फ्रेम बदलण्यासाठी वर किंवा खाली ओढा. जागा बदलण्यासाठी दुसऱ्या फोटोवर सोडा.", "上下拖曳調整構圖，拖到另一張照片上即可交換位置。"],
-["Keyboard: Space to swap, arrows to choose, Space to confirm.", "कीबोर्ड: बदलण्यासाठी स्पेस, निवडीसाठी बाण, पुष्टीसाठी स्पेस.", "鍵盤操作：空白鍵開始交換，方向鍵選擇，再按空白鍵確認。"],
 ["Your session has ended. Please open your invitation again.", "तुझं सत्र संपलं आहे. कृपया निमंत्रण पुन्हा उघड.", "你已登出，請重新開啟邀請連結。"],
 ["This scrapbook has been taken offline. Please check back later.", "हे आठवणींचं पुस्तक सध्या उपलब्ध नाही. कृपया नंतर पुन्हा पाहा.", "這本回憶相簿暫時下線了，請稍後再回來看看。"],
 ["pick your favorite photo of me. i’ve made this very difficult.", "माझा आवडता फोटो निवड. सोपं नसेल, सगळेच छान आहेत.", "挑一張你最喜歡的我。每張都這麼可愛，真的很難選。"],

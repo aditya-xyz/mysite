@@ -72,7 +72,7 @@ test('saved views default to handle-left and switch to handle-right without gene
  }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
 });
 
-test('angle changes retain their controls, crossfade decoded previews and respect reduced motion',async()=>{
+test('angle changes retain their controls, turn decoded previews and respect reduced motion',async()=>{
  const saved={document:(globalThis as any).document,Image:(globalThis as any).Image,matchMedia:(globalThis as any).matchMedia,getComputedStyle:(globalThis as any).getComputedStyle};
  const animations:any[]=[];let reduced=false;
  const node=(tag:string):any=>({tagName:tag.toUpperCase(),className:'',children:[] as any[],isConnected:true,style:{},dataset:{},
@@ -98,7 +98,8 @@ test('angle changes retain their controls, crossfade decoded previews and respec
   const controls=figure.children[1];controls.children[1].onclick();await settle();
   assert.equal(figure.children[1],controls,'The highlight can slide because its control stays mounted');
   assert.equal(controls.children[1].ariaPressed,'true');assert.equal(animations.length,2);
-  assert.ok(animations.every(a=>a.options.duration===240));
+  assert.ok(animations.every(a=>a.options.duration===440));
+  assert.match(animations[0].frames[0].transform,/rotateY\(38deg\)/);assert.match(animations[1].frames.at(-1).transform,/rotateY\(-32deg\)/);
   assert.equal(figure.querySelectorAll('.pb-mockup-crossfade').length,0,'The old overlay is released after fading');
   reduced=true;controls.children[0].onclick();await settle();
   assert.equal(controls.children[0].ariaPressed,'true');assert.equal(animations.length,2,'Reduced motion skips both fade animations');

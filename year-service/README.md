@@ -1087,3 +1087,11 @@ photo grids remain independent choices. Mug angles crossfade already-decoded
 supplier previews while preserving the mounted controls. Reduced-motion users
 get immediate changes. Mobile actions are shorter, and the print action shows
 only “A Christmas gift” using its existing translations.
+
+The mug-angle transition now combines directional perspective motion with the
+supplier-image blend; it approximates a turn from the two saved angle proofs.
+Glass-inspired selectors use a translucent tint and backdrop blur, with an opaque
+reduced-transparency fallback. Mobile actions are 38px visibly and top modal icons
+34px, with expanded hit areas; desktop actions are 40px. The Christmas gift action
+has a red gradient. The crop hint is shorter in English, Marathi and Chinese;
+keyboard controls remain functional without the visible keyboard-instructions line.

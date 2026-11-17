@@ -1,5 +1,6 @@
 // Reviewed feature copy, also offered in the Studio translation catalog.
 export const digitalUi=[
+['Drag to reframe. Drop onto another photo to swap.','फ्रेम बदलण्यासाठी फोटो ओढा. जागा बदलण्यासाठी दुसऱ्या फोटोवर सोडा.','拖曳調整構圖，拖到另一張照片上即可交換位置。'],
 ['not dishwasher safe · hand wash only','डिशवॉशरमध्ये धुवायचा नाही · हातानेच धुवा','不能放洗碗機 · 請手洗'],
 ['not dishwasher safe','डिशवॉशरमध्ये धुवायचा नाही','不能放洗碗機'],
 ['or be like me and lick it clean','किंवा माझ्यासारखं चाटून स्वच्छ करा','或是學我，舔乾淨就好'],
