@@ -1061,3 +1061,7 @@ Approved maximum postcard placement (November 16): new Handwrytten folded design
 The four-design mug chooser uses a compact two-by-two grid on desktop and mobile.
 Its desktop dialog is capped at 720px, with full-width tiles inside the available
 body space. Shared guest styles also apply to Studio’s recipient preview.
+
+Mug details omit the repeated visible heading and recommendation suffix. On mobile,
+the supplier preview flexes to the remaining dialog height while angle controls,
+care notes and navigation remain visible. The dialog retains its accessible name.

@@ -388,3 +388,26 @@ header .theme-toggle{min-width:44px;min-height:44px}
 
 /* Keep address actions distinct in both gift flows. */
 .delivery-panel .delivery-actions{gap:12px;margin:16px 0 4px}.delivery-panel .delivery-actions .button{margin:0}.delivery-panel .delivery-secondary{background:transparent;color:var(--ink);border:1px solid var(--line);min-height:48px;padding:12px 22px}.delivery-panel .delivery-secondary:hover:not(:disabled){background:var(--surface)}
+
+/* Keep the details accessible without repeating the step title on screen. */
+.pb-mug-review #pb-order-title{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.pb-mug-review .pb-dialog-top .pb-eyebrow{margin:0}
+@media(max-width:700px){
+ .pb-gift-dialog.pb-mug-review[open]{display:flex;flex-direction:column;height:calc(100dvh - 24px)}
+ .pb-mug-review>:not(.pb-dialog-body){flex-shrink:0}
+ .pb-mug-review .pb-dialog-top{padding:14px 20px 10px}
+ .pb-mug-review .pb-order-steps{padding-bottom:12px}
+ .pb-mug-review .pb-dialog-body{display:flex;flex-direction:column;flex:1;min-height:0;padding-top:8px}
+ .pb-mug-review .pb-order-review{flex:1;min-height:0;grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:0 0 8px}
+ .pb-mug-review .pb-order-review>.pb-mug-preview{display:flex;flex-direction:column;min-height:0;height:100%}
+ .pb-mug-review .pb-printful-mockup,.pb-mug-review .pb-live-preview .pb-mockup-wait{flex:1;min-height:0;height:0;width:100%;transform:none}
+ .pb-mug-review .pb-mockup-views,.pb-mug-review .pb-mug-preview figcaption{flex-shrink:0}
+ .pb-mug-review .pb-mockup-views{margin:6px 0}
+ .pb-mug-review .pb-mug-preview figcaption{margin-bottom:4px}
+ .pb-mug-review .pb-order-review>div{padding-bottom:0}
+ .pb-mug-review .pb-order-review .pb-eyebrow{margin:4px 0 6px}
+ .pb-mug-review .pb-order-review .pb-gift-price{margin-top:12px;padding:10px 14px}
+ .pb-mug-review .pb-mug-summary{margin-top:12px;gap:4px}
+ .pb-mug-review .pb-dialog-bottom{gap:10px;padding:12px 20px}
+ .pb-mug-review .pb-dialog-bottom .button{min-width:0}
+}

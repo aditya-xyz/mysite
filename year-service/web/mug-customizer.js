@@ -1,4 +1,4 @@
-import {mugStyles,mugFonts,preferredMugOptions,pixelMugOptions} from './mug-options.js';
+import {mugStyles,mugFonts,preferredMugOptions} from './mug-options.js';
 import {mugPreview} from './mug-preview.js';
 import {customSelectMarkup,bindCustomSelect} from './custom-select.js';
 import {esc} from './pixelbook.js';
@@ -13,9 +13,9 @@ export function openMugCustomizer(design,current,finish,styles=mugStyles,preview
  function render(focusKey){
   const openKey=selectBinding?.openKey;selectBinding?.destroy();
   dialog.innerHTML=`<div class="pb-customizer-body">${previewMarkup(design,configuration)}<div class="pb-mug-options">${fields().map(({key,label,values})=>{
-   const optionLabel=v=>(v.label||v)+(key==='style'&&v.id===pixelMugOptions().style?' · Pixel recommended':'');
+   const optionLabel=v=>(v.label||v);
    return customSelectMarkup({key,label,value:configuration[key],open:openKey===key,options:values.map(v=>({value:v.id||v,selectedLabel:v.label||v,label:optionLabel(v)+(available(design,candidate(key,v.id||v))?'':' · preparing'),disabled:!available(design,candidate(key,v.id||v))}))});
-  }).join('')}${styles.find(s=>s.id===configuration.style)?.careNote?`<p class="pb-mug-care">${esc(styles.find(s=>s.id===configuration.style).careNote)}<br><span>or be like me and lick it clean</span></p>`:''}</div></div><div class="pb-dialog-bottom pb-customizer-actions"><button type="button" class="button pb-secondary-button" data-restore-style>Restore Pixel’s Style</button><button type="button" class="button" data-customizer-done>Done</button></div>`;
+  }).join('')}${styles.find(s=>s.id===configuration.style)?.careNote?`<p class="pb-mug-care">${esc(styles.find(s=>s.id===configuration.style).careNote.replace(/^Not dishwasher safe/,'not dishwasher safe'))}<br><span>or be like me and lick it clean</span></p>`:''}</div></div><div class="pb-dialog-bottom pb-customizer-actions"><button type="button" class="button pb-secondary-button" data-restore-style>Restore Pixel’s Style</button><button type="button" class="button" data-customizer-done>Done</button></div>`;
   selectBinding=bindCustomSelect(dialog,(key,value)=>{configuration=candidate(key,value);render(key);});
   dialog.querySelector('[data-customizer-done]').onclick=()=>complete(configuration);
   dialog.querySelector('[data-restore-style]').onclick=()=>complete(preferredMugOptions(styles));
