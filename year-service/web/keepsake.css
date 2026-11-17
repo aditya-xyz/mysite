@@ -261,3 +261,9 @@ html:has(#keepsake[open]){overflow:hidden}
 .ks-print-dialog.ks-address-step [data-print-pictures],.ks-print-dialog.ks-address-step>.ks-bottom{display:none}
 .ks-print-dialog.ks-address-step{width:min(570px,calc(100vw - 28px))}
 .ks-address-step .ks-print-body{padding-bottom:16px}
+
+/* Let the picker fit its photos; the editor retains its larger canvas area. */
+#keepsake:has(.ks-select-body){height:fit-content;max-height:min(1000px,calc(100dvh - 24px))}
+#keepsake:has(.ks-select-body)>.ks-shell{height:auto;max-height:min(998px,calc(100dvh - 26px))}
+#keepsake .ks-select-body{flex:0 1 auto;overflow:hidden}
+#keepsake .ks-select-body .ks-picks[data-page-count]{justify-items:center}
