@@ -30,9 +30,10 @@ export async function mugQuote(request:Request,env:PrintEnv,invite:InvitationAud
  return estimateMug(env,data.configuration,delivery.address);
 }
 export async function createMugOrder(request:Request,env:PrintEnv,invite:InvitationAudience,data:Record<string,unknown>){
- if(!await mugAllowed(env,invite))throw new PrintProblem(403,'Complimentary mugs are not enabled for this scrapbook and invitation.');
+ const existing=await mugStatus(request,env,invite);
+ if(!existing.eligible)throw new PrintProblem(403,'Complimentary mugs are not enabled for this scrapbook and invitation.');
  if(!simulatedOrders(request,env))throw new PrintProblem(503,'Mug ordering is not enabled.');
- const existing=await mugStatus(request,env,invite);if(existing.claim)return {...existing,reused:true};
+ if(existing.claim)return {...existing,reused:true};
  const row=await env.DB.prepare('SELECT published_json,published_version,is_active FROM editions WHERE year=?1').bind(invite.edition_year).first<{published_json:string;published_version:number;is_active:number}>();
  const edition:Published|null=row?.published_json?JSON.parse(row.published_json):null;
  const design=edition&&publishedMugs(edition).find(d=>d.id===data.designId);
@@ -51,10 +52,13 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
   await reserveMugEstimate(env,invite.id);
   quote=await estimateMug(env,configuration,address);
  }
- const mockup=typeof data.mockupId==='string'?await env.DB.prepare("SELECT id FROM mug_mockups WHERE id=?1 AND invitation_id=?2 AND year=?3 AND design_id=?4 AND configuration_json=?5 AND caption=?6 AND cutout_version=?7 AND status IN ('pending','ready')").bind(data.mockupId,invite.id,invite.edition_year,design.id,JSON.stringify(configuration),design.caption,design.cutoutVersion).first<{id:string}>():null;
- const prepared=typeof data.preparedPreviewId==='string'?await env.DB.prepare('SELECT id FROM mug_preview_images WHERE id=?1 AND year=?2 AND design_id=?3 AND cutout_version=?4 AND caption=?5 AND style=?6 AND size=?7 AND color=?8 AND font=?9').bind(data.preparedPreviewId,invite.edition_year,design.id,design.cutoutVersion,design.caption,configuration.style,configuration.size,configuration.color,configuration.font).first<{id:string}>():null;
- const file=await env.MEDIA.get(design.preview_key);if(!file)throw new PrintProblem(409,'The mug artwork is unavailable.');
- const print=printfulEnabled(env)?await preparedMugPrint(env,invite.edition_year,design.id,configuration):null;
+ const [mockup,prepared,file,print]=await Promise.all([
+  typeof data.mockupId==='string'?env.DB.prepare("SELECT id FROM mug_mockups WHERE id=?1 AND invitation_id=?2 AND year=?3 AND design_id=?4 AND configuration_json=?5 AND caption=?6 AND cutout_version=?7 AND status IN ('pending','ready')").bind(data.mockupId,invite.id,invite.edition_year,design.id,JSON.stringify(configuration),design.caption,design.cutoutVersion).first<{id:string}>():null,
+  typeof data.preparedPreviewId==='string'?env.DB.prepare('SELECT id FROM mug_preview_images WHERE id=?1 AND year=?2 AND design_id=?3 AND cutout_version=?4 AND caption=?5 AND style=?6 AND size=?7 AND color=?8 AND font=?9').bind(data.preparedPreviewId,invite.edition_year,design.id,design.cutoutVersion,design.caption,configuration.style,configuration.size,configuration.color,configuration.font).first<{id:string}>():null,
+  env.MEDIA.get(design.preview_key),
+  printfulEnabled(env)?preparedMugPrint(env,invite.edition_year,design.id,configuration):null
+ ]);
+ if(!file)throw new PrintProblem(409,'The mug artwork is unavailable.');
  if(print&&typeof data.preparedPreviewId==='string'&&(!prepared||!(await env.DB.prepare('SELECT id FROM mug_preview_images WHERE id=?1 AND source_id=?2').bind(prepared.id,print.sourceId).first())))throw new PrintProblem(409,'The mug preview changed. Reopen the gift picker.');
  const id='mug-'+token().slice(0,24),printKey=print?`${invite.edition_year}/mug-orders/${id}/print.png`:null,key=`${invite.edition_year}/mug-orders/${id}/artwork.png`;
  // Store the exact published artwork before reserving, so a crash cannot leave an active order without a proof.

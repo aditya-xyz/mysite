@@ -118,7 +118,8 @@ export async function preparedMugCatalog(env:PrintEnv,year:number,includeSavedCa
 // Freeze the same full-wrap artwork used by the saved supplier proofs.
 export async function preparedMugPrint(env:PrintEnv,year:number,designId:string,configuration:{style:string;size:string;color:string;font:string}){
  const catalog=await printfulCatalog(env),style=catalog.styles.find(s=>s.id===configuration.style),variant=style?.variants.find(v=>v.size===configuration.size&&v.color===configuration.color);
- const plan=variant&&(await preparedMugPlans(env,year)).find(p=>p.design_id===designId&&p.font===configuration.font&&p.ink===inkFor(configuration.style)&&p.printWidth===variant.printWidth&&p.printHeight===variant.printHeight&&p.productId===style!.productId);
+ const design=(await published(env,year)).find(d=>d.id===designId);
+ const plan=design&&variant?.printWidth&&variant.printHeight&&mugFonts.some((f:{id:string})=>f.id===configuration.font)&&mugPlacementGuide(style!.productId,variant.printWidth,variant.printHeight)?await sourcePlan(year,design,configuration.font,inkFor(configuration.style),variant.printWidth,variant.printHeight,style!.productId):null;
  const file=plan&&await env.MEDIA.get(plan.artwork_key);if(!file)throw new PrintProblem(409,'This mug artwork is still being prepared. Try again shortly.');
  return {file,sourceId:plan!.id,layoutVersion:LAYOUT};
 }

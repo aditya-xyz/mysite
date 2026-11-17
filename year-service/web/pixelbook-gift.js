@@ -95,7 +95,6 @@ export function mountPixelGift(journal,root){
     busy=true;modal.setAttribute('aria-busy','true');
     modal.querySelectorAll('[data-gift-next],[data-gift-back],[data-edit-address],[data-customize-mug]').forEach(button=>button.disabled=true);
     try{
-      await delivery.confirm();
       const result=await request('claim',{designId:selected.id,configuration,addressVersion:delivery.state.version,requestKey,mockupId:mockups.id(selected,configuration),preparedPreviewId:mockups.preparedId(selected,configuration)});receipt={...result.claim,design:result.claim.design||{...selected}};
       if(!modal.isConnected)return;selectReceipt();render();
     }catch(error){if(error.name!=='AbortError'&&modal.open){modal.querySelector('.pb-gift-status').textContent=error.message;modal.querySelectorAll('[data-gift-next],[data-gift-back],[data-edit-address],[data-customize-mug]').forEach(button=>button.disabled=false);}}

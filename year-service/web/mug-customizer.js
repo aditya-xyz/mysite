@@ -25,7 +25,7 @@ export function openMugCustomizer(design,current,finish,styles=mugStyles,preview
  }
  function complete(value){if(completing||destroyed)return;completing=true;selectBinding?.destroy();closeDialog(dialog).then(()=>{if(destroyed)return;dialog.remove();finish({...value});});}
  dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)complete(configuration);}});
- dialog.addEventListener('cancel',event=>event.preventDefault());
+ dialog.addEventListener('cancel',event=>{event.preventDefault();complete(configuration);});
  document.body.append(dialog);render();openDialog(dialog);dialog.querySelector('[data-select-control]').focus();
  return {refresh(nextStyles=styles){styles=nextStyles;const key=document.activeElement?.closest('[data-select-control],[data-select-option]')?.dataset;render(key?.selectControl||key?.selectOption);},destroy(){destroyed=true;selectBinding?.destroy();dialog.close();dialog.remove();}};
 }
