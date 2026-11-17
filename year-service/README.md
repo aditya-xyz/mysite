@@ -1065,3 +1065,7 @@ body space. Shared guest styles also apply to Studio’s recipient preview.
 Mug details omit the repeated visible heading and recommendation suffix. On mobile,
 the supplier preview flexes to the remaining dialog height while angle controls,
 care notes and navigation remain visible. The dialog retains its accessible name.
+
+Mobile postcard selection and editing use the small viewport height with extra
+outer margins for expanded browser controls. Saved US addresses place Edit address
+beside the mailing label in both gift flows; the existing verification form is unchanged.

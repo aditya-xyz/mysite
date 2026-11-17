@@ -235,3 +235,10 @@ html:has(#keepsake[open]){overflow:hidden}
 @media(min-width:601px){#keepsake{width:min(780px,calc(100vw - 40px))}#keepsake:has(.ks-complete-stage){width:min(640px,calc(100vw - 40px))}#keepsake .ks-complete-preview{max-width:100%}#keepsake .ks-bottom:has([data-preview]){justify-content:flex-end}#keepsake [data-preview]{flex:0 0 auto;min-width:180px}}
 #keepsake .ks-picks{grid-template-rows:repeat(2,minmax(0,1fr))}#keepsake .ks-picks[data-page-count="1"],#keepsake .ks-picks[data-page-count="2"],#keepsake .ks-picks[data-page-count="3"]{grid-template-rows:1fr}
 @media(max-width:600px){#keepsake .ks-picks{grid-template-rows:repeat(3,minmax(0,1fr))}#keepsake .ks-picks[data-page-count="3"],#keepsake .ks-picks[data-page-count="4"]{grid-template-rows:repeat(2,minmax(0,1fr))}#keepsake .ks-picks[data-page-count="1"],#keepsake .ks-picks[data-page-count="2"]{grid-template-rows:1fr}}
+
+/* Leave breathing room for mobile browser chrome, even when its bars expand. */
+@media(max-width:600px){
+ #keepsake{width:calc(100vw - 32px);height:min(740px,calc(100svh - 56px));max-height:calc(100svh - 56px);margin:auto;border:1px solid var(--line);border-radius:14px}
+ #keepsake .ks-top{padding-block:10px}
+ #keepsake .ks-select-body{padding-block:10px}
+}

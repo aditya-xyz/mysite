@@ -413,3 +413,15 @@ header .theme-toggle{min-width:44px;min-height:44px}
  .pb-mug-review .pb-dialog-bottom{gap:10px;padding:12px 20px}
  .pb-mug-review .pb-dialog-bottom .button{min-width:0}
 }
+
+/* Put the saved-address action alongside the mailing label in both gift flows. */
+.delivery-address-row{display:flex;align-items:center;gap:12px}
+.delivery-address-row address{flex:1;min-width:0;overflow-wrap:anywhere}
+.delivery-panel .delivery-address-row .delivery-secondary{flex:none;margin:0;padding-inline:14px;font-size:14px}
+.delivery-address-row:has(.delivery-note){flex-wrap:wrap}
+.delivery-address-row .delivery-note{flex-basis:100%;min-width:0}
+@media(max-width:600px){
+ .ks-print-dialog .delivery-summary h3{font-size:17px}
+ .ks-print-dialog .delivery-summary address{font-size:15px;line-height:1.4}
+ .ks-print-dialog .ks-household-note{font-size:14px;line-height:1.4;padding:8px 10px}
+}
