@@ -447,15 +447,20 @@ header .theme-toggle{min-width:44px;min-height:44px}
 @media(max-width:700px){
  .pb-gift-dialog{max-height:calc(100dvh - 24px)}
  .pb-gift-dialog[open]:has(.pb-designs){height:min(740px,calc(100dvh - 24px))}
- .pb-mug-customizer[open]{display:flex;flex-direction:column;height:min(740px,calc(100dvh - 24px))}
- .pb-mug-customizer .pb-customizer-body{display:flex;flex:1;min-height:0;flex-direction:column;gap:8px;padding:14px 20px 8px}
+ /* Reserve room for choices rather than stretching the preview on tall phones. */
+ .pb-mug-customizer[open]{display:flex;flex-direction:column;height:min(660px,calc(100dvh - 24px))}
+ .pb-mug-customizer .pb-customizer-body{display:flex;flex:1;min-height:0;flex-direction:column;gap:6px;padding:12px 18px 6px}
  .pb-mug-customizer .pb-customizer-body>.pb-mug-preview{display:flex;flex:1;min-height:0;flex-direction:column}
  .pb-mug-customizer .pb-printful-mockup,.pb-mug-customizer .pb-mockup-wait{flex:1;min-height:0;height:0;transform:none}
  .pb-mug-customizer .pb-mockup-views,.pb-mug-customizer figcaption{flex-shrink:0}
  .pb-mug-customizer .pb-mockup-views{margin:4px 0}
  .pb-mug-customizer figcaption{margin-bottom:4px}
- .pb-mug-customizer .pb-mug-options{flex:none;width:100%;margin:4px 0;gap:10px 12px}
- .pb-mug-customizer .pb-customizer-actions{flex:none;padding:12px 20px}
+ .pb-mug-customizer .pb-mug-options{flex:none;width:100%;margin:4px 0;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+ .pb-mug-customizer .pb-customizer-actions{flex:none;padding:10px 18px}
+ .pb-mug-customizer .pb-custom-select>span{margin-bottom:4px}
+ .pb-mug-customizer .pb-select-trigger{min-height:44px;padding:10px 12px}
+ /* Opening over the preview keeps menus inside the sheet and the footer still. */
+ .pb-mug-customizer .pb-custom-select .pb-select-list{top:auto;bottom:calc(100% - 22px);margin:0 0 4px;max-height:min(190px,35dvh)}
 }
 
 /* Give Pixel’s editor portrait a little more presence beside the note. */
