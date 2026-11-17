@@ -1127,3 +1127,27 @@ Mug and postcard step contents slide in the direction of navigation while headin
 The mug customizer treats backdrop clicks like Done and retains the current options, with a guard against duplicate completion. The main mug picker opens immediately from published cutouts; fresh gift status and catalog checks continue in the background, and Continue remains unavailable until they finish. A newly discovered household order replaces that provisional picker with its saved receipt.
 
 Escape in the mug customizer now follows Done and backdrop dismissal, retaining current choices. Mug confirmation removes the duplicate browser address-confirm call: the claim endpoint still confirms the saved address/version before reserving the gift. It reuses its initial permission/status check, reads independent proof/artwork records concurrently, and derives only the selected print layout rather than every mug/font combination. Exact shipping estimates and frozen-artwork storage still complete before success is returned.
+
+
+## Guest read latency and launch checks
+
+Journal and gallery requests resolve the current session, published edition and
+legacy household aliases in one D1 query. Gift deadlines likewise use one query
+for policy, country and any frozen household deadline. No authorization result
+or private media is cached across requests on the server: revocation, publication
+and membership changes still apply to the next request. Server-Timing exposes
+only duration labels (auth, storage, theme, gifts, journal and app), never IDs,
+queries, addresses or storage keys.
+
+Run `npm run test:launch-load` after the normal suite/build. This isolated local
+fixture opens 72 households, each with a 97-photo publication, then loads their
+journals and four small images each. It checks audience isolation, immediate
+publication/revocation changes and untouched original quotas. Run it separately
+from the other Miniflare runtimes; it is a local concurrency check, not a
+production latency or vendor throughput benchmark.
+
+Guest dark-mode actions use a brighter sage gradient and dark text, while the
+Christmas gift retains its red sheen. Modal sheets and photo-paper edges use
+muted greens. Mug previews get a soft light behind the display only; no printed
+or exported artwork is recolored. Segmented highlights include their borders
+inside each option's width so both end stops have matching insets.

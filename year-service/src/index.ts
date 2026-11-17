@@ -20,7 +20,7 @@ import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionC
 import { reserveDownload,releaseDownload } from "./downloads.ts";
 import { previewDimensions } from "./image-dimensions.ts";
 import { invitationAudience, invitationName, invitationMembers, type InvitationAudience } from "./invitations.ts";
-import { publishedEdition, clientEdition, visiblePhotos, publishedMugs } from "./edition.ts";
+import { publishedEdition, clientEdition, visiblePhotos, publishedMugs, type Published } from "./edition.ts";
 
 interface Env extends AddressEnv, SmsBudgetEnv {
   DB: D1Database;
@@ -71,16 +71,26 @@ async function invitation(request: Request, env: Env) {
   await requireActive(env,row.edition_year);
   return row;
 }
-async function authenticated(request: Request, env: Env) {
+// Hydrate read-only edition/audience context in the same current-session query.
+// No authorization cache: revocations, membership and publication changes apply immediately.
+async function authenticated(request: Request, env: Env, readContext=false) {
   const raw = cookie(request, SESSION);
   if (!validToken(raw)) throw new Failure(401, "Please verify your invitation to continue.");
-  const row = await env.DB.prepare(`SELECT i.*,s.expires_at AS session_expires_at,e.published_version AS media_publication_version,e.is_active AS scrapbook_active,e.taken_offline_at AS scrapbook_offline FROM invites i JOIN sessions s ON s.invite_id=i.id LEFT JOIN editions e ON e.year=i.edition_year
+  const row = await env.DB.prepare(`SELECT i.*,s.expires_at AS session_expires_at,e.published_version AS media_publication_version,e.is_active AS scrapbook_active,e.taken_offline_at AS scrapbook_offline${readContext?`,e.published_json AS read_edition_json,
+    (SELECT json_group_array(alias.id) FROM invites alias WHERE alias.edition_year=i.edition_year
+      AND alias.person_id IN (SELECT value FROM json_each(CASE WHEN i.member_ids!='' THEN i.member_ids WHEN i.person_id IS NOT NULL THEN json_array(i.person_id) ELSE '[]' END))) AS read_aliases_json`:''} FROM invites i JOIN sessions s ON s.invite_id=i.id LEFT JOIN editions e ON e.year=i.edition_year
     WHERE s.token_hash=?1 AND s.expires_at>?2 AND i.expires_at>?2 AND i.revoked_at IS NULL`)
-    .bind(await digest(raw), now()).first<Invite&{session_expires_at:number;media_publication_version:number;scrapbook_active:number|null;scrapbook_offline:number|null}>();
+    .bind(await digest(raw), now()).first<Invite&{session_expires_at:number;media_publication_version:number;scrapbook_active:number|null;scrapbook_offline:number|null;read_edition_json?:string|null;read_aliases_json?:string}>();
   if (!row) throw new Failure(401, "Your session has ended. Please open your invitation again.");
   if(row.scrapbook_offline)throw new Failure(409,"This scrapbook has been taken offline. Please check back later.",undefined,"SCRAPBOOK_OFFLINE");
   if(!row.scrapbook_active)throw new Failure(409,"This scrapbook is no longer active. Please ask for a current invitation.");
   return row;
+}
+function readEdition(invite:Awaited<ReturnType<typeof authenticated>>):Published|null {
+  return invite.read_edition_json?JSON.parse(invite.read_edition_json):null;
+}
+function readAudience(invite:Awaited<ReturnType<typeof authenticated>>):string[] {
+  return [...new Set([invite.id,...invitationMembers(invite),...JSON.parse(invite.read_aliases_json||'[]') as string[]])];
 }
 async function body(request: Request) {
   if (!request.headers.get("Content-Type")?.startsWith("application/json")) throw new Failure(415, "JSON required.");
@@ -112,7 +122,10 @@ async function twilio(env: Env, resource: string, params: Record<string, string>
   return data;
 }
 
-async function route(request: Request, env: Env, ctx:ExecutionContext) {
+async function route(request: Request, env: Env, ctx:ExecutionContext, timings:string[]) {
+  async function measured<T>(name:string,work:()=>Promise<T>):Promise<T>{
+    const start=performance.now();try{return await work();}finally{timings.push(`${name};dur=${(performance.now()-start).toFixed(1)}`);}
+  }
   const url = new URL(request.url), path = url.pathname;
   if (request.method === "POST" && !sameOrigin(request)) throw new Failure(403, "Please use this site's invitation page.");
   if (path.startsWith("/api/") && request.method === "POST") {
@@ -258,13 +271,18 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     return response;
   }
   if (path === "/api/journal" && request.method === "GET") {
-    const i = await authenticated(request, env);
-    const edition = await publishedEdition(env.DB,i.edition_year);
+    const i = await measured('auth',()=>authenticated(request, env,true));
+    const edition = readEdition(i),audience=readAudience(i);
     if (edition) {
-      const [audience,translation,themeAssets,window]=await Promise.all([invitationAudience(env.DB,i),translationPayload(env.DB,i.edition_year,i.language),themeAssetManifest(env.MEDIA,i.edition_year),giftWindow(env.DB,i)]);
+      const [translation,themeAssets,gifts]=await measured('journal',()=>Promise.all([
+        translationPayload(env.DB,i.edition_year,i.language),measured('theme',()=>themeAssetManifest(env.MEDIA,i.edition_year)),
+        measured('gifts',async()=>{const window=await giftWindow(env.DB,i);const [keepsake,giftStatus]=await Promise.all([
+          keepsakeManifest(env,i,visiblePhotos(edition,i.id,audience).filter(p=>p.recipients.length).length,window),mugStatus(request,env,i,window)
+        ]);return {window,keepsake,giftStatus};})
+      ]));
+      const {window,keepsake,giftStatus}=gifts;
       const data=localizeJournal(clientEdition(edition,i.id,invitationName(i),i.edition_year,audience),translation);
       Object.assign(data,{mediaCacheScope:await digest(JSON.stringify(["display",cookie(request,SESSION),i.id,i.version,i.media_publication_version,edition])),mediaCacheExpiresAt:Math.min(i.expires_at,i.session_expires_at),householdSize:new Set(invitationMembers(i)).size,shareSocials:!!i.share_socials,themeAssets,giftWindow:window});
-      const [keepsake,giftStatus]=await Promise.all([keepsakeManifest(env,i,data.photos.filter(p=>p.personal).length,window),mugStatus(request,env,i,window)]);
       Object.assign(data,{keepsake});
       if(!giftStatus.eligible){data.gift.enabled=false;data.gift.designs=[];}
       const claim=giftStatus.claim;
@@ -277,7 +295,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     }
     if (i.edition_year !== 2026) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
     const photos = await env.DB.prepare(`SELECT id,caption,alt,invite_id,preview_key,original_key FROM photos
-      WHERE invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?1)) ORDER BY invite_id IS NULL,sort_order,id`).bind(JSON.stringify(await invitationAudience(env.DB,i))).all<Photo>();
+      WHERE invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?1)) ORDER BY invite_id IS NULL,sort_order,id`).bind(JSON.stringify(audience)).all<Photo>();
     return json({ year:i.edition_year,householdSize:new Set(invitationMembers(i)).size,name: invitationName(i), verificationName:i.name,shareSocials:!!i.share_socials, photos: await Promise.all(photos.results.map(async p => ({ id: p.id, caption: p.caption, alt: p.alt,...await previewDimensions(env.MEDIA,p.preview_key),
       personal: p.invite_id !== null, src: `/api/media/${p.id}`,viewerSrc:`/api/media/${p.id}/viewer`, canSave: !!p.invite_id && !!p.original_key }))) });
   }
@@ -292,17 +310,17 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
   }
   const media = /^\/api\/media\/([a-z0-9-]+)(\/(original|viewer))?$/.exec(path);
   if (media && request.method === "GET") {
-    const i=await authenticated(request,env),edition=await publishedEdition(env.DB,i.edition_year),original=media[3]==="original";
+    const i=await measured('auth',()=>authenticated(request,env,true)),edition=readEdition(i),original=media[3]==="original";
     let key:string|null,filename:string,mime:string;
     if(edition){
-      const p=visiblePhotos(edition,i.id,await invitationAudience(env.DB,i)).find(p=>p.id===media[1]);
+      const p=visiblePhotos(edition,i.id,readAudience(i)).find(p=>p.id===media[1]);
       if(!p||(original&&(!p.recipients.length||!p.original_key)))throw new Failure(404,"Photo not found.");
       key=original?p.original_key:media[3]==="viewer"?(p.viewer_key||p.preview_key):p.preview_key;
       filename=p.filename;mime=original?p.mime:"image/jpeg";
     }else{
       if(i.edition_year!==2026)throw new Failure(404,"Photo not found.");
       const p=await env.DB.prepare("SELECT * FROM photos WHERE id=?1 AND (invite_id IS NULL OR invite_id IN (SELECT value FROM json_each(?2)))")
-        .bind(media[1],JSON.stringify(await invitationAudience(env.DB,i))).first<Photo>();
+        .bind(media[1],JSON.stringify(readAudience(i))).first<Photo>();
       if(!p||(original&&(!p.invite_id||!p.original_key)))throw new Failure(404,"Photo not found.");
       key=original?p.original_key:p.preview_key;filename=p.filename||"photo.jpg";mime=original?"":"image/jpeg";
     }
@@ -310,7 +328,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
     const reservation=original?await reserveDownload(env.DB,i.id,media[1],now()):null;
     if(reservation&&!reservation.allowed)throw new Failure(429,"You’ve reached five original downloads for this photo. Your allowance resets within 24 hours.",reservation.retryAfter);
     let file:R2ObjectBody|null;
-    try{file=await env.MEDIA.get(key);}catch{
+    try{file=await measured('storage',()=>env.MEDIA.get(key));}catch{
       if(reservation?.allowed)await releaseDownload(env.DB,i.id,media[1],reservation.windowStart);
       throw new Failure(503,"The original could not be retrieved. Please try again.");
     }
@@ -327,12 +345,12 @@ async function route(request: Request, env: Env, ctx:ExecutionContext) {
 
 export default {
   async fetch(request: Request, env: Env, ctx:ExecutionContext) {
-    const requestStarted=performance.now();
+    const requestStarted=performance.now(),timings:string[]=[];
     let response: Response;
-    try { response = await route(request, env, ctx); }
+    try { response = await route(request, env, ctx,timings); }
     catch (error) { response = error instanceof PrintProblem ? json({error:error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{})},error.status,error.retryAfter?{'Retry-After':String(error.retryAfter)}:undefined) : error instanceof Failure || error instanceof SmsBudgetError ? json({ error: error.message,...(error.code?{code:error.code}:{}),...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
     const headers = new Headers(response.headers);
-    headers.set("Server-Timing",`app;dur=${(performance.now()-requestStarted).toFixed(1)}`);
+    headers.set("Server-Timing",[...timings,`app;dur=${(performance.now()-requestStarted).toFixed(1)}`].join(", "));
     const assetUrl=new URL(request.url),versionedShell=/^\/(app\.bundle\.js|app\.styles\.css|theme\.js|fonts\/(asap-variable\.woff2|caveat-400\.ttf))$/.test(assetUrl.pathname)&&/^[a-f0-9]{16}$/.test(assetUrl.searchParams.get('v')||'')&&response.status===200;
     headers.set("Cache-Control",versionedShell?"public, max-age=31536000, immutable":"no-store, private");
     headers.set("Referrer-Policy", "no-referrer");

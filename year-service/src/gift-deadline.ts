@@ -26,13 +26,12 @@ export const giftReservationOpenSQL=`NOT EXISTS(SELECT 1 FROM card_fallback_poli
  CASE WHEN coalesce(nullif((SELECT CASE WHEN json_valid(gp.mailing_address) THEN json_extract(gp.mailing_address,'$.country') END FROM people gp WHERE gp.id=i.person_id),''),'US')!='US'
  THEN cutoff_policy.international_cutoff ELSE cutoff_policy.us_cutoff END)`;
 export async function giftWindow(db:D1Database,invite:Pick<InvitationAudience,'id'|'person_id'|'edition_year'>,at=now()){
- const policy=await db.prepare('SELECT * FROM card_fallback_policies WHERE year=?1').bind(invite.edition_year).first<CardFallbackPolicy>();
+ const policy=await db.prepare(`SELECT p.*,(SELECT mailing_address FROM people WHERE id=?2) AS mailing_address,
+  j.cutoff_at AS job_cutoff_at,j.run_at AS job_run_at FROM card_fallback_policies p
+  LEFT JOIN card_fallback_jobs j ON j.year=p.year AND j.invitation_id=?3 WHERE p.year=?1`)
+  .bind(invite.edition_year,invite.person_id,invite.id).first<CardFallbackPolicy&{mailing_address:string|null;job_cutoff_at:number|null;job_run_at:number|null}>();
  if(!policy)return {closed:false,closesAt:null,runAt:null};
- const [person,job]=await Promise.all([
-  db.prepare('SELECT mailing_address FROM people WHERE id=?1').bind(invite.person_id).first<{mailing_address:string|null}>(),
-  db.prepare('SELECT cutoff_at,run_at FROM card_fallback_jobs WHERE year=?1 AND invitation_id=?2').bind(invite.edition_year,invite.id).first<{cutoff_at:number;run_at:number}>()
- ]);
- let country:unknown;try{country=JSON.parse(person?.mailing_address||'{}').country;}catch{}
- const deadline=job?{closesAt:job.cutoff_at,runAt:job.run_at}:countryDeadline(policy,country);
+ let country:unknown;try{country=JSON.parse(policy.mailing_address||'{}').country;}catch{}
+ const deadline=policy.job_cutoff_at!==null?{closesAt:policy.job_cutoff_at,runAt:policy.job_run_at!}:countryDeadline(policy,country);
  return {closed:at>=deadline.closesAt,...deadline};
 }

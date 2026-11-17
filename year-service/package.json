@@ -11,6 +11,7 @@
     "predeploy": "npm run guest:build",
     "dev": "wrangler dev --port 8787",
     "check": "tsc --noEmit",
+    "test:launch-load": "node --experimental-strip-types --test test/load/guest-read-load.test.ts",
     "test:card-fallback": "node --experimental-strip-types --test test/card-fallback.test.ts",
     "test": "npm run admin:build && wrangler deploy --dry-run --outdir .wrangler/test-bundle && wrangler deploy --config admin/wrangler.jsonc --dry-run --outdir ../.wrangler/admin-test-bundle && node --experimental-strip-types --test test/*.test.ts",
     "admin:build": "npm run guest:build && node scripts/build-admin.mjs",
