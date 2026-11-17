@@ -1,5 +1,9 @@
 // Reviewed feature copy, also offered in the Studio translation catalog.
 export const digitalUi=[
+['Pixel perfect. one of my favorite photos of me.','अगदी Pixel च्या पसंतीची निवड! माझाही आवडता फोटो आहे हा.','完美到不行。這張我自己也很喜歡。'],
+['Your household’s gift','तुमच्या घरासाठी भेट','你們家的禮物'],
+['Saving your household’s gift…','तुमच्या घरासाठी भेट नोंदवत आहोत…','正在儲存你們家的禮物……'],
+['Hang tight. Pixel’s on it.','थोडं थांब. Pixel कामाला लागली आहे.','稍等一下，Pixel 正在處理。'],
 ['Drag to reframe. Drop onto another photo to swap.','फ्रेम बदलण्यासाठी फोटो ओढा. जागा बदलण्यासाठी दुसऱ्या फोटोवर सोडा.','拖曳調整構圖，拖到另一張照片上即可交換位置。'],
 ['not dishwasher safe · hand wash only','डिशवॉशरमध्ये धुवायचा नाही · हातानेच धुवा','不能放洗碗機 · 請手洗'],
 ['not dishwasher safe','डिशवॉशरमध्ये धुवायचा नाही','不能放洗碗機'],

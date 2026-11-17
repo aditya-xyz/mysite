@@ -3,3 +3,12 @@
 @media(prefers-reduced-motion:reduce){.loading-paw{animation:none}}
 .scrapbook-loading{display:flex;min-height:40svh;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--ink,#244637);text-align:center}
 .scrapbook-loading p{margin:0}
+
+.pb-mug-submission{display:flex;min-height:180px;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:var(--ink)}
+.pb-mug-submission p{margin:0}
+.pb-filling-paw{display:block;position:relative;width:64px;height:64px;color:var(--button)}
+.pb-filling-paw>span{position:absolute;inset:0;opacity:.18}
+.pb-filling-paw .loading-paw{width:100%;height:100%;animation:none}
+.pb-filling-paw>.pb-paw-fill{opacity:1;animation:pb-paw-fill 2.1s ease-in-out infinite;clip-path:inset(100% 0 0)}
+@keyframes pb-paw-fill{0%{clip-path:inset(100% 0 0)}70%,85%{clip-path:inset(0)}100%{clip-path:inset(100% 0 0)}}
+@media(prefers-reduced-motion:reduce){.pb-filling-paw>.pb-paw-fill{animation:none;clip-path:inset(0)}}

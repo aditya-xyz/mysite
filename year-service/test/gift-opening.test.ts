@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 // @ts-expect-error Browser client exercised with a minimal DOM.
 import {mountPixelGift} from '../web/pixelbook-gift.js';
 
-function fixture(t: any,{hasOrder=true,orderingEnabled=true,claim=null as any,livePricing=false}={}){
+function fixture(t: any,{hasOrder=true,orderingEnabled=true,claim=null as any,livePricing=false,receiptFigure=false}={}){
  const previousDocument=(globalThis as any).document;
- const node=()=>({disabled:false,textContent:'',onclick:null as any,focus(){},setAttribute(){},addEventListener(){},after(){}});
+ const node=()=>({disabled:false,textContent:'',onclick:null as any,focus(){},setAttribute(){},listeners:{} as Record<string,Function>,addEventListener(event:string,handler:Function){this.listeners[event]=handler;},append(){},after(){}});
  const description=node(),launch=node(),heading=node(),status=node(),next=node(),history:string[]=[],images:any[]=[],displayedImages:any[]=[];
+ const figure={isConnected:true,dataset:{},children:[] as any[],querySelector(){return null;},replaceChildren(...children:any[]){this.children=children;}};
  const listeners:Record<string,()=>void>={};
- const modal={open:false,isConnected:true,html:'',
+ const modal={open:false,isConnected:true,html:'',className:'',
   set innerHTML(value:string){this.html=value;history.push(value);status.textContent='';},get innerHTML(){return this.html;},
   setAttribute(){},removeAttribute(){},querySelectorAll(){return [];},
-  querySelector(selector:string){if(selector==='h2')return heading;if(selector==='.pb-gift-status')return status;if(selector==='[data-gift-next]')return next;if(selector==='[data-saved-gift-image]'&&this.html.includes('data-saved-gift-image'))return {className:'pb-printful-mockup',alt:'Saved gift',replaceWith(image:any){displayedImages.push(image);}};return null;},
+  querySelector(selector:string){if(selector==='.pb-mug-preview'&&receiptFigure)return figure;if(selector==='h2')return heading;if(selector==='.pb-gift-status')return status;if(selector==='[data-gift-next]')return next;if(selector==='[data-saved-gift-image]'&&this.html.includes('data-saved-gift-image'))return {className:'pb-printful-mockup',alt:'Saved gift',replaceWith(image:any){displayedImages.push(image);}};return null;},
   addEventListener(event:string,handler:()=>void){listeners[event]=handler;},
   showModal(){this.open=true;},close(){this.open=false;listeners.close?.();},remove(){this.isConnected=false;}
  };
@@ -20,7 +21,7 @@ function fixture(t: any,{hasOrder=true,orderingEnabled=true,claim=null as any,li
  const gift=mountPixelGift({name:'Household',gift:{enabled:true,hasOrder,orderingEnabled,designs,claim,livePricing}},
   {querySelector(selector:string){return selector==='[data-open-gift]'?launch:selector==='#pb-gift .pb-present-copy>p'?description:null;}});
  t.after(()=>{gift.destroy();(globalThis as any).document=previousDocument;});
- return {launch,modal,history,status,designs,next,images,displayedImages,description};
+ return {launch,modal,history,status,designs,next,images,displayedImages,description,figure};
 }
 
 test('viewing an existing household gift never renders the selector, including on reopen',async t=>{
@@ -137,4 +138,36 @@ test('the chooser warms only the selected saved proof and catalog refresh does n
  const fetch=mock.method(globalThis,'fetch',async(path:any)=>{calls.push(String(path));return Response.json(String(path).endsWith('/status')?{claim:null,livePricing:true}:{styles:mugStyles,prepared:true,previews:[{id:'saved',designId:'mug-0',configuration:pixelMugOptions(),src:'/supplier.jpg'}]});});t.after(()=>fetch.mock.restore());
  const {launch,modal}=fixture(t,{hasOrder:false,livePricing:true});await launch.onclick();assert.match(modal.innerHTML,/data-design=/);
  t.mock.timers.tick(30000);await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(calls,['/api/gift/status','/api/gift/catalog','/supplier.jpg']);
+});
+
+for(const failFirst of [false,true])test(`mug submission shows a paw until the server responds and ${failFirst?'restores a safe retry':'prevents duplicate taps'}`,async t=>{
+ const {launch,modal,next,designs,status}=fixture(t,{hasOrder:false});
+ const claims:any[]=[];let respond!:(value:Response)=>void;
+ const fetch=mock.method(globalThis,'fetch',async(path:string,init?:RequestInit)=>{
+  if(path==='/api/gift/status')return Response.json({claim:null});
+  if(path==='/api/delivery-address')return Response.json({verified:true,version:1,country:'US',mode:'local_mock',address:{line1:'123 Sample Lane',city:'Example',state:'CA',postalCode:'90001',country:'US'}});
+  assert.equal(path,'/api/gift/claim');claims.push(JSON.parse(init!.body as string));return new Promise<Response>(r=>respond=r);
+ });t.after(()=>fetch.mock.restore());
+ await launch.onclick();await next.listeners.click();assert.doesNotMatch(modal.innerHTML,/your chosen mugshot|don’t i have excellent taste/);await next.listeners.click();
+ assert.match(modal.innerHTML,/confirm & order/);
+ let pending=next.listeners.click();assert.match(modal.innerHTML,/pb-mug-submission/);assert.match(modal.innerHTML,/pb-paw-fill/);assert.doesNotMatch(modal.innerHTML,/data-gift-next|test order saved/);
+ await next.listeners.click();assert.equal(claims.length,1,'A second tap never creates another request');
+ if(failFirst){respond(Response.json({error:'Please try again.'},{status:503}));await pending;assert.equal(status.textContent,'Please try again.');assert.match(modal.innerHTML,/confirm & order/);assert.doesNotMatch(modal.innerHTML,/pb-mug-submission/);pending=next.listeners.click();assert.equal(claims.length,2);assert.deepEqual(claims[0],claims[1],'Retry preserves the idempotency key and chosen mug');}
+ respond(Response.json({claim:{status:'simulated',configuration:claims[0].configuration,designId:designs[0].id,design:designs[0]}}));await pending;
+ assert.match(modal.innerHTML,/Pixel perfect. one of my favorite photos of me./);assert.doesNotMatch(modal.innerHTML,/<h3>Pixel perfect|excellent choice|that’s a wrap|pb-mug-submission/);assert.match(modal.className,/pb-mug-confirmation/);
+});
+
+test('reopening a saved gift reconnects both prepared handle angles while preserving its saved image',async t=>{
+ const previousImage=(globalThis as any).Image;(globalThis as any).Image=class{src='';async decode(){}};t.after(()=>{(globalThis as any).Image=previousImage;});
+ const calls:string[]=[],claim={...savedGift,design:{...savedGift.design,caption:'Saved caption'}};
+ const fetch=mock.method(globalThis,'fetch',async(path:string)=>{
+  calls.push(path);
+  if(path==='/api/gift/status')return Response.json({claim,livePricing:true});
+  if(path==='/api/gift/catalog')return Response.json({styles:mugStyles,prepared:true,previews:['handle-left','handle-right'].map(view=>({id:view,view,designId:claim.designId,caption:claim.design.caption,configuration:claim.configuration,src:'/proof-'+view}))});
+  assert.match(path,/^\/proof-handle-(left|right)$/);return new Response(new Blob(['saved proof']));
+ });t.after(()=>fetch.mock.restore());
+ const {launch,figure,modal}=fixture(t,{claim,livePricing:true,receiptFigure:true});
+ await launch.onclick();for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(calls.includes('/api/gift/catalog'));assert.ok(calls.includes('/proof-handle-left'));assert.ok(calls.includes('/proof-handle-right'));
+ assert.match(figure.children[1].className,/\bpb-mockup-views\b/);assert.match(modal.className,/pb-mug-confirmation/);
 });

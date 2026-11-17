@@ -467,3 +467,22 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-letter{grid-template-columns:minmax(0,1fr) 290px}
 .pb-letter-photo{height:356px}
 @media(max-width:700px){.pb-letter{grid-template-columns:1fr}.pb-letter-photo{width:204px;height:250px}}
+
+/* Saved and newly placed mugs share one compact receipt. */
+:is(.pb-mug-confirmation,.pb-mug-submitting) .pb-receipt-title{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+:is(.pb-mug-confirmation,.pb-mug-submitting) .pb-dialog-top{justify-content:flex-end;padding:12px 20px 0}
+.pb-mug-confirmation{width:min(480px,calc(100vw - 24px));overflow-x:hidden}
+.pb-mug-submitting{width:min(400px,calc(100vw - 24px))}
+.pb-mug-confirmation .pb-printful-mockup{width:min(100%,300px);height:260px}
+.pb-mug-confirmation .pb-gift-done .pb-mug-preview{margin:8px auto 12px}
+.pb-mug-confirmation .pb-dialog-top{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:0;padding:14px 16px 6px}
+.pb-mug-confirmation .pb-dialog-top .pb-done-mark{grid-column:2;justify-self:center;margin:0}
+.pb-mug-confirmation .pb-dialog-top .pb-close{grid-column:3}
+.pb-mug-confirmation .pb-dialog-body{padding-top:0}
+.pb-mug-confirmation .pb-gift-done>p{margin:8px 0}
+.pb-mug-confirmation .pb-gift-done{margin:0 auto 16px}
+.pb-mug-confirmation .pb-dialog-bottom{justify-content:center}
+.pb-mug-confirmation .pb-done-mark{margin-bottom:12px}
+.pb-mug-confirmation .pb-mug-preview figcaption{display:none}
+.pb-mug-submitting .pb-dialog-bottom{display:none}
+@media(max-width:700px){.pb-mug-confirmation .pb-printful-mockup{height:clamp(100px,calc(100dvh - 480px),260px)}.pb-mug-confirmation .pb-gift-done .pb-mug-preview{margin:8px auto 12px}}
