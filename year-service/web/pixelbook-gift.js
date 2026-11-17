@@ -122,24 +122,21 @@ export function mountPixelGift(journal,root){
     const previewDesign=designs[0];
     // The authorized journal already includes the saved gift; refresh it in the background.
     configuration=pixelMugOptions();selected=previewDesign;
-    if(receipt)selectReceipt();else step=ordering||journal.gift.hasOrder?'loading':'pick';
-    // A new selection opens once its status is known, without a household-receipt flash.
-    const deferOpen=ordering&&!receipt&&!journal.gift.hasOrder;
-    if(deferOpen)launch.disabled=true;
-    else{render();openDialog(modal);modal.querySelector('h2').focus();}
+    if(receipt)selectReceipt();else step=journal.gift.hasOrder?'loading':'pick';
+    // Published mugshots can be browsed immediately; Continue waits for fresh permissions.
+    render();openDialog(modal);modal.querySelector('h2').focus();
     try{
       if(!ordering&&!journal.gift.hasOrder&&!receipt){contextReady=true;step='pick';selected=previewDesign;render();modal.querySelector('h2').focus();return;}
-      const displayedReceipt=receipt;
+      const displayedReceipt=receipt,displayedStep=step;
       const result=await request('status');receipt=result.claim||null;
       livePricing=result.livePricing===true;
       if(livePricing&&!receipt){const catalog=await preloadCatalog();styles=catalog.styles;mockups.configure(catalog);configuration=preferredMugOptions(styles);}
       if(!modal.isConnected)return;
       if(receipt)selectReceipt();else{step='pick';selected=selected||previewDesign;requestKey=crypto.randomUUID();launch.textContent='pick your mugshot';}
-      if(deferOpen){render();openDialog(modal);}
       if(!modal.open)return;contextReady=true;
-      if(!deferOpen&&(!displayedReceipt||receiptKey(displayedReceipt)!==receiptKey(receipt)))render();
+      if(displayedStep!==step||receiptKey(displayedReceipt)!==receiptKey(receipt))render();
       // The chooser needs only small cutouts. Supplier mockups load when review opens.
-    }catch(error){if(error.name!=='AbortError'){if(deferOpen&&modal.isConnected&&!modal.open){step='error';render();openDialog(modal);}if(modal.open){if(!receipt){step='error';render();}modal.querySelector('.pb-gift-status').textContent=error.message;}if(!receipt){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}}
+    }catch(error){if(error.name!=='AbortError'){if(modal.open){if(!receipt){step='error';render();}modal.querySelector('.pb-gift-status').textContent=error.message;}if(!receipt){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}}
     finally{opening=false;launch.disabled=false;if(modal.open&&step==='pick')modal.querySelector('[data-gift-next]').disabled=!selected||!ordering||!contextReady;}
   };
   modal.addEventListener('click',event=>{if(event.target===modal){const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeDialog(modal);}});

@@ -43,11 +43,11 @@ test('viewing an existing household gift never renders the selector, including o
  assert.ok(history.every(html=>!html.includes('data-design=')));
 });
 
-test('a household order created since the journal loaded also skips the selector',async t=>{
- const {launch,modal,designs}=fixture(t,{hasOrder:false});
+test('a household order created since the journal loaded replaces the provisional picker before continuing',async t=>{
+ const {launch,modal,designs,next}=fixture(t,{hasOrder:false});
  const fetch=mock.method(globalThis,'fetch',async()=>Response.json({claim:{status:'simulated',designId:designs[1].id,design:designs[1]}}));
  t.after(()=>fetch.mock.restore());
- const opening=launch.onclick();assert.doesNotMatch(modal.innerHTML,/data-design=/);
+ const opening=launch.onclick();assert.equal(modal.open,true);assert.match(modal.innerHTML,/data-design=/);assert.match(modal.innerHTML,/data-gift-next\b[^>]*\bdisabled/);
  await opening;assert.match(modal.innerHTML,/Pixel perfect/);
 });
 
@@ -55,7 +55,7 @@ test('new mugshot selections open directly without a household gift loading scre
  const {launch,modal,next}=fixture(t,{hasOrder:false});
  let resolve!:(value:Response)=>void;
  const fetch=mock.method(globalThis,'fetch',async()=>new Promise<Response>(r=>resolve=r));t.after(()=>fetch.mock.restore());
- const opening=launch.onclick();assert.equal(modal.open,false);assert.equal(launch.disabled,true);
+ const opening=launch.onclick();assert.equal(modal.open,true);assert.match(modal.innerHTML,/data-gift-next\b[^>]*\bdisabled/);assert.equal(launch.disabled,false);
  assert.doesNotMatch(modal.innerHTML,/Loading your gift|your household’s gift/);
  resolve(Response.json({claim:null}));await opening;assert.equal(modal.open,true);assert.match(modal.innerHTML,/data-design=/);assert.equal(next.disabled,false);assert.equal(launch.disabled,false);
 });
