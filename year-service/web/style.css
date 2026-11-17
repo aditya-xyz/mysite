@@ -34,7 +34,7 @@ html:has(#photo[open]){overflow:hidden}
 .grid{grid-auto-rows:4px;grid-auto-flow:row}
 @media(max-width:359px){.grid{column-gap:10px}.card span{font-size:11px}}
 
-#photo[open]{animation:photo-enter 280ms cubic-bezier(.16,1,.3,1) both;transform-origin:center}
+#photo[open]{animation:none;transform-origin:center}
 #photo[open].is-closing{animation:photo-exit 180ms ease-in both;pointer-events:none}
 #photo.is-closing::backdrop{animation:photo-backdrop-out 180ms ease-in both}
 @keyframes photo-enter{from{opacity:0;transform:translateY(14px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -218,3 +218,16 @@ html:lang(mr) h1,html:lang(mr) h2,html:lang(mr) h3,html:lang(mr) p,html:lang(mr)
 #photo.is-returning .photo-slide-viewport{overflow:visible}
 /* Prepare the current image layer before a Safari dismissal starts. */
 #photo .photo-slide-rail>img:first-child{will-change:transform}
+
+/* Opening and returning share the same image layer and thumbnail geometry. */
+#photo.is-expanding .photo-slide-viewport{overflow:visible}
+#photo.is-expanding .photo-control,#photo.is-expanding .photo-pagination,#photo.is-expanding .photo-toolbar,#photo.is-expanding #photo-caption{visibility:hidden}
+#photo.is-expanding::backdrop{animation:photo-backdrop-in 280ms ease-out both}
+#photo #previous-photo,#photo #next-photo{width:36px;height:36px}
+#photo #previous-photo::after,#photo #next-photo::after{content:'';position:absolute;inset:-4px;border-radius:inherit}
+#photo #previous-photo svg,#photo #next-photo svg{width:18px;height:18px}
+@media(pointer:coarse),(max-width:600px){
+ #photo #previous-photo,#photo #next-photo{width:32px;height:32px}
+ #photo #previous-photo::after,#photo #next-photo::after{inset:-6px}
+ #photo #previous-photo svg,#photo #next-photo svg{width:17px;height:17px}
+}

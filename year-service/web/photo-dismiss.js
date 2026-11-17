@@ -12,3 +12,15 @@ export function dismissPhotoToThumbnail(dialog,image,thumbnail,onClose){
  animation.finished.then(finish,finish);timer=setTimeout(finish,360);
  return true;
 }
+
+// Reverse the thumbnail return using the decoded image already in the viewer.
+export function openPhotoFromThumbnail(dialog,image,origin){
+ const idle={finished:Promise.resolve(),cancel(){}};
+ if(!origin?.width||!image.naturalWidth||!image.animate||matchMedia('(prefers-reduced-motion: reduce)').matches)return idle;
+ const box=image.getBoundingClientRect(),fit=Math.min(box.width/image.naturalWidth,box.height/image.naturalHeight),width=image.naturalWidth*fit,height=image.naturalHeight*fit;
+ if(!width||!height)return idle;
+ const dx=origin.left+origin.width/2-box.left-box.width/2,dy=origin.top+origin.height/2-box.top-box.height/2,scale=Math.min(origin.width/width,origin.height/height);
+ dialog.classList.add('is-expanding');
+ const animation=image.animate([{transform:`translate3d(${dx}px,${dy}px,0) scale(${scale})`},{transform:'translate3d(0,0,0) scale(1)'}],{duration:280,easing:'cubic-bezier(.2,.75,.25,1)'});
+ return {cancel:()=>animation.cancel(),finished:animation.finished.catch(()=>{}).then(()=>dialog.classList.remove('is-expanding'))};
+}

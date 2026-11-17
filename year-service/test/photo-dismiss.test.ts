@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error Browser helper.
-import {dismissPhotoToThumbnail} from '../web/photo-dismiss.js';
+import {dismissPhotoToThumbnail,openPhotoFromThumbnail} from '../web/photo-dismiss.js';
 
 test('dismissal animates the painted image without allocating a proxy and accounts for a scaled drag',async()=>{
  const saved={document:(globalThis as any).document,innerWidth:(globalThis as any).innerWidth,innerHeight:(globalThis as any).innerHeight};
@@ -18,4 +18,18 @@ test('dismissal animates the painted image without allocating a proxy and accoun
   assert.equal(animations[1].frames[1].opacity,0);animations[1].finish();await new Promise(r=>setImmediate(r));assert.equal(closed,2);
   assert.equal(dismissPhotoToThumbnail(dialog,{...image,naturalWidth:0},null,()=>{}),false);
  }finally{Object.assign(globalThis,saved);}
+});
+
+
+test('opening expands from the tapped thumbnail and skips motion when requested',async()=>{
+ const previous=(globalThis as any).matchMedia;let reduced=false,frames:any,finish=()=>{},canceled=0;const classes=new Set<string>();
+ (globalThis as any).matchMedia=()=>({matches:reduced});
+ const image={naturalWidth:400,naturalHeight:200,getBoundingClientRect:()=>({left:40,top:100,width:300,height:500}),animate(f:any){frames=f;return {finished:new Promise<void>(r=>finish=r),cancel(){canceled++;finish();}};}};
+ const dialog={classList:{add:(c:string)=>classes.add(c),remove:(c:string)=>classes.delete(c)}};
+ try{
+  const opening=openPhotoFromThumbnail(dialog,image,{left:20,top:40,width:100,height:50});
+  assert.match(frames[0].transform,/translate3d\(-120px,-285px/);assert.match(frames[0].transform,/scale\(0.333/);assert.equal(classes.has('is-expanding'),true);
+  opening.cancel();await opening.finished;assert.equal(canceled,1);assert.equal(classes.size,0);
+  reduced=true;const still=openPhotoFromThumbnail(dialog,image,{width:100,height:50});await still.finished;assert.equal(classes.size,0);
+ }finally{(globalThis as any).matchMedia=previous;}
 });

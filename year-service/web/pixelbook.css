@@ -441,3 +441,8 @@ header .theme-toggle{min-width:44px;min-height:44px}
  .pb-mug-customizer .pb-mug-options{flex:none;width:100%;margin:4px 0;gap:10px 12px}
  .pb-mug-customizer .pb-customizer-actions{flex:none;padding:12px 20px}
 }
+
+/* Give Pixel’s editor portrait a little more presence beside the note. */
+.pb-letter{grid-template-columns:minmax(0,1fr) 290px}
+.pb-letter-photo{height:356px}
+@media(max-width:700px){.pb-letter{grid-template-columns:1fr}.pb-letter-photo{width:204px;height:250px}}
