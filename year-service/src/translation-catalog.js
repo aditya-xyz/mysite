@@ -134,7 +134,6 @@ const existingUiDrafts=[
 ["test order saved", "चाचणी ऑर्डर जतन झाली", "測試訂單已儲存"],
 ["gift request received", "भेटीची विनंती मिळाली", "已收到禮物申請"],
 ["Close gift picker", "भेट निवड बंद करा", "關閉禮物選擇"],
-["not dishwasher safe. good thing i lick all my bowls.", "डिशवॉशरमध्ये धुवायचा नाही. मी तर माझ्या वाट्या चाटूनच स्वच्छ करते.", "不能放洗碗機。還好我的碗都是自己舔乾淨的。"],
 ["· Pixel recommended", "· Pixel ची शिफारस", "· Pixel 推薦"],
 ["Sending to", "या पत्त्यावर पाठवणार", "寄送至"],
 ["Contact mom or dad if this address needs to change.", "पत्ता बदलायचा असल्यास आई किंवा बाबांशी संपर्क साध.", "如果需要更改地址，請聯絡媽媽或爸爸。"],

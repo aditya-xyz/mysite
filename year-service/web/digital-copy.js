@@ -1,5 +1,8 @@
 // Reviewed feature copy, also offered in the Studio translation catalog.
 export const digitalUi=[
+['Not dishwasher safe · hand wash only','डिशवॉशरमध्ये धुवायचा नाही · हातानेच धुवा','不能放洗碗機 · 請手洗'],
+['not dishwasher safe','डिशवॉशरमध्ये धुवायचा नाही','不能放洗碗機'],
+['or be like me and lick it clean','किंवा माझ्यासारखं चाटून स्वच्छ करा','或是學我，舔乾淨就好'],
 ['Edit address','पत्ता बदला','編輯地址'],
 ['Cancel edit','बदल रद्द करा','取消編輯'],
 ['Paperless is not enabled for this invitation.','या आमंत्रणासाठी पेपरलेस पर्याय उपलब्ध नाही.','這份邀請目前未開放無紙明信片。'],
