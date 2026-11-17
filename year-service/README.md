@@ -1076,3 +1076,8 @@ Mug selection and customization also fit the dynamic mobile viewport below 700px
 height, so expanding browser bars do not disable their fitted layouts. Gift-flow
 buttons display in lowercase through scoped styling, preserving translated copy
 and option values across English, Marathi and Traditional Chinese.
+
+Guest actions share `web/buttons.css`: softly rounded rectangles, moss gradients
+and a static inset highlight, with quieter secondary actions and dark-theme support.
+Photo selection tiles retain their own styling. The guest bundle and Studio’s
+recipient preview use the same button treatment.

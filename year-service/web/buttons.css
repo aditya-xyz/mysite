@@ -1,0 +1,45 @@
+/* Shared guest actions: soft rectangles, moss gradients and a quiet glass edge.
+   Photo selection tiles and artwork controls keep their own geometry. */
+:root{
+ --pb-action-fill:radial-gradient(ellipse at 30% 0%,#ffffff18,transparent 65%),linear-gradient(180deg,#47735b 0%,#315d47 48%,#284e3b 100%);
+ --pb-action-border:#244b38;
+ --pb-action-ink:#fffdf5;
+ --pb-action-shadow:inset 0 1px 0 #ffffff45,inset 0 -1px 0 #00000016,0 1px 2px #142b1924;
+ --pb-soft-fill:linear-gradient(180deg,color-mix(in srgb,var(--paper) 86%,white),var(--paper) 48%,color-mix(in srgb,var(--paper) 95%,var(--ink)));
+ --pb-soft-shadow:inset 0 1px 0 #ffffff85,inset 0 -1px 0 #20392f08,0 1px 2px #142b1912;
+}
+:root[data-palette=night]{--pb-soft-shadow:inset 0 1px 0 #ffffff18,inset 0 -1px 0 #0002,0 1px 2px #0003}
+/* Root/body scope keeps the shared treatment above older screen-specific styles. */
+:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){
+ border:1px solid var(--pb-action-border);
+ border-radius:8px;
+ background:var(--pb-action-fill);
+ color:var(--pb-action-ink);
+ box-shadow:var(--pb-action-shadow);
+ text-decoration:none;
+ transition:filter 140ms ease,box-shadow 140ms ease;
+}
+:root :is(body,#keepsake,#photo) :is(.pb-secondary-button,.delivery-secondary,.text-button,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle){
+ background:var(--pb-soft-fill);
+ border-color:var(--line);
+ color:var(--ink);
+ box-shadow:var(--pb-soft-shadow);
+}
+:root :is(body,#keepsake,#photo) :is(.ks-frame,.pb-mockup-view,.fc-views button)[aria-pressed=true]{
+ background:var(--pb-action-fill);
+ border-color:var(--pb-action-border);
+ color:var(--pb-action-ink);
+ box-shadow:var(--pb-action-shadow);
+}
+:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control):hover:not(:disabled){filter:brightness(1.06);translate:none}
+:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control):active:not(:disabled){filter:brightness(.97);box-shadow:inset 0 1px 3px #142b1933}
+:root .text-button{padding-inline:12px}
+@media(prefers-reduced-motion:reduce){
+ :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){transition:none}
+}
+/* Keep the three frame choices in one compact rectangular group on phones. */
+:root #keepsake .ks-paper-tabs{border-radius:10px}
+@media(max-width:600px){
+ :root #keepsake .ks-paper-tabs{width:100%;max-width:100%;flex-wrap:nowrap}
+ :root #keepsake .ks-paper-tabs .ks-frame{flex:1;min-width:0;justify-content:center;padding-inline:6px;gap:4px;font-size:11px}
+}
