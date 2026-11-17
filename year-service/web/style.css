@@ -234,3 +234,6 @@ html:lang(mr) h1,html:lang(mr) h2,html:lang(mr) h3,html:lang(mr) p,html:lang(mr)
 
 .grid .card[data-photo-opening]{visibility:hidden}
 #photo .photo-slide-rail>img{border:0;padding:0;background:transparent;box-shadow:none}
+
+#photo .photo-slide-neighbor[hidden]{display:none}
+#photo.is-expanding .photo-slide-neighbor{visibility:hidden}

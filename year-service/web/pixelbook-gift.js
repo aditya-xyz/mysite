@@ -1,3 +1,4 @@
+import {slideStep} from './step-motion.js';
 import {openDialog,closeDialog} from './dialog-motion.js';
 import {sessionImages} from './session-images.js';
 import {readResource} from './read-resource.js';
@@ -77,6 +78,7 @@ export function mountPixelGift(journal,root){
     if(savedImage&&receiptPreview){receiptPreview.image.className=savedImage.className;receiptPreview.image.alt=savedImage.alt;savedImage.replaceWith(receiptPreview.image);}
     if(step==='review')mockups.update(modal.querySelector('.pb-mug-preview'),selected,configuration);
     if(step==='done'&&mockups.id(receipt?.design||selected,receipt?.configuration||configuration))mockups.update(modal.querySelector('.pb-mug-preview'),receipt?.design||selected,receipt?.configuration||configuration);
+    slideStep(modal,step==='address'?(delivery.ready?'address-ready':'address-edit'):step,step==='address'?(delivery.ready?3:2):({pick:0,review:1,done:4}[step]),'.pb-dialog-body');
     if(modal.open){modal.scrollTop=0;modal.querySelector('h2').focus({preventScroll:true});}
   }
   async function request(path,data){
@@ -140,6 +142,7 @@ export function mountPixelGift(journal,root){
     }catch(error){if(error.name!=='AbortError'){if(deferOpen&&modal.isConnected&&!modal.open){step='error';render();openDialog(modal);}if(modal.open){if(!receipt){step='error';render();}modal.querySelector('.pb-gift-status').textContent=error.message;}if(!receipt){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}}
     finally{opening=false;launch.disabled=false;if(modal.open&&step==='pick')modal.querySelector('[data-gift-next]').disabled=!selected||!ordering||!contextReady;}
   };
+  modal.addEventListener('click',event=>{if(event.target===modal){const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeDialog(modal);}});
   modal.addEventListener('close',()=>{controller?.abort();returnFocus?.focus({preventScroll:true});});
   warmReceipt();
   return {destroy(){clearInterval(catalogTimer);catalogController.abort();controller?.abort();customizer?.destroy();mockups.destroy();delivery.destroy();modal.remove();}};

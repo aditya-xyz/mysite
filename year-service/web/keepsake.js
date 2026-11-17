@@ -1,3 +1,4 @@
+import {slideStep} from './step-motion.js';
 import {openDialog,closeDialog} from './dialog-motion.js';
 import {beginPreviewTransition} from './preview-transition.js';
 import {sessionImages} from './session-images.js';
@@ -151,6 +152,7 @@ export function mountKeepsake(journal,section){
         },onStatus:text=>{const announcement=modal.querySelector('.ks-editor-announcement');if(announcement)announcement.textContent=text;}});
       paintCard();
     }
+    slideStep(modal,step==='pick'?'pick-'+pickPage:step,step==='pick'?pickPage/100:({edit:1,preview:2}[step]),'.ks-body');
     if(modal.open)modal.querySelector('h2').focus();
   }
   function updateExport(){const preview=modal.querySelector('[data-preview]');if(preview)preview.disabled=!file||busy;printFlow.prepare();const bottom=modal.querySelector('.ks-export-actions');if(bottom&&step!=='pick'){bottom.innerHTML=exportActions();bottom.querySelector('[data-save]')?.addEventListener('click',download);bottom.querySelector('[data-share]')?.addEventListener('click',shareCard);printFlow.bind(bottom);}}

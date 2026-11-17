@@ -1,3 +1,4 @@
+import {slideStep} from './step-motion.js';
 import {openDialog,closeDialog} from './dialog-motion.js';
 import {readResource} from './read-resource.js';
 import {esc,householdOrderNote} from './pixelbook.js';
@@ -33,6 +34,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
    sheet.querySelector('#print-title').textContent=addressStep?(delivery.state?.verified?'Edit address':'where’s home?'):'Mail this postcard?';
    const region=sheet.querySelector('[data-delivery-address]');region.innerHTML=delivery.markup();delivery.bind(region);
    submit.disabled=previewOnly||submitting||!delivery.ready;
+   slideStep(sheet,addressStep?'address':'review',addressStep?0:1,'.ks-print-body');
    if(previous!==addressStep&&sheet.open){sheet.scrollTop=0;(addressStep?region.querySelector('input:not([type="hidden"])'):sheet.querySelector('#print-title'))?.focus({preventScroll:true});}
   }
   delivery=prepareDelivery();deliveryChanged=renderAddress;renderAddress();
