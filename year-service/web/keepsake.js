@@ -30,7 +30,7 @@ export function mountKeepsake(journal,section){
   const launch=entry.querySelector('button'),modal=document.createElement('dialog');
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
   let assembleNext=false,pickPage=0,chosen=[],crops=new Map(),step='pick',file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
-  const images=new Map(),defaultArt=new Map(),urls=new Set();let cardImages=[],editorCleanup=null,previewFrame=0,orderToast=null,toastTimer=null,digitalPreviewUrl=null,borderTransition=null;
+  const images=new Map(),defaultArt=new Map(),urls=new Set();let cardImages=[],editorCleanup=null,previewFrame=0,orderToast=null,toastTimer=null,digitalPreviewUrl=null,borderTransition=null,exportSignature=null;
   const printFlow=createPrintFlow({previewOnly:journal.adminPreview===true,householdName:journal.name,householdSize:journal.householdSize,getData:()=>({file,defaultSrc:defaultSrc(),cardCount:1,personalized:!fixed,recipe:{format:'folded',mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:status=>{if(fixed&&status?.order&&!status.order.personalized)setOrdered(status.order);if(modal.open&&step==='edit')updateExport();},onOrdered:(message,simulated,order)=>{if(fixed)setOrdered(order);if(modal.open){showOrderToast(message,simulated);modal.querySelector(fixed?'[data-close]':'[data-share],[data-save]')?.focus();}}});
   const digitalFlow=createDigitalFlow({journal,getData:()=>({frame,background:frameBackground(frame),images:cardImages.slice(0,3),crops:chosen.map(id=>crops.get(id)),photoIds:fixed?[]:[...chosen],cropMap:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)]))}),loadImage,onChange:state=>{if(state?.claimed){digitalOnly=true;if(fixed)frame=state.frame;updateDigitalEntry();}if(modal.open&&step==='edit'){updateExport();if(file)void digitalFlow.prewarm();}},onSaved:(state,message)=>{if(state?.claimed){digitalOnly=true;updateDigitalEntry();if(modal.open&&(fixed||step!=='preview')){step=fixed?'edit':'preview';render();}}if(message)setStatus(message);}});
   function updateDigitalEntry(){if(!digitalOnly)return;launch.textContent=fixed?'view your postcard':'make another postcard';entry.querySelector('.pb-present-copy>p').textContent='paperless fan club · unlimited downloads';}
@@ -109,13 +109,14 @@ export function mountKeepsake(journal,section){
     const mobile=matchMedia('(pointer:coarse)').matches||innerWidth<=600;
     const useShare=mobile&&(digital||!shareFallback);
     const icon=useShare?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m-4 4 4-4 4 4M6 11H4v10h16V11h-2"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></svg>';
-    return (digitalOnly?'':printFlow.buttonMarkup())+`<button class="ks-primary ks-digital" ${useShare?'data-share':'data-save'} ${file?'':'disabled'}>${icon}<span>${busy?'Preparing…':digital&&!digitalOnly?'Keep it digital':useShare?'Share':'Save copy'}</span></button>`;
+    return (digitalOnly?'':printFlow.buttonMarkup())+`<button class="ks-primary ks-digital" ${useShare?'data-share':'data-save'} ${file?'':'disabled'}>${icon}<span>${digital&&!digitalOnly?'Keep it digital':useShare?'Share':'Save copy'}</span></button>`;
 
   }
   function pickMarkup(){const page=photos.slice(pickPage*6,pickPage*6+6);return `<div class="ks-pick-shell"><div class="ks-picks" data-page-count="${page.length}">${page.map(p=>{const n=chosen.indexOf(p.id);return `<button class="ks-pick" data-pick="${esc(p.id)}" aria-label="${esc(p.caption||p.alt)}" aria-pressed="${n>=0}"><img data-session-src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async"><span class="ks-badge" ${n<0?'hidden':''}>${n+1}</span></button>`;}).join('')}</div>${photos.length>6?`<nav class="ks-pick-pages" aria-label="Photo pages"><button class="ks-secondary" data-photo-page="-1" ${pickPage===0?'disabled':''}>Previous photos</button><span>${pickPage+1} / ${Math.ceil(photos.length/6)}</span><button class="ks-secondary" data-photo-page="1" ${(pickPage+1)*6>=photos.length?'disabled':''}>Next photos</button></nav>`:''}</div>`;}
   function frameMarkup(){if(fixed&&digitalOnly)return '';return `<div class="ks-paper-tabs pb-segments" role="group" aria-label="Frame style">${keepsakeFrames.map(({id:value,label})=>`<button class="ks-frame" data-frame="${value}" aria-pressed="${frame===value}"><span class="ks-swatch ${value}" aria-hidden="true"></span><span>${label}</span></button>`).join('')}</div>`;}
   function editorMarkup(){if(!fixed&&step==='preview')return `<div class="ks-complete-stage"><img class="ks-complete-preview" alt="Your complete digital postcard"></div>`;if(fixed&&digitalOnly)return `<div class="ks-default-editor"><p class="ks-description">paperless fan club · unlimited downloads</p><img class="ks-default-image" src="/api/print/digital/image" alt="Your complete digital postcard"></div>`;if(fixed&&ordered?.format==='folded')return `<div class="ks-default-editor"><p class="ks-description">Ordered on: ${esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}))}</p>${foldedCardMarkup({frontSrc:ordered.artworkSrc,insideSrc:null,preview:ordered.preview,pictures:ordered.pictures,frontDesign:ordered.frontDesign})}</div>`;if(fixed)return `<div class="ks-default-editor"><p class="ks-description">${ordered?'Ordered on: '+esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})):'Pixel picked these for you. Choose your border.'}</p><div class="ks-preview-wrap"><img class="ks-default-image" data-default-image src="${esc(defaultSrc())}" alt="Pixel’s fixed postcard: family photo above, dogs on the lower left and family on the lower right"></div></div>`;return `<div class="ks-editor-stage"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five postcard: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Photo ${i+1}: drag vertically to reframe, drag onto another photo to swap" aria-describedby="ks-direct-help"></button>`).join('')}</div></div><p id="ks-direct-help" class="ks-crop-hint">Drag to reframe. Drop onto another photo to swap.</p><span class="ks-editor-announcement" role="status" aria-live="polite"></span></div>`;}
   function render(){
+    exportSignature=null;
     borderTransition?.cancel();borderTransition=null;
     editorCleanup?.();editorCleanup=null;cancelAnimationFrame(previewFrame);previewFrame=0;cardImages=[];
     revision++;file=null;busy=step!=='pick';printFlow.prepare();
@@ -155,7 +156,22 @@ export function mountKeepsake(journal,section){
     slideStep(modal,step==='pick'?'pick-'+pickPage:step,step==='pick'?pickPage/100:({edit:1,preview:2}[step]),'.ks-body');
     if(modal.open)modal.querySelector('h2').focus();
   }
-  function updateExport(){const preview=modal.querySelector('[data-preview]');if(preview)preview.disabled=!file||busy;printFlow.prepare();const bottom=modal.querySelector('.ks-export-actions');if(bottom&&step!=='pick'){bottom.innerHTML=exportActions();bottom.querySelector('[data-save]')?.addEventListener('click',download);bottom.querySelector('[data-share]')?.addEventListener('click',shareCard);printFlow.bind(bottom);}}
+  function updateExport(){
+    const preview=modal.querySelector('[data-preview]');if(preview)preview.disabled=!file||busy;
+    printFlow.prepare();
+    const bottom=modal.querySelector('.ks-export-actions');if(!bottom||step==='pick')return;
+    const markup=exportActions(),signature=markup.replace(/\sdisabled(?=[\s>])/g,'').replace(/\s+>/g,'>');
+    // A new frame changes readiness, not the action buttons or their labels.
+    // Rebuild only when the available action itself changes (print/share/save).
+    if(signature!==exportSignature){
+      bottom.innerHTML=markup;exportSignature=signature;
+      bottom.querySelector('[data-save]')?.addEventListener('click',download);
+      bottom.querySelector('[data-share]')?.addEventListener('click',shareCard);
+      printFlow.bind(bottom);
+    }
+    bottom.setAttribute('aria-busy',String(busy));
+    bottom.querySelectorAll('button').forEach(button=>button.disabled=!file||busy);
+  }
   function drawCard(canvas,loaded){
     const ctx=canvas.getContext('2d');canvas.dataset.paper=drawKeepsakeFrame(ctx,frame,loaded[4]);
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';

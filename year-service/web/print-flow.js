@@ -25,7 +25,8 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   const sheet=dialog;document.body.append(dialog);bindFoldedCard(dialog,{onSwap:swapPictures,onView:view=>activeView=view});
   const message=text=>{sheet.querySelector('.ks-status').textContent=text;};
   const submit=dialog.querySelector('[data-submit-print]');
-  if(previewOnly)message('Admin preview · Final ordering is disabled. No allowance is used.');
+  const previewMessage=previewOnly?'Admin preview · Final ordering is disabled. No allowance is used.':'';
+  message(previewMessage);
   let addressStep=false;
   function renderAddress(){
    if(!sheet.isConnected)return;
@@ -50,7 +51,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   function renderCard(){const region=sheet.querySelector('[data-print-pictures]'),swap=region.querySelector('[data-swap-card]'),restore=swap&&document.activeElement===swap;region.innerHTML=cardMarkup();bindPictures(region);renderAddress();if(restore)region.querySelector('[data-swap-card]')?.focus({preventScroll:true});}
   function swapPictures(){
    if(submitting||!data.personalized)return;
-   frontDesign=data.recipe.frontDesign==='personal'?'default':'personal';data=previewData();requestKey=crypto.randomUUID();message('');
+   frontDesign=data.recipe.frontDesign==='personal'?'default':'personal';data=previewData();requestKey=crypto.randomUUID();message(previewMessage);
    renderCard();
    sheet.querySelector('[data-swap-card]')?.focus({preventScroll:true});
   }

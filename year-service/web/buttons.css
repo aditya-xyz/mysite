@@ -1,42 +1,53 @@
 /* Shared guest actions: soft rectangles, moss gradients and a quiet glass edge.
    Photo selection tiles and artwork controls keep their own geometry. */
 :root{
- --pb-action-fill:radial-gradient(ellipse at 30% 0%,#ffffff18,transparent 65%),linear-gradient(180deg,#47735b 0%,#315d47 48%,#284e3b 100%);
+ --pb-action-fill:radial-gradient(ellipse at 30% 0%,#ffffff2b,transparent 65%),linear-gradient(180deg,#47735b 0%,#315d47 48%,#284e3b 100%);
  --pb-action-border:#244b38;
  --pb-action-ink:#fffdf5;
- --pb-action-shadow:inset 0 1px 0 #ffffff45,inset 0 -1px 0 #00000016,0 1px 2px #142b1924;
+ --pb-action-shadow:inset 0 1px 0 #ffffff62,inset 0 -1px 0 #00000016,0 1px 2px #142b1924;
  --pb-soft-fill:linear-gradient(180deg,color-mix(in srgb,var(--paper) 86%,white),var(--paper) 48%,color-mix(in srgb,var(--paper) 95%,var(--ink)));
  --pb-soft-shadow:inset 0 1px 0 #ffffff85,inset 0 -1px 0 #20392f08,0 1px 2px #142b1912;
 }
 :root[data-palette=night]{--pb-soft-shadow:inset 0 1px 0 #ffffff18,inset 0 -1px 0 #0002,0 1px 2px #0003}
 /* Root/body scope keeps the shared treatment above older screen-specific styles. */
 :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){
+ --pb-control-fill:var(--pb-action-fill);
  border:1px solid var(--pb-action-border);
- border-radius:8px;
- background:var(--pb-action-fill);
+ border-radius:12px;
+ corner-shape:superellipse(1.25);
+ background-image:linear-gradient(105deg,transparent 42%,#ffffff26 50%,transparent 58%),var(--pb-control-fill);
+ background-size:260% 100%,100% 100%,100% 100%;
+ background-position:100% 0,center,center;
+ background-repeat:no-repeat;
  color:var(--pb-action-ink);
  box-shadow:var(--pb-action-shadow);
  text-decoration:none;
- transition:filter 140ms ease,box-shadow 140ms ease;
 }
 :root :is(body,#keepsake,#photo) :is(.pb-secondary-button,.delivery-secondary,.text-button,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle){
- background:var(--pb-soft-fill);
+ --pb-control-fill:var(--pb-soft-fill);
  border-color:var(--line);
  color:var(--ink);
  box-shadow:var(--pb-soft-shadow);
 }
 :root :is(body,#keepsake,#photo) :is(.ks-frame,.pb-mockup-view,.fc-views button)[aria-pressed=true]{
- background:var(--pb-action-fill);
+ --pb-control-fill:var(--pb-action-fill);
  border-color:var(--pb-action-border);
  color:var(--pb-action-ink);
  box-shadow:var(--pb-action-shadow);
 }
-:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control):hover:not(:disabled){filter:brightness(1.06);translate:none}
-:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control):active:not(:disabled){filter:brightness(.97);box-shadow:inset 0 1px 3px #142b1933}
-:root .text-button{padding-inline:12px}
-@media(prefers-reduced-motion:reduce){
- :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){transition:none}
+
+/* Text actions size to their label and wrap when space is tight. */
+:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.resolution-control){
+ inline-size:fit-content;
+ min-inline-size:44px;
+ max-inline-size:100%;
+ flex:0 1 auto;
+ padding-inline:clamp(12px,4vw,20px);
+ white-space:normal;
+ overflow-wrap:anywhere;
+ text-align:center;
 }
+:root :is(body,#keepsake,#photo) .text-button{padding-inline:12px}
 /* Keep the three frame choices in one compact rectangular group on phones. */
 :root #keepsake .ks-paper-tabs{border-radius:10px}
 @media(max-width:600px){
@@ -44,8 +55,6 @@
  :root #keepsake .ks-paper-tabs .ks-frame{flex:1;min-width:0;justify-content:center;padding-inline:6px;gap:4px;font-size:11px}
 }
 
-/* A softer curve with continuous corners on browsers that support them. */
-:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control){border-radius:12px;corner-shape:superellipse(1.25)}
 :root :is(body,#keepsake,#photo) .pb-segments{
  --pb-segment-count:3;--pb-segment-index:0;
  position:relative;isolation:isolate;display:flex;flex-wrap:nowrap;gap:0;padding:4px;
@@ -73,7 +82,7 @@
 .pb-mockup-crossfade{position:absolute;display:block;pointer-events:none;margin:0;border:0}
 @media(max-width:700px){
  :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary){min-height:44px;padding-block:9px}
- :root :is(body,#keepsake,#photo) .ks-gift{min-height:44px;padding-block:9px;text-align:center;font-size:14px;gap:8px;white-space:nowrap}
+ :root :is(body,#keepsake,#photo) .ks-gift{min-height:44px;padding-block:9px;font-size:14px;gap:8px}
  :root #keepsake .ks-gift svg{width:20px;height:20px}
  :root :is(body,#keepsake,#photo) .pb-segments>button[aria-pressed]{min-height:36px;padding-block:6px}
  :root #keepsake .ks-paper-tabs .ks-frame{padding-inline:5px;gap:4px;font-size:11px}
@@ -87,7 +96,7 @@
 
 /* The gift keeps its festive red, with the same glossy surface as other actions. */
 :root .ks-gift{
- --pb-action-fill:radial-gradient(ellipse at 30% 0%,#ffffff28,transparent 65%),linear-gradient(180deg,#cb4d52 0%,#b72b3c 48%,#922237 100%);
+ --pb-action-fill:radial-gradient(ellipse at 30% 0%,#ffffff3d,transparent 65%),linear-gradient(180deg,#cb4d52 0%,#b72b3c 48%,#922237 100%);
  --pb-action-border:#861c30;
  --pb-action-shadow:inset 0 1px 0 #ffffff66,inset 0 -1px 0 #650e242e,0 1px 3px #54102724;
 }
@@ -98,17 +107,11 @@
  box-shadow:inset 0 1px 0 #ffffff65,inset 0 -1px 0 #20392f0a,0 2px 8px #142b190a;
 }
 :root :is(body,#keepsake,#photo) .pb-segments::before{transition-timing-function:cubic-bezier(.2,.9,.25,1.12)}
-:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.pb-close,.photo-control){transition:filter 140ms ease,scale 160ms cubic-bezier(.2,.8,.2,1),box-shadow 140ms ease}
-:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.pb-close,.photo-control):active:not(:disabled){scale:.98}
 @media(max-width:700px){
  :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary){min-height:38px;padding-block:6px;font-size:14px;line-height:1.4}
  :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary)::after{content:'';position:absolute;inset:-3px 0;border-radius:inherit}
  :root :is(body,#keepsake,#photo) .pb-segments>button[aria-pressed]{min-height:32px;padding-block:5px}
  :root :is(body,#keepsake,#photo) .pb-segments>button[aria-pressed]::after{content:'';position:absolute;inset:-6px 0;border-radius:inherit}
-}
-@media(prefers-reduced-motion:reduce){
- :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.pb-close,.photo-control){transition:none}
- :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.pb-close,.photo-control):active:not(:disabled){scale:1}
 }
 @media(prefers-reduced-transparency:reduce){
  :root :is(body,#keepsake,#photo) .pb-segments{background:var(--paper);-webkit-backdrop-filter:none;backdrop-filter:none}
@@ -144,8 +147,8 @@
 :root #photo .photo-control.close:hover::before,:root #photo .photo-control.close:focus-visible::before{background:#08110d45}
 
 /* Photo actions float quietly over the image rather than using gift colors. */
-:root #photo .photo-control:not(.close){background:rgb(10 15 13 / .28);border-color:#ffffff25;box-shadow:none;color:#fff;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-:root #photo .photo-control:not(.close):hover:not(:disabled),:root #photo .photo-control:not(.close):focus-visible{background:rgb(10 15 13 / .46);box-shadow:none;filter:none}
+:root #photo .photo-control:not(.close){background-color:rgb(10 15 13 / .28);background-image:linear-gradient(#ffffff1f,transparent 60%);border-color:#ffffff45;box-shadow:none;color:#fff;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+:root #photo .photo-control:not(.close):focus-visible{background-color:rgb(10 15 13 / .46)}
 @media(prefers-reduced-transparency:reduce){:root #photo .photo-control:not(.close){background:#202723;-webkit-backdrop-filter:none;backdrop-filter:none}}
 
 /* A neutral dark lens keeps the white close glyph visible on bright photos. */
@@ -173,3 +176,42 @@
 :root[data-palette=night] footer .pb-closing-photo{border-color:var(--pb-sheet)}
 /* Give white and black mugs an equally readable, softly lit display surface. */
 :root[data-palette=night] .pb-mug-preview:has(.pb-printful-mockup){background:radial-gradient(ellipse at 50% 40%,#70846d90 0%,#536a5338 48%,transparent 72%)}
+
+/* The highlight moves with a quick lift, and both mouse and touch get a press. */
+:root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control,.pb-design,.ks-pick,.pb-mugshot-stack,.pb-select-list button){
+ touch-action:manipulation;
+}
+@media (prefers-reduced-motion:no-preference){
+ :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control,.pb-design,.ks-pick,.pb-mugshot-stack,.pb-select-list button){
+  transition:background-position 420ms ease-out,color 180ms ease,filter 150ms ease,
+    translate 210ms cubic-bezier(.2,.8,.3,1.35),scale 210ms cubic-bezier(.2,.8,.3,1.35);
+ }
+ @media (hover:hover) and (pointer:fine){
+  :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control,.pb-design,.ks-pick,.pb-mugshot-stack,.pb-select-list button):hover:not(:disabled,[aria-disabled=true]){
+   background-position:0 0,center,center;
+   filter:brightness(1.075);
+   translate:0 -2px;
+   scale:1.015;
+  }
+ }
+ :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control,.pb-design,.ks-pick,.pb-mugshot-stack,.pb-select-list button):is(:active,[data-button-pressed]):not(:disabled,[aria-disabled=true]){
+  background-position:0 0,center,center;
+  filter:brightness(.97);
+  translate:0 1px;
+  scale:.965;
+  transition-duration:160ms,100ms,75ms,75ms,75ms;
+ }
+}
+@media (prefers-reduced-motion:reduce){
+ :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control,.pb-design,.ks-pick,.pb-mugshot-stack,.pb-select-list button):is(:active,[data-button-pressed]):not(:disabled,[aria-disabled=true]){
+  filter:brightness(.94);
+ }
+}
+
+/* Photo cards already lift on hover. Give a tap the same feedback as a mouse press. */
+:root .grid .card:is(:active,[data-button-pressed]){
+ filter:brightness(.96);
+}
+@media (prefers-reduced-motion:no-preference){
+ :root .grid .card[data-button-pressed]{translate:0 1px}
+}

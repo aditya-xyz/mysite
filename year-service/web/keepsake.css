@@ -37,7 +37,7 @@ html:has(#keepsake[open]){overflow:hidden}
 
 /* Keep the real export and gesture controls, with the new paper studio finish. */
 .ks-entry{margin:30px 0 0;padding:24px 28px;border:0;border-radius:18px;background:var(--peach);align-items:center}.ks-entry .kicker{font:500 14px/1.4 Asap,system-ui,sans-serif;text-transform:none;letter-spacing:.035em}.ks-entry h2{font:400 28px/1.15 Asap,system-ui,sans-serif}.ks-entry p:not(.kicker){font-size:12px}.ks-entry .button{font-size:13px}.ks-top h2{font-family:Asap,system-ui,sans-serif;font-size:23px}#keepsake{border-radius:22px;background:var(--paper);color:var(--ink)}.ks-icon{background:var(--paper);border:1px solid var(--line)}.ks-preview-wrap{box-shadow:0 8px 28px #20392f12}.ks-body{padding:24px}.ks-frame{border-radius:22px;min-height:38px;background:var(--paper)}.ks-frame[aria-pressed=true]{background:var(--surface);border-color:var(--button)}.ks-top{border-bottom:0}.ks-bottom{border-top:0}.ks-count{font-size:12px}.ks-crop-hint{font-size:12px}.ks-pick{border-radius:3px;border:7px solid #fffdf7;background:#fffdf7}.ks-order button{font-family:inherit}#keepsake[open]{animation:ks-paper-in .24s ease-out both}@keyframes ks-paper-in{from{opacity:0;transform:translateY(12px) scale(.99)}to{opacity:1;transform:none}}
-@media(max-width:600px){.ks-entry{padding:22px;gap:16px;margin-top:28px}.ks-entry h2{font-size:26px}.ks-entry p:not(.kicker){display:none}.ks-entry .button{width:100%}#keepsake{border-radius:0}.ks-top{padding:16px 18px 8px}.ks-top h2{font-size:21px}.ks-body{padding:20px 24px 10px}.ks-preview-wrap{width:min(100%,345px,calc((100dvh - 330px)*.8))}.ks-bottom{padding-left:24px;padding-right:24px}.ks-picks{gap:14px}}
+@media(max-width:600px){.ks-entry{padding:22px;gap:16px;margin-top:28px}.ks-entry h2{font-size:26px}.ks-entry p:not(.kicker){display:none}#keepsake{border-radius:0}.ks-top{padding:16px 18px 8px}.ks-top h2{font-size:21px}.ks-body{padding:20px 24px 10px}.ks-preview-wrap{width:min(100%,345px,calc((100dvh - 330px)*.8))}.ks-bottom{padding-left:24px;padding-right:24px}.ks-picks{gap:14px}}
 @media(prefers-reduced-motion:reduce){#keepsake[open]{animation:none}}
 
 /* Leave room for selected outlines and the final row above the action bar. */
@@ -56,7 +56,6 @@ html:has(#keepsake[open]){overflow:hidden}
 /* Desktop actions should fit their labels rather than stretch across the sheet. */
 @media(min-width:601px){
   #keepsake:has(.ks-preview-wrap) .ks-bottom{justify-content:flex-end}
-  #keepsake .ks-gift,#keepsake .ks-digital{flex:0 0 auto;min-width:170px;padding-inline:22px}
 }
 
 .ks-assembly{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
@@ -232,7 +231,7 @@ html:has(#keepsake[open]){overflow:hidden}
 .ks-digital-confirm{height:calc(100dvh - 32px);max-height:1000px;overflow:hidden}.ks-digital-confirm[open]{display:flex;flex-direction:column}.ks-digital-confirm-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;gap:12px;padding:0 24px 12px}.ks-digital-confirm-body>img{flex:1;min-height:0;width:100%;max-height:none;object-fit:contain;margin:0}.ks-digital-confirm-body p{flex:none;margin:0;width:100%;font-size:14px}.ks-digital-confirm .ks-bottom{flex:none;position:static}
 @media(max-width:600px){#keepsake .ks-picks{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(var(--pick-mobile-rows),minmax(0,1fr))}#keepsake .ks-crop-hint span{display:none}.ks-digital-confirm .ks-top h2{font-size:20px}.ks-digital-confirm-body{padding-inline:16px;gap:8px}.ks-digital-confirm-body p{font-size:13px}}
 /* Desktop postcard dialogs follow the artwork rather than the wide gallery. */
-@media(min-width:601px){#keepsake{width:min(780px,calc(100vw - 40px))}#keepsake:has(.ks-complete-stage){width:min(640px,calc(100vw - 40px))}#keepsake .ks-complete-preview{max-width:100%}#keepsake .ks-bottom:has([data-preview]){justify-content:flex-end}#keepsake [data-preview]{flex:0 0 auto;min-width:180px}}
+@media(min-width:601px){#keepsake{width:min(780px,calc(100vw - 40px))}#keepsake:has(.ks-complete-stage){width:min(640px,calc(100vw - 40px))}#keepsake .ks-complete-preview{max-width:100%}#keepsake .ks-bottom:has([data-preview]){justify-content:flex-end}}
 #keepsake .ks-picks{grid-template-rows:repeat(2,minmax(0,1fr))}#keepsake .ks-picks[data-page-count="1"],#keepsake .ks-picks[data-page-count="2"],#keepsake .ks-picks[data-page-count="3"]{grid-template-rows:1fr}
 @media(max-width:600px){#keepsake .ks-picks{grid-template-rows:repeat(3,minmax(0,1fr))}#keepsake .ks-picks[data-page-count="3"],#keepsake .ks-picks[data-page-count="4"]{grid-template-rows:repeat(2,minmax(0,1fr))}#keepsake .ks-picks[data-page-count="1"],#keepsake .ks-picks[data-page-count="2"]{grid-template-rows:1fr}}
 
@@ -242,6 +241,21 @@ html:has(#keepsake[open]){overflow:hidden}
  #keepsake .ks-top{padding-block:10px}
  #keepsake .ks-select-body{padding-block:10px}
 }
+
+/* Picker photos follow their own proportions, like the main gallery. */
+#keepsake .ks-select-body{overflow-y:auto}
+#keepsake .ks-select-body .ks-pick-shell{flex:none;min-height:auto}
+#keepsake .ks-select-body .ks-picks[data-page-count]{
+ flex:none;grid-template-rows:none;grid-auto-rows:auto;align-items:start;
+}
+#keepsake .ks-select-body .ks-picks[data-page-count] .ks-pick{
+ width:100%;height:auto;aspect-ratio:auto;align-self:start;
+ border:7px solid var(--pb-sheet);background:var(--pb-sheet);
+}
+#keepsake .ks-select-body .ks-pick img{width:100%;height:auto;object-fit:contain}
+
+/* Repainting a border temporarily blocks export without flashing the actions. */
+#keepsake .ks-export-actions[aria-busy=true] :is(.ks-primary,.ks-gift):disabled{opacity:1;cursor:progress}
 
 /* Address entry is a separate task; return to the postcard after accepting it. */
 .ks-print-dialog.ks-address-step [data-print-pictures],.ks-print-dialog.ks-address-step>.ks-bottom{display:none}

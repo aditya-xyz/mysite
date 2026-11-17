@@ -1,0 +1,142 @@
+/* Warm ivory, pistachio, apricot, and terracotta: light-theme gift tokens. */
+:root[data-palette=moss] {
+  --pb-light-page: #f8f4ed;
+  --pb-light-postcard: #edf2e8;
+  --pb-light-mug: #fff0e6;
+  --pb-light-heading: #9e4533;
+  --pb-light-button: #285a46;
+  --pb-light-body: #403d37;
+  --pb-light-cream: #fff8ed;
+  --paper: var(--pb-light-page);
+  --ink: var(--pb-light-body);
+  --accent: var(--pb-light-heading);
+  --button: var(--pb-light-button);
+  --button-ink: var(--pb-light-cream);
+  --pb-action-ink: var(--pb-light-cream);
+  --pb-action-border: #204d3b;
+  --pb-light-action-fill: radial-gradient(ellipse at 30% 0%, #ffffff20, transparent 65%),
+    linear-gradient(180deg, #346b53, var(--pb-light-button) 55%, #204d3b);
+  --pb-action-fill: var(--pb-light-action-fill);
+  --pb-disabled-fill: color-mix(in srgb, var(--pb-light-button) 14%, var(--paper));
+  --pb-disabled-ink: var(--pb-light-body);
+  --pb-disabled-border: color-mix(in srgb, var(--pb-light-button) 38%, var(--paper));
+}
+:root[data-palette=moss] :is(.pb-presents .keepsake-section, #keepsake,
+  .ks-print-dialog, .ks-digital-confirm) {
+  --pb-gift-surface: var(--pb-light-postcard);
+  --pb-gift-edge: #b9cbb0;
+  --pb-gift-edge-hover: #87a77d;
+  --pb-gift-doodle: #518269;
+}
+:root[data-palette=moss] :is(#pb-gift, .pb-gift-dialog, .pb-mug-customizer) {
+  --pb-gift-surface: var(--pb-light-mug);
+  --pb-gift-edge: #f1cbb0;
+  --pb-gift-edge-hover: #dda27d;
+  --pb-gift-doodle: #e9a17d;
+  --pb-blush: #e5c9b3;
+}
+:root[data-palette=moss] :is(.pb-presents .pb-present-card, .pb-gift-dialog,
+  .pb-mug-customizer, #keepsake, .ks-print-dialog, .ks-digital-confirm) {
+  --paper: var(--pb-gift-surface);
+  --surface: color-mix(in srgb, var(--pb-gift-surface) 85%, white);
+  --ink: var(--pb-light-body);
+  --muted: #686158;
+  --line: var(--pb-gift-edge);
+  --pb-sheet: #fffdf8;
+  --pb-soft-fill: linear-gradient(180deg, #fffdf8, var(--paper));
+  background: radial-gradient(ellipse at 35% 12%, #fffdf878, transparent 72%), var(--paper);
+  border-color: var(--pb-gift-edge);
+  box-shadow: 0 8px 24px #63452b0d;
+}
+:root[data-palette=moss] .pb-presents .pb-present-copy h3,
+:root[data-palette=moss] .pb-gift #pb-gift-title,
+:root[data-palette=moss] .pb-gift #pb-gift-title em {
+  color: var(--pb-light-heading);
+}
+:root[data-palette=moss] .pb-presents-heading h2 {
+  color: var(--pb-light-heading);
+  position: relative;
+  width: fit-content;
+}
+:root[data-palette=moss] .pb-presents-heading h2::after {
+  content: '';
+  position: absolute;
+  left: 44%;
+  bottom: -15px;
+  width: 34%;
+  height: 12px;
+  border-top: 4px solid #518269;
+  border-radius: 50%;
+  rotate: -2deg;
+  pointer-events: none;
+}
+:root[data-palette=moss] .pb-presents-heading .pb-eyebrow {
+  color: var(--pb-light-button);
+}
+:root[data-palette=moss] .pb-presents-budget {
+  color: var(--pb-light-heading);
+  border-color: #e6d4c0;
+}
+:root[data-palette=moss] .pb-presents .pb-gift-sticker {
+  background: #e5c35f;
+  color: #302718;
+}
+:root[data-palette=moss] .ks-gift {
+  --pb-action-fill: var(--pb-light-action-fill);
+  --pb-disabled-fill: color-mix(in srgb, var(--pb-light-button) 14%, var(--paper));
+  --pb-disabled-ink: var(--pb-light-body);
+  --pb-disabled-border: color-mix(in srgb, var(--pb-light-button) 38%, var(--paper));
+  --pb-action-ink: var(--pb-light-cream);
+  --pb-action-border: #204d3b;
+}
+:root[data-palette=moss] .ks-gift :is(svg, small) {color: inherit}
+:root[data-palette=moss] :is(body, #keepsake, #photo) .pb-mockup-views.pb-segments {
+  border-color: #987d69;
+}
+:root[data-palette=moss] .pb-presents .pb-present-card {
+  border-radius: 16px;
+  transition: translate 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+:root[data-palette=moss] .pb-presents .pb-present-card:focus-within {
+  border-color: var(--pb-gift-edge-hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root[data-palette=moss] .pb-presents .pb-present-card:hover {
+    border-color: var(--pb-gift-edge-hover);
+    box-shadow: 0 14px 28px #63452b1a;
+  }
+  :root[data-palette=moss] .pb-presents .button:hover:not(:disabled) {filter: brightness(1.05)}
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :root[data-palette=moss] .pb-presents .pb-present-card:hover {translate: 0 -3px}
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-palette=moss] .pb-presents .pb-present-card {transition: none}
+}
+
+/* Decorative strokes and small arrows share the existing component structure. */
+:root[data-palette=night] .pb-presents .keepsake-section {--pb-gift-doodle: var(--pb-night-sage)}
+:root[data-palette=night] #pb-gift {--pb-gift-doodle: #bca6c5}
+.pb-presents .pb-present-art::after {
+  content: '';
+  position: absolute;
+  left: 8%;
+  top: 8%;
+  width: 34px;
+  height: 36px;
+  background: var(--pb-gift-doodle);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 36'%3E%3Cpath d='M4 29l12-1M8 15l11 6M23 5l5 11' stroke='black' stroke-width='4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") center / contain no-repeat;
+  pointer-events: none;
+}
+.pb-presents #pb-gift .pb-present-art::after {left: auto;right: 5%;top: 4%;scale: -1 1}
+.pb-presents .pb-present-copy > .button {gap: 12px}
+.pb-presents .pb-present-copy > .button::before {
+  content: '';
+  order: 1;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 12h15m-6-6 6 6-6 6' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") center / contain no-repeat;
+  pointer-events: none;
+}

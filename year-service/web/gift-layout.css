@@ -1,0 +1,136 @@
+/* Shared geometry: changing themes must never change a gift flow's layout. */
+:root :is(.ks-print-dialog, .ks-digital-confirm) .ks-bottom {
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--pb-gift-edge);
+}
+:root :is(.ks-print-dialog, .ks-digital-confirm) .ks-primary {
+  flex: 0 1 auto;
+}
+:root :is(body, #keepsake) :is(.ks-print-dialog, .ks-digital-confirm) .ks-primary:disabled {
+  background: var(--pb-disabled-fill);
+  color: var(--pb-disabled-ink);
+  border: 1px dashed var(--pb-disabled-border);
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
+}
+:root .ks-digital-confirm {
+  width: min(640px, calc(100vw - 24px));
+  height: fit-content;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+:root .ks-digital-confirm .ks-digital-confirm-body {
+  flex: none;
+  gap: 16px;
+}
+:root .ks-digital-confirm .ks-digital-confirm-body > img {
+  flex: none;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(560px, calc(100dvh - 260px));
+}
+@media (min-width: 760px) {
+  :root .ks-print-dialog:not(.ks-address-step) {
+    width: min(760px, calc(100vw - 48px));
+  }
+  :root .ks-print-dialog:not(.ks-address-step) .ks-print-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto minmax(0, 1fr);
+    align-items: start;
+    gap: 0 24px;
+    padding-block: 8px 20px;
+  }
+  :root .ks-print-dialog:not(.ks-address-step) [data-print-pictures] {
+    grid-column: 1;
+    grid-row: 1 / 5;
+  }
+  :root .ks-print-dialog:not(.ks-address-step) :is([data-delivery-address], .ks-status) {
+    grid-column: 2;
+  }
+  :root .ks-print-dialog:not(.ks-address-step) [data-delivery-address] {
+    grid-row: 2;
+  }
+  :root .ks-print-dialog:not(.ks-address-step) .ks-status {
+    grid-row: 3;
+    margin: 12px 0 0;
+  }
+  :root .ks-print-dialog .fc-views {flex-wrap: wrap}
+}
+
+/* Mug details and address steps fit their content in both color modes. */
+.pb-gift-dialog.pb-mug-review {
+  width: min(800px, calc(100vw - 32px));
+  height: fit-content;
+}
+.pb-gift-dialog:has(.pb-dialog-body > .delivery-panel) {
+  width: min(640px, calc(100vw - 32px));
+}
+.pb-gift-dialog:is(.pb-mug-review, :has(.pb-dialog-body > .delivery-panel)) .pb-dialog-top {
+  padding: 18px 24px 12px;
+}
+.pb-gift-dialog:is(.pb-mug-review, :has(.pb-dialog-body > .delivery-panel)) .pb-preview-banner {
+  margin-inline: 24px;
+  margin-bottom: 12px;
+}
+.pb-gift-dialog:is(.pb-mug-review, :has(.pb-dialog-body > .delivery-panel)) .pb-order-steps {
+  gap: 12px;
+  padding: 0 24px 14px;
+}
+.pb-gift-dialog:is(.pb-mug-review, :has(.pb-dialog-body > .delivery-panel)) .pb-dialog-body {
+  flex: none;
+  padding: 16px 24px;
+}
+.pb-gift-dialog:is(.pb-mug-review, :has(.pb-dialog-body > .delivery-panel)) .pb-dialog-bottom {
+  padding: 14px 24px;
+}
+.pb-gift-dialog.pb-mug-review .pb-order-review {
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto;
+  gap: 24px;
+  align-items: center;
+  padding: 0;
+}
+.pb-gift-dialog.pb-mug-review .pb-order-review > .pb-mug-preview {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  height: auto;
+  min-height: 0;
+}
+.pb-gift-dialog.pb-mug-review .pb-order-review :is(.pb-printful-mockup, .pb-mockup-wait) {
+  flex: none;
+  width: 100%;
+  height: min(300px, 36dvh);
+  min-height: 0;
+  transform: none;
+  clip-path: none;
+  margin-block: 0;
+}
+.pb-gift-dialog.pb-mug-review .pb-mug-summary {
+  margin-top: 16px;
+}
+@media (max-width: 700px) {
+  .pb-gift-dialog.pb-mug-review[open] {
+    height: fit-content;
+  }
+  .pb-gift-dialog.pb-mug-review .pb-order-review {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 12px;
+  }
+  .pb-gift-dialog.pb-mug-review .pb-order-review :is(.pb-printful-mockup, .pb-mockup-wait) {
+    height: min(240px, 28dvh);
+  }
+  .pb-gift-dialog:is(.pb-mug-review, :has(.pb-dialog-body > .delivery-panel)) .pb-order-steps {
+    gap: 8px;
+    padding-inline: 18px;
+  }
+  .pb-gift-dialog:is(.pb-mug-review, :has(.pb-dialog-body > .delivery-panel)) .pb-dialog-body {
+    padding: 12px 18px;
+  }
+}

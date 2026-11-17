@@ -1,0 +1,203 @@
+/* Midnight forest: shared night tokens, with paper and aubergine gift surfaces. */
+:root[data-palette=night] {
+  --pb-night-page: #0b1412;
+  --pb-night-postcard: #10231f;
+  --pb-night-mug: #211c29;
+  --pb-night-cutout: #332a38;
+  --pb-night-heading: #f5e5d7;
+  --pb-night-body: #e7ddd5;
+  --pb-night-accent: #e8af91;
+  --pb-night-sage: #a9d49f;
+  --pb-night-sticker: #e5c35f;
+  --pb-night-button-ink: #122019;
+  --paper: var(--pb-night-page);
+  --ink: var(--pb-night-body);
+  --accent: var(--pb-night-accent);
+  --button: var(--pb-night-sage);
+  --button-ink: var(--pb-night-button-ink);
+  --pb-action-ink: var(--pb-night-button-ink);
+  --pb-action-border: #c2dfb94d;
+  --pb-night-action-fill: radial-gradient(ellipse at 30% 0%, #ffffff18, transparent 65%),
+    linear-gradient(180deg, #b9dfaf, var(--pb-night-sage) 55%, #99c58f);
+  --pb-action-fill: var(--pb-night-action-fill);
+  --pb-readable-line: color-mix(in srgb, var(--ink) 46%, var(--paper));
+  --pb-photo-border: #a7b49c;
+}
+
+/* A lighter sage paper edge, shared by the gallery and postcard picker. */
+:root[data-palette=night] .grid .card {
+  background: var(--pb-photo-border);
+  color: #20362b;
+}
+:root[data-palette=night] #keepsake .ks-select-body .ks-picks[data-page-count] .ks-pick {
+  border-color: var(--pb-photo-border);
+  background: var(--pb-photo-border);
+}
+:root[data-palette=night] #keepsake .ks-pick[aria-pressed=true]::after {
+  border-color: #20362b;
+}
+
+/* Carry each gift's surface into its editor, customization, and confirmation. */
+:root[data-palette=night] :is(.pb-presents .keepsake-section, #keepsake,
+  .ks-print-dialog, .ks-digital-confirm) {
+  --pb-gift-surface: var(--pb-night-postcard);
+  --pb-gift-edge: #70b89c40;
+  --pb-gift-edge-hover: #8ed0b470;
+  --pb-gift-glow: #a9d49f0a;
+}
+:root[data-palette=night] :is(#pb-gift, .pb-gift-dialog, .pb-mug-customizer) {
+  --pb-gift-surface: var(--pb-night-mug);
+  --pb-gift-edge: #c4a5d140;
+  --pb-gift-edge-hover: #d8bce57a;
+  --pb-gift-glow: #d6b3d20c;
+}
+:root[data-palette=night] :is(.pb-presents .pb-present-card, .pb-gift-dialog,
+  .pb-mug-customizer, #keepsake, .ks-print-dialog, .ks-digital-confirm) {
+  --paper: var(--pb-gift-surface);
+  --surface: color-mix(in srgb, var(--pb-gift-surface) 88%, var(--pb-night-body));
+  --pb-sheet: #d2c4cd;
+  --ink: var(--pb-night-body);
+  --muted: #c5b9bd;
+  --line: var(--pb-gift-edge);
+  --pb-readable-line: color-mix(in srgb, var(--pb-night-body) 45%, var(--pb-gift-surface));
+  --pb-soft-fill: linear-gradient(180deg, var(--surface), var(--paper));
+  background: radial-gradient(ellipse at 35% 12%, var(--pb-gift-glow), transparent 72%), var(--paper);
+  border-color: var(--pb-gift-edge);
+  box-shadow: 0 10px 28px #00000020;
+}
+:root[data-palette=night] :is(h1, h2, h3),
+:root[data-palette=night] .pb-presents .pb-present-copy h3,
+:root[data-palette=night] .pb-gift #pb-gift-title,
+:root[data-palette=night] .pb-gift #pb-gift-title em {
+  color: var(--pb-night-heading);
+}
+:root[data-palette=night] .pb-presents-heading h2 {
+  color: var(--pb-night-heading);
+  position: relative;
+  width: fit-content;
+}
+:root[data-palette=night] .pb-presents-heading h2::after {
+  content: '';
+  position: absolute;
+  left: 44%;
+  bottom: -15px;
+  width: 34%;
+  height: 12px;
+  border-top: 4px solid var(--pb-night-sage);
+  border-radius: 50%;
+  rotate: -2deg;
+  pointer-events: none;
+}
+:root[data-palette=night] .pb-presents-heading .pb-eyebrow {
+  color: var(--pb-night-sage);
+}
+:root[data-palette=night] .pb-presents .pb-gift-sticker {
+  background: var(--pb-night-sticker);
+  color: var(--pb-night-button-ink);
+}
+:root[data-palette=night] .ks-gift {
+  --pb-action-fill: var(--pb-night-action-fill);
+  --pb-action-border: #c2dfb94d;
+  --pb-action-ink: var(--pb-night-button-ink);
+  --pb-action-shadow: inset 0 1px 0 #ffffff70, 0 2px 5px #0003;
+}
+:root[data-palette=night] .ks-gift :is(svg, small) {
+  color: inherit;
+}
+
+/* Keep the cutout chooser's backing dark without changing other paper borders. */
+:root[data-palette=night] .pb-gift-dialog .pb-design-image {
+  background: var(--pb-night-cutout);
+  border-color: var(--pb-night-cutout);
+}
+
+/* Confirmation colors; their layout is shared by both themes. */
+:root[data-palette=night] {
+  --pb-disabled-fill: color-mix(in srgb, var(--pb-night-sage) 22%, var(--paper));
+  --pb-disabled-ink: var(--pb-night-body);
+  --pb-disabled-border: color-mix(in srgb, var(--pb-night-sage) 45%, var(--paper));
+}
+:root[data-palette=night] .ks-print-dialog .fc-views .fc-swap {
+  border-color: var(--pb-readable-line);
+  color: var(--pb-night-body);
+}
+
+:root[data-palette=night] .pb-presents .pb-present-card {
+  border-radius: 16px;
+  transition: translate 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+:root[data-palette=night] .pb-presents .pb-present-card:focus-within {
+  border-color: var(--pb-gift-edge-hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  :root[data-palette=night] .pb-presents .pb-present-card:hover {
+    border-color: var(--pb-gift-edge-hover);
+    box-shadow: 0 16px 32px #00000038;
+  }
+  :root[data-palette=night] .pb-presents .button:hover:not(:disabled) {
+    filter: brightness(1.05);
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :root[data-palette=night] .pb-presents .pb-present-card:hover {
+    translate: 0 -3px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-palette=night] .pb-presents .pb-present-card {
+    transition: none;
+  }
+}
+
+/* Lift supporting copy a little without changing headings or surface colors. */
+:root[data-palette=night] :is(body, #keepsake) :is(.pb-section-heading p, .pb-stack-hint,
+  .pb-gift-allowance, .pb-design-caption, .pb-preview-banner,
+  .pb-preview-note, .pb-mockup-status, .pb-mug-care, .delivery-note,
+  .pb-address-country, .pb-save-address small, .ks-count, .ks-crop-hint) {
+  color: color-mix(in srgb, var(--muted) 85%, var(--ink));
+}
+
+/* Brighter edges only where they identify an interactive control. */
+:root[data-palette=night] :is(.entry, .pb-field, .delivery-form)
+  input:not([type=checkbox], [type=radio], [type=hidden]) {
+  border-color: var(--pb-readable-line);
+  color: var(--ink);
+}
+:root[data-palette=night] :is(.entry, .pb-field, .delivery-form) input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+:root[data-palette=night] :is(body, #keepsake, #photo)
+  :is(.pb-secondary-button, .delivery-secondary, .text-button, .ks-secondary,
+  .ks-icon, .pb-close, .pb-select-trigger, .theme-toggle, .pb-segments) {
+  border-color: var(--pb-readable-line);
+}
+:root[data-palette=night] :is(.pb-select-list, .delivery-panel .address-autocomplete) {
+  border-color: var(--pb-readable-line);
+}
+:root[data-palette=night] :is(.pb-select-list, .delivery-panel .address-autocomplete)
+  [role=option][aria-selected=true] {
+  box-shadow: inset 3px 0 var(--button);
+}
+
+/* Use the existing peach accent for a clear keyboard focus indicator. */
+:root[data-palette=night] :is(input, textarea, select, button, a):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+:root[data-palette=night] :is(.entry, .pb-field, .delivery-form) input:focus {
+  border-color: var(--accent);
+}
+
+/* Slightly deepen the neutral lens behind white photo controls. */
+:root[data-palette=night] #photo .photo-control:not(.close) {
+  background-color: rgb(10 15 13 / .46);
+}
+:root[data-palette=night] #photo .photo-control:not(.close):is(:hover, :focus-visible) {
+  background-color: rgb(10 15 13 / .62);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-palette=night] #photo .photo-control:not(.close) {
+    background-color: #202723;
+  }
+}
