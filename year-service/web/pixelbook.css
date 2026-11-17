@@ -393,7 +393,7 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-mug-review #pb-order-title{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .pb-mug-review .pb-dialog-top .pb-eyebrow{margin:0}
 @media(max-width:700px){
- .pb-gift-dialog.pb-mug-review[open]{display:flex;flex-direction:column;height:calc(100dvh - 24px)}
+ .pb-gift-dialog.pb-mug-review[open]{display:flex;flex-direction:column;height:min(740px,calc(100dvh - 24px))}
  .pb-mug-review>:not(.pb-dialog-body){flex-shrink:0}
  .pb-mug-review .pb-dialog-top{padding:14px 20px 10px}
  .pb-mug-review .pb-order-steps{padding-bottom:12px}
@@ -401,6 +401,8 @@ header .theme-toggle{min-width:44px;min-height:44px}
  .pb-mug-review .pb-order-review{flex:1;min-height:0;grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:0 0 8px}
  .pb-mug-review .pb-order-review>.pb-mug-preview{display:flex;flex-direction:column;min-height:0;height:100%}
  .pb-mug-review .pb-printful-mockup,.pb-mug-review .pb-live-preview .pb-mockup-wait{flex:1;min-height:0;height:0;width:100%;transform:none}
+ /* Trim only the supplier image’s empty top/bottom padding. */
+ .pb-mug-review .pb-printful-mockup{clip-path:inset(min(28px,4dvh) 0);margin-block:calc(-1 * min(28px,4dvh))}
  .pb-mug-review .pb-mockup-views,.pb-mug-review .pb-mug-preview figcaption{flex-shrink:0}
  .pb-mug-review .pb-mockup-views{margin:6px 0}
  .pb-mug-review .pb-mug-preview figcaption{margin-bottom:4px}
