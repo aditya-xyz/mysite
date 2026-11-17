@@ -10,7 +10,7 @@
   "triggers": { "crons": ["23 9 * * *", "* * * * *"] },
   "assets": { "directory": "./web", "binding": "ASSETS", "run_worker_first": true },
   "vars": {
-    "SMS_DAILY_LIMIT": "50",
+    "SMS_DAILY_LIMIT": "200",
     "SMS_MONTHLY_LIMIT": "500",
     "ORDER_MODE": "simulation",
     "PRINT_ORDER_MODE": "handwrytten_test",

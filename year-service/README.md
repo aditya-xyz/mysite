@@ -61,7 +61,7 @@ also have a hashed-IP limit. Successful checks consume a challenge once and
 create a separate opaque session, hashed in D1, lasting at most seven days.
 Expired or revoked invitations invalidate sessions on every journal/media fetch.
 
-Global SMS caps additionally allow at most **50 Verify send attempts per UTC day**
+Global SMS caps additionally allow at most **200 Verify send attempts per UTC day**
 and **500 per UTC calendar month**, across all invitations and editions sharing
 the database. `SMS_DAILY_LIMIT` and `SMS_MONTHLY_LIMIT` in `wrangler.jsonc` configure
 these defaults; zero pauses new sends and invalid values fail closed. Apply
@@ -492,7 +492,7 @@ No Lob account exists yet. No plans were upgraded or payment methods added.
 | Service | Proposed controls | What is currently in this app |
 | --- | --- | --- |
 | Google Maps | 50 validations/day, 1,000/month; 200 combined autocomplete/details calls/day, 2,000/month; low per-minute provider quotas and a $1 budget alert | Admin Worker atomic request guards; server-only key; $1 monthly budget alert |
-| Twilio Verify | $5/$10 monthly usage alerts; Fraud Guard on; geo-permissions only for actual guest countries (US/India/Netherlands discussed) | Global 50 send attempts/day and 500/month in UTC; per-invitation 5 sends/hour, 60sec resend lease, 5 checks/challenge, 15 checks/hour, hashed-IP limits |
+| Twilio Verify | $5/$10 monthly usage alerts; Fraud Guard on; geo-permissions only for actual guest countries (US/India/Netherlands discussed) | Global 200 send attempts/day and 500/month in UTC; per-invitation 5 sends/hour, 60sec resend lease, 5 checks/challenge, 15 checks/hour, hashed-IP limits |
 | Cloudflare Workers/D1/R2 | Usage alerts at $5/$10; consider a1,000ms CPU request cap after checking large-upload CPU; watch R2 storage at5GB/8GB | Private/authenticated media, bounded uploads and per-photo downloads; no overall dollar hard cap or configured CPU override; $5/$10 alerts saved |
 | Lob | Keep print orders off; later pilot:5 cards/day,20/month and a separate approved postal budget | Live mailing not connected; scrapbook defaultoff and one active allowance/invitation with owner reset |
 | Netlify | Keep the present plan, disable credit auto-recharge if available; usage notifications at50/80/100% | Static portfolio. Free Legacy plan; no credit auto-recharge or saved card; custom percentage alerts unavailable |
