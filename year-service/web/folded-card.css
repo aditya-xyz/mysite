@@ -50,3 +50,9 @@
 [data-card-panel="front"] .fc-art:not(.fc-vendor-art) img{width:105.882353%;height:auto;max-width:none;flex:0 0 105.882353%}
 .fc-spread .fc-art:not(.fc-vendor-inside){justify-content:flex-start}
 .fc-spread .fc-art:not(.fc-vendor-inside) img{width:78.823529%;height:auto;margin-left:14.117647%;max-width:none;flex:0 0 78.823529%}
+
+/* The panel animation uses a temporary inert copy so note canvases stay intact. */
+.fc-preview{position:relative}
+.fc-page{backface-visibility:hidden}
+.fc-surface[data-turn-ghost]{pointer-events:none;will-change:transform,opacity}
+.fc-preview:has([data-turn-ghost]){overflow:clip}

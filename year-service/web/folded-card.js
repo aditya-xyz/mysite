@@ -1,3 +1,4 @@
+import {turnCardView} from './card-turn.js';
 import {drawFoldedNote} from './print-design.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // A2 portrait: front bleed and inside-left insets match the approved provider proof.
@@ -19,7 +20,7 @@ export function bindFoldedCard(container,{onSwap,onView}={}){
   root.querySelectorAll('[data-card-view]').forEach(button=>button.onclick=()=>{
    const view=button.dataset.cardView;
    root.querySelectorAll('[data-card-view]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
-   root.querySelectorAll('[data-card-panel]').forEach(p=>p.hidden=p.dataset.cardPanel!==view);
+   turnCardView(root,view);
    onView?.(view);
   });
  }
