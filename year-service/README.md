@@ -1101,3 +1101,9 @@ then fade it out. This covers canvas, default-image and complete digital preview
 snapshots are canceled on replacement/close and skipped for reduced motion. Exported
 artwork is unchanged. All × controls use circular outlines; the photo viewer keeps
 its quiet translucent inner circle and full tap target without the square action face.
+
+Front/inside/back preview changes use hinged opening/closing and cover-turn motion.
+An inert outgoing panel preserves note-canvas pixels while the selected real panel
+becomes visible. Rapid choices cancel the prior turn and release its temporary
+canvases; reduced-motion users switch immediately. Supplier proofs, artwork and
+mailing data remain unchanged.
