@@ -491,7 +491,7 @@ No Lob account exists yet. No plans were upgraded or payment methods added.
 
 | Service | Proposed controls | What is currently in this app |
 | --- | --- | --- |
-| Google Maps | 50 validations/day, 1,000/month; 200 combined autocomplete/details calls/day, 2,000/month; low per-minute provider quotas and a $1 budget alert | Admin Worker atomic request guards; server-only key; $1 monthly budget alert |
+| Google Maps | 50 validations/day, 1,000/month; 1,000 combined autocomplete/details calls/day, 2,000/month; low per-minute provider quotas and a $1 budget alert | Admin Worker atomic request guards; server-only key; $1 monthly budget alert |
 | Twilio Verify | $5/$10 monthly usage alerts; Fraud Guard on; geo-permissions only for actual guest countries (US/India/Netherlands discussed) | Global 200 send attempts/day and 500/month in UTC; per-invitation 5 sends/hour, 60sec resend lease, 5 checks/challenge, 15 checks/hour, hashed-IP limits |
 | Cloudflare Workers/D1/R2 | Usage alerts at $5/$10; consider a1,000ms CPU request cap after checking large-upload CPU; watch R2 storage at5GB/8GB | Private/authenticated media, bounded uploads and per-photo downloads; no overall dollar hard cap or configured CPU override; $5/$10 alerts saved |
 | Lob | Keep print orders off; later pilot:5 cards/day,20/month and a separate approved postal budget | Live mailing not connected; scrapbook defaultoff and one active allowance/invitation with owner reset |
@@ -1151,3 +1151,8 @@ Christmas gift retains its red sheen. Modal sheets and photo-paper edges use
 muted greens. Mug previews get a soft light behind the display only; no printed
 or exported artwork is recolored. Segmented highlights include their borders
 inside each option's width so both end stops have matching insets.
+
+
+The shared Places autocomplete/details cap is configured at 1,000 requests per
+UTC day in both Workers, with the monthly cap at 2,000. Existing usage counters
+are retained. This app-level change does not alter Google Cloud billing or quotas.
