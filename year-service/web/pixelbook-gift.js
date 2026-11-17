@@ -64,6 +64,7 @@ export function mountPixelGift(journal,root){
       selected=designs.find(d=>d.id===b.dataset.design);
       modal.querySelectorAll('[data-design]').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.design===selected.id)));
       modal.querySelector('[data-gift-next]').disabled=!ordering||opening;
+      if(contextReady)warmSelected();
       // Cutout selection does not need a decoded supplier mockup.
     });
     modal.querySelector('[data-customize-mug]')?.addEventListener('click',()=>{
@@ -134,7 +135,8 @@ export function mountPixelGift(journal,root){
       if(receipt)selectReceipt();else{step='pick';selected=selected||previewDesign;requestKey=crypto.randomUUID();launch.textContent='pick your mugshot';}
       if(!modal.open)return;contextReady=true;
       if(displayedStep!==step||receiptKey(displayedReceipt)!==receiptKey(receipt))render();
-      // The chooser needs only small cutouts. Supplier mockups load when review opens.
+      // Warm only this selected mug’s saved angles while the human is choosing.
+      if(!receipt&&livePricing)warmSelected();
     }catch(error){if(error.name!=='AbortError'){if(modal.open){if(!receipt){step='error';render();}modal.querySelector('.pb-gift-status').textContent=error.message;}if(!receipt){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}}
     finally{opening=false;launch.disabled=false;if(modal.open&&step==='pick')modal.querySelector('[data-gift-next]').disabled=!selected||!ordering||!contextReady;}
   };

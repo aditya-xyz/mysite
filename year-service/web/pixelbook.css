@@ -269,6 +269,9 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-mockup-views .pb-mockup-view{min-height:44px;padding:8px 14px;border:1px solid var(--line);border-radius:24px;background:var(--paper);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
 .pb-mockup-views .pb-mockup-view[aria-pressed=true]{background:var(--button);color:var(--button-ink);border-color:var(--button)}
 .pb-mockup-views .pb-mockup-view:disabled{opacity:.45;cursor:default}
+.pb-mug-preview[aria-busy=true]:has(>.pb-printful-mockup) figcaption::before{content:'';display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:pb-angle-loading .7s linear infinite}
+@keyframes pb-angle-loading{to{rotate:360deg}}
+@media(prefers-reduced-motion:reduce){.pb-mug-preview[aria-busy=true] figcaption::before{animation:none}}
 
 /* Both physical gifts share one place and the same visual weight. */
 .pb-presents{margin:64px 0 56px}

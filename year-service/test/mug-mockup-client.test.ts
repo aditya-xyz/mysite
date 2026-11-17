@@ -105,3 +105,59 @@ test('angle changes retain their controls, turn decoded previews and respect red
   assert.equal(controls.children[0].ariaPressed,'true');assert.equal(animations.length,2,'Reduced motion skips both fade animations');
  }finally{client.destroy();fetch.mock.restore();Object.assign(globalThis,saved);}
 });
+
+function angleFixture(t:any){
+ const saved={document:(globalThis as any).document,Image:(globalThis as any).Image,matchMedia:(globalThis as any).matchMedia};
+ const node=(tag:string):any=>({tagName:tag.toUpperCase(),className:'',children:[],isConnected:true,dataset:{},attrs:new Map(),
+  append(...nodes:any[]){for(const n of nodes){n.parent=this;this.children.push(n);}},
+  replaceChildren(...nodes:any[]){this.children=[];this.append(...nodes);},
+  querySelector(selector:string){return this.children.find((n:any)=>selector==='img.pb-printful-mockup'?n.tagName==='IMG'&&n.className==='pb-printful-mockup':selector==='figcaption'?n.tagName==='FIGCAPTION':false)||null;},
+  querySelectorAll(){return [];},setAttribute(name:string,value:string){this.attrs.set(name,value);},focus(){},
+  replaceWith(next:any){next.parent=this.parent;this.parent.children[this.parent.children.indexOf(this)]=next;},
+ });
+ (globalThis as any).document={createElement:node};(globalThis as any).Image=class{src='';async decode(){}};
+ (globalThis as any).matchMedia=()=>({matches:true});t.after(()=>Object.assign(globalThis,saved));
+ const design={id:'photo',caption:'hello'},configuration={style:'classic',size:'11oz',color:'white',font:'clean'};
+ const client=createMugMockups();t.after(()=>client.destroy());
+ client.configure({prepared:true,styles:[],previews:['handle-left','handle-right'].map(view=>({id:view,view,designId:design.id,caption:design.caption,configuration,src:'/saved/'+view}))});
+ return {client,figure:node('figure'),design,configuration};
+}
+test('preloading a selected mug decodes both saved angles once without generation',async t=>{
+ const f=angleFixture(t),calls:string[]=[];
+ const fetch=mock.method(globalThis,'fetch',async(path:string)=>{calls.push(path);return new Response(new Blob([path]));});t.after(()=>fetch.mock.restore());
+ f.client.preload(f.design,f.configuration);await settle();
+ assert.deepEqual(calls,['/saved/handle-left','/saved/handle-right']);
+ f.client.update(f.figure,f.design,f.configuration);await settle();
+ f.figure.children[1].children[1].onclick();await settle();
+ f.client.preload(f.design,f.configuration);await settle();
+ assert.equal(calls.length,2);assert.equal(f.figure.attrs.get('aria-busy'),'false');
+});
+test('slow angle taps select immediately, keep the current image and announce loading; late images cannot overwrite a newer tap',async t=>{
+ const f=angleFixture(t);let release!:()=>void;
+ const gate=new Promise<void>(resolve=>release=resolve);
+ const fetch=mock.method(globalThis,'fetch',async(path:string)=>{if(path.endsWith('right'))await gate;return new Response(new Blob([path]));});t.after(()=>fetch.mock.restore());
+ f.client.update(f.figure,f.design,f.configuration);await settle();
+ const image=f.figure.children[0],controls=f.figure.children[1],caption=f.figure.children[2];
+ controls.children[1].onclick();
+ assert.equal(controls.children[1].ariaPressed,'true');assert.equal(controls.children[0].ariaPressed,'false');
+ assert.equal(f.figure.attrs.get('aria-busy'),'true');assert.match(caption.textContent,/Loading right handle/);
+ assert.equal(f.figure.children[0],image);
+ await settle();controls.children[0].onclick();
+ assert.equal(controls.children[0].ariaPressed,'true');assert.equal(f.figure.attrs.get('aria-busy'),'false');
+ release();await settle();assert.equal(f.figure.children[0],image);
+ controls.children[1].onclick();assert.notEqual(f.figure.children[0],image);
+ assert.equal(f.figure.attrs.get('aria-busy'),'false');assert.equal(fetch.mock.callCount(),2);
+});
+test('an angle download failure stops loading and the same control can retry',async t=>{
+ const f=angleFixture(t);let failed=false;
+ const fetch=mock.method(globalThis,'fetch',async(path:string)=>{
+  if(path.endsWith('right')&&!failed){failed=true;return Response.json({error:'Temporary failure'},{status:503});}
+  return new Response(new Blob([path]));
+ });t.after(()=>fetch.mock.restore());
+ f.client.update(f.figure,f.design,f.configuration);await settle();
+ const controls=f.figure.children[1];controls.children[1].onclick();await settle();
+ assert.equal(f.figure.attrs.get('aria-busy'),'false');assert.match(f.figure.children[2].textContent,/Tap.*retry/);
+ controls.children[1].onclick();assert.equal(f.figure.attrs.get('aria-busy'),'true');await settle();
+ assert.equal(f.figure.attrs.get('aria-busy'),'false');assert.equal(f.figure.children[2].textContent,'Printful mockup · final placement may vary');
+ assert.equal(fetch.mock.callCount(),3);
+});

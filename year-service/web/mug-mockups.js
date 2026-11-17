@@ -16,15 +16,8 @@ export function createMugMockups(){
   }finally{controllers.delete(controller);}
  }
  const request=async(path,body)=>(await fetchResponse('/api/gift/mockup'+path,body)).json();
- function recordFor(design,options){const angle=selectedView(design,options),id=key(design,options,angle);let record=records.get(id);if(!record){record={elements:new Set(),started:false,design,configuration:{...options},view:angle};records.set(id,record);}return record;}
- function paint(record){
-  for(const element of record.elements){
-   if(!element.isConnected){record.elements.delete(element);continue;}
-   if(record.imageUrl){
-    if(element.dataset.mockupImage===record.imageUrl)continue;
-    const image=document.createElement('img');image.className='pb-printful-mockup';image.src=record.imageUrl;image.alt=record.view==='handle-right'?'Printful preview of Santa Pixel and pixelbook ’26, handle on right':'Printful preview of your selected mugshot and caption, handle on left';
-    const caption=document.createElement('figcaption');caption.textContent='Printful mockup · final placement may vary';
-    if(prepared){
+ function recordFor(design,options,angle=selectedView(design,options)){const id=key(design,options,angle);let record=records.get(id);if(!record){record={elements:new Set(),started:false,design,configuration:{...options},view:angle};records.set(id,record);}return record;}
+ function controlsFor(element,record){
      let cached=angleControls.get(element);
      if(!cached){
       const controls=document.createElement('div');controls.className='pb-mockup-views pb-segments';controls.role='group';controls.ariaLabel='Mug preview angle';
@@ -35,6 +28,25 @@ export function createMugMockups(){
       button.ariaPressed=String(record.view===angle);button.disabled=!prepared.has(key(record.design,record.configuration,angle));
       button.onclick=()=>{view=angle;update(element,record.design,record.configuration);button.focus?.({preventScroll:true});};
      }
+     return cached;
+ }
+ function paint(record){
+  for(const element of record.elements){
+   if(!element.isConnected){record.elements.delete(element);continue;}
+   const loading=!record.imageUrl&&!record.waiting&&!record.error;
+   element.setAttribute?.('aria-busy',String(loading));
+   if(prepared&&angleControls.has(element))controlsFor(element,record);
+   const previousImage=element.querySelector('img.pb-printful-mockup');
+   if(previousImage?.tagName==='IMG'){
+    const caption=element.querySelector('figcaption');
+    if(caption)caption.textContent=record.error?'Preview unavailable. Tap the handle option to retry.':loading?`Loading ${record.view==='handle-right'?'right':'left'} handle…`:'Printful mockup · final placement may vary';
+   }
+   if(record.imageUrl){
+    if(element.dataset.mockupImage===record.imageUrl)continue;
+    const image=document.createElement('img');image.className='pb-printful-mockup';image.src=record.imageUrl;image.alt=record.view==='handle-right'?'Printful preview of Santa Pixel and pixelbook ’26, handle on right':'Printful preview of your selected mugshot and caption, handle on left';
+    const caption=document.createElement('figcaption');caption.role='status';caption.ariaLive='polite';caption.textContent='Printful mockup · final placement may vary';
+    if(prepared){
+     const cached=controlsFor(element,record);
      const previous=element.querySelector('img.pb-printful-mockup');
      if(previous?.tagName==='IMG'&&cached.controls.isConnected){
       const animate=!matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -72,7 +84,7 @@ export function createMugMockups(){
    const response=await fetchResponse(result.src),blob=await response.blob();if(disposed)return;
    const url=URL.createObjectURL(blob);urls.add(url);const image=new Image();image.src=url;await image.decode();
    if(disposed){URL.revokeObjectURL(url);urls.delete(url);return;}
-   record.src=result.src;record.imageUrl=url;record.blob=null;record.loadedAt=Date.now();paint(record);
+   record.src=result.src;record.imageUrl=url;record.error='';record.blob=null;record.loadedAt=Date.now();paint(record);
    if(urls.size>32)for(const stale of [...records.values()].filter(r=>r!==record&&r.imageUrl&&!connected(r)).sort((a,b)=>a.loadedAt-b.loadedAt)){
     URL.revokeObjectURL(stale.imageUrl);urls.delete(stale.imageUrl);stale.imageUrl=null;stale.started=false;stale.lookup=null;if(urls.size<=32)break;
    }
@@ -110,8 +122,9 @@ export function createMugMockups(){
  function update(element,design,configuration){
   if(!element||!catalog||disposed)return;
   for(const record of records.values())record.elements.delete(element);
-  const record=recordFor(design,configuration);record.elements.add(element);paint(record);
-  if(!record.started&&!record.imageUrl){record.started=true;later(()=>run(record,design,{...configuration}),0);}
+  const record=recordFor(design,configuration);record.elements.add(element);
+  if(!record.started&&!record.imageUrl){record.error='';record.started=true;later(()=>run(record,design,{...configuration}),0);}
+  paint(record);
  }
  function drain(){while(!disposed&&preloadActive<3&&preloadQueue.length){preloadActive++;preloadQueue.shift()().finally(()=>{preloadActive--;drain();});}}
  return {
@@ -124,7 +137,20 @@ export function createMugMockups(){
   available(design,configuration){return !prepared||!!savedFor(design,configuration);},
   preparedId(design,configuration){return savedFor(design,configuration)?.id||null;},
   id(design,configuration){return records.get(key(design,configuration,selectedView(design,configuration)))?.id||null;},
-  preload(design,configuration){if(!catalog||disposed)return;const record=recordFor(design,configuration);if(prepared){if(record.imageUrl||record.warming)return;record.warming=true;preloadQueue.push(()=>lookup(record,design,configuration).catch(()=>{}).finally(()=>{record.warming=false;}));drain();}else lookup(record,design,configuration).catch(()=>{});},
+  preload(design,configuration){
+   if(!catalog||disposed)return;
+   if(prepared){
+    const selected=selectedView(design,configuration);
+    for(const angle of [selected,selected==='handle-left'?'handle-right':'handle-left']){
+     if(!prepared.has(key(design,configuration,angle)))continue;
+     const record=recordFor(design,configuration,angle);
+     if(record.imageUrl||record.warming)continue;
+     record.warming=true;
+     preloadQueue.push(()=>lookup(record,design,configuration).catch(()=>{}).finally(()=>{record.warming=false;}));
+    }
+    drain();
+   }else lookup(recordFor(design,configuration),design,configuration).catch(()=>{});
+  },
   update,
   destroy(){disposed=true;timers.forEach(clearTimeout);controllers.forEach(c=>c.abort());urls.forEach(url=>URL.revokeObjectURL(url));records.clear();}
  };

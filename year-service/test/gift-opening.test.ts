@@ -132,9 +132,9 @@ test('browsing the gallery does not start background mug-preview downloads',asyn
 
 // @ts-expect-error Shared browser mug catalog.
 import {mugStyles,pixelMugOptions} from '../web/mug-options.js';
-test('the chooser and its catalog refresh do not download supplier mockups',async t=>{
+test('the chooser warms only the selected saved proof and catalog refresh does not download it again',async t=>{
  t.mock.timers.enable({apis:['setTimeout','setInterval']});const calls:string[]=[];
  const fetch=mock.method(globalThis,'fetch',async(path:any)=>{calls.push(String(path));return Response.json(String(path).endsWith('/status')?{claim:null,livePricing:true}:{styles:mugStyles,prepared:true,previews:[{id:'saved',designId:'mug-0',configuration:pixelMugOptions(),src:'/supplier.jpg'}]});});t.after(()=>fetch.mock.restore());
  const {launch,modal}=fixture(t,{hasOrder:false,livePricing:true});await launch.onclick();assert.match(modal.innerHTML,/data-design=/);
- t.mock.timers.tick(30000);await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(calls,['/api/gift/status','/api/gift/catalog']);
+ t.mock.timers.tick(30000);await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(calls,['/api/gift/status','/api/gift/catalog','/supplier.jpg']);
 });
