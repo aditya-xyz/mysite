@@ -60,7 +60,11 @@ test('reviewed invitation languages preserve English, privacy and existing data'
   assert.equal(JSON.stringify((await translationPayload(db,2026,'mr')).translations),publishedBefore);
   await assert.rejects(()=>call('mr',{patch:true,version:fresh.version,sourceVersion:10,entries:{[key]:{source:'Good dog.',value:'Stale edit'}}}),/changed/);
   await assert.rejects(()=>call('mr',{patch:true,version:saved.version,sourceVersion:10,entries:{'ui:Continue':{source:'Continue',value:'Not inline content'}}}),/only update story text and photo zingers/);
-  await assert.rejects(()=>call('mr',{patch:true,version:saved.version,sourceVersion:10,entries:{[key]:{source:'Wrong English',value:'Wrong source'}}}),/English source/);
+  await call('mr',{patch:true,version:saved.version,sourceVersion:10,entries:{[key]:{source:'Earlier English caption',value:'Preserved earlier translation'}}});
+  const stale=await call('mr');assert.deepEqual(stale.entries[key],{source:'Earlier English caption',value:'Preserved earlier translation'});
+  const preview=localizeJournal({photos:[{id:'one',caption:'Good dog.',alt:'A dog'}]},await translationPayload(db,2026,'mr',true));assert.equal(preview.photos[0].caption,'Good dog.','Stale draft translations use English without blocking saves');
+  await assert.rejects(()=>call('mr',{version:stale.version,sourceVersion:10,entries:{[key]:stale.entries[key]}}),/English source/);
+  assert.equal(JSON.stringify((await translationPayload(db,2026,'mr')).translations),publishedBefore,'Preserving a stale draft never changes published text');
  });
  await t.test('inline story drafts save both scripts without changing zingers, printed notes or approval',async()=>{
   for(const [locale,value] of [['mr','आपल्या गोष्टी'],['zh-TW','我們的故事']]){
