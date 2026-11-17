@@ -129,3 +129,16 @@
  :root :is(body,#keepsake,#photo) .pb-segments>button[aria-pressed]{min-height:34px;padding-block:6px}
 }
 :root :is(body,#keepsake,#photo) .pb-select-trigger{min-height:40px;padding-block:8px}
+
+/* The photo close affordance stays quiet over the picture, without a frame. */
+:root #photo .photo-control.close{border:0;background:transparent;box-shadow:none;border-radius:50%;corner-shape:round}
+:root #photo .photo-control.close::before{background:#08110d26;border:0;box-shadow:none;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+:root #photo .photo-control.close:hover::before,:root #photo .photo-control.close:focus-visible::before{background:#08110d55}
+.ks-complete-stage{position:relative}
+.ks-border-transition{position:absolute;z-index:1;display:block;pointer-events:none;margin:0;border:0}
+
+/* Every × is a simple circular outline, including the paperless confirmation. */
+:root :is(body,#keepsake,#photo) :is(.pb-close,.ks-icon[data-close],.ks-icon[data-close-print],.ks-icon[data-cancel]){border-radius:50%;corner-shape:round;background:transparent;border:1px solid var(--line);box-shadow:none}
+:root :is(body,#keepsake,#photo) :is(.pb-close,.ks-icon[data-close],.ks-icon[data-close-print],.ks-icon[data-cancel]):active{box-shadow:none}
+:root #photo .photo-control.close::before{border:1px solid #ffffff25;background:#08110d20}
+:root #photo .photo-control.close:hover::before,:root #photo .photo-control.close:focus-visible::before{background:#08110d45}

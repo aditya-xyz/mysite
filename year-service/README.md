@@ -1095,3 +1095,9 @@ reduced-transparency fallback. Mobile actions are 38px visibly and top modal ico
 34px, with expanded hit areas; desktop actions are 40px. The Christmas gift action
 has a red gradient. The crop hint is shorter in English, Marathi and Chinese;
 keyboard controls remain functional without the visible keyboard-instructions line.
+
+Border changes hold a temporary display snapshot until the next artwork is ready,
+then fade it out. This covers canvas, default-image and complete digital previews;
+snapshots are canceled on replacement/close and skipped for reduced motion. Exported
+artwork is unchanged. All × controls use circular outlines; the photo viewer keeps
+its quiet translucent inner circle and full tap target without the square action face.

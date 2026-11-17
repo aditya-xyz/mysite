@@ -1,3 +1,4 @@
+import {beginPreviewTransition} from './preview-transition.js';
 import {sessionImages} from './session-images.js';
 import {readBlob} from './read-resource.js';
 import {keepsakeFrames,defaultKeepsakeFrame,frameBackground,framePreview} from './keepsake-frames.js';
@@ -27,7 +28,7 @@ export function mountKeepsake(journal,section){
   const launch=entry.querySelector('button'),modal=document.createElement('dialog');
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
   let assembleNext=false,pickPage=0,chosen=[],crops=new Map(),step='pick',file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
-  const images=new Map(),defaultArt=new Map(),urls=new Set();let cardImages=[],editorCleanup=null,previewFrame=0,orderToast=null,toastTimer=null,digitalPreviewUrl=null;
+  const images=new Map(),defaultArt=new Map(),urls=new Set();let cardImages=[],editorCleanup=null,previewFrame=0,orderToast=null,toastTimer=null,digitalPreviewUrl=null,borderTransition=null;
   const printFlow=createPrintFlow({previewOnly:journal.adminPreview===true,householdName:journal.name,householdSize:journal.householdSize,getData:()=>({file,defaultSrc:defaultSrc(),cardCount:1,personalized:!fixed,recipe:{format:'folded',mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:status=>{if(fixed&&status?.order&&!status.order.personalized)setOrdered(status.order);if(modal.open&&step==='edit')updateExport();},onOrdered:(message,simulated,order)=>{if(fixed)setOrdered(order);if(modal.open){showOrderToast(message,simulated);modal.querySelector(fixed?'[data-close]':'[data-share],[data-save]')?.focus();}}});
   const digitalFlow=createDigitalFlow({journal,getData:()=>({frame,background:frameBackground(frame),images:cardImages.slice(0,3),crops:chosen.map(id=>crops.get(id)),photoIds:fixed?[]:[...chosen],cropMap:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)]))}),loadImage,onChange:state=>{if(state?.claimed){digitalOnly=true;if(fixed)frame=state.frame;updateDigitalEntry();}if(modal.open&&step==='edit'){updateExport();if(file)void digitalFlow.prewarm();}},onSaved:(state,message)=>{if(state?.claimed){digitalOnly=true;updateDigitalEntry();if(modal.open&&(fixed||step!=='preview')){step=fixed?'edit':'preview';render();}}if(message)setStatus(message);}});
   function updateDigitalEntry(){if(!digitalOnly)return;launch.textContent=fixed?'view your postcard':'make another postcard';entry.querySelector('.pb-present-copy>p').textContent='paperless fan club · unlimited downloads';}
@@ -54,6 +55,7 @@ export function mountKeepsake(journal,section){
     modal.append(orderToast);toastTimer=setTimeout(clearOrderToast,8000);
   }
   function cleanup(){
+    borderTransition?.cancel();borderTransition=null;
     editorCleanup?.();editorCleanup=null;cancelAnimationFrame(previewFrame);previewFrame=0;cardImages=[];
     clearOrderToast();printFlow.close();digitalFlow.close();revision++;abort?.abort();abort=null;images.forEach(p=>p.then(image=>image.close?.()).catch(()=>{}));images.clear();defaultArt.clear();file=null;
     urls.forEach(url=>URL.revokeObjectURL(url));urls.clear();modal.querySelectorAll('canvas').forEach(canvas=>{canvas.width=0;canvas.height=0;});busy=false;returnFocus?.focus({preventScroll:true});
@@ -112,6 +114,7 @@ export function mountKeepsake(journal,section){
   function frameMarkup(){if(fixed&&digitalOnly)return '';return `<div class="ks-paper-tabs pb-segments" role="group" aria-label="Frame style">${keepsakeFrames.map(({id:value,label})=>`<button class="ks-frame" data-frame="${value}" aria-pressed="${frame===value}"><span class="ks-swatch ${value}" aria-hidden="true"></span><span>${label}</span></button>`).join('')}</div>`;}
   function editorMarkup(){if(!fixed&&step==='preview')return `<div class="ks-complete-stage"><img class="ks-complete-preview" alt="Your complete digital postcard"></div>`;if(fixed&&digitalOnly)return `<div class="ks-default-editor"><p class="ks-description">paperless fan club · unlimited downloads</p><img class="ks-default-image" src="/api/print/digital/image" alt="Your complete digital postcard"></div>`;if(fixed&&ordered?.format==='folded')return `<div class="ks-default-editor"><p class="ks-description">Ordered on: ${esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}))}</p>${foldedCardMarkup({frontSrc:ordered.artworkSrc,insideSrc:null,preview:ordered.preview,pictures:ordered.pictures,frontDesign:ordered.frontDesign})}</div>`;if(fixed)return `<div class="ks-default-editor"><p class="ks-description">${ordered?'Ordered on: '+esc(new Date(ordered.created_at*1000).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})):'Pixel picked these for you. Choose your border.'}</p><div class="ks-preview-wrap"><img class="ks-default-image" data-default-image src="${esc(defaultSrc())}" alt="Pixel’s fixed postcard: family photo above, dogs on the lower left and family on the lower right"></div></div>`;return `<div class="ks-editor-stage"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five postcard: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Photo ${i+1}: drag vertically to reframe, drag onto another photo to swap" aria-describedby="ks-direct-help"></button>`).join('')}</div></div><p id="ks-direct-help" class="ks-crop-hint">Drag to reframe. Drop onto another photo to swap.</p><span class="ks-editor-announcement" role="status" aria-live="polite"></span></div>`;}
   function render(){
+    borderTransition?.cancel();borderTransition=null;
     editorCleanup?.();editorCleanup=null;cancelAnimationFrame(previewFrame);previewFrame=0;cardImages=[];
     revision++;file=null;busy=step!=='pick';printFlow.prepare();
     modal.innerHTML=`<div class="ks-shell"><div class="ks-top"><button class="ks-icon" data-back aria-label="${step==='pick'?'Close postcard':'Back'}">${arrow}</button><h2 id="ks-title" tabindex="-1">${step==='pick'?'make a little postcard':'Your postcard'}</h2><button class="ks-icon" data-close aria-label="Close postcard">${cross}</button></div><div class="ks-body ${step==='pick'?'ks-select-body':'ks-edit-body'}">${step==='pick'?pickMarkup():editorMarkup()}<p class="ks-status" role="status" aria-live="polite"></p></div>${fixed&&ordered?'':`<div class="ks-bottom">${actions()}</div>`}</div>`;
@@ -127,7 +130,7 @@ export function mountKeepsake(journal,section){
     });
     modal.querySelectorAll('[data-photo-page]').forEach(button=>button.onclick=()=>{pickPage+=Number(button.dataset.photoPage);render();});
     const next=modal.querySelector('[data-continue]');if(next)next.onclick=()=>{if(chosen.length===3){assembleNext=true;step='edit';render();}};
-    modal.querySelectorAll('[data-frame]').forEach(b=>b.onclick=()=>{if(frame===b.dataset.frame)return;frame=b.dataset.frame;modal.querySelectorAll('[data-frame]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.frame===frame)));paintCard();});
+    modal.querySelectorAll('[data-frame]').forEach(b=>b.onclick=()=>{if(frame===b.dataset.frame)return;borderTransition?.cancel();borderTransition=beginPreviewTransition(modal.querySelector('.ks-preview,.ks-complete-preview,[data-default-image]'));frame=b.dataset.frame;modal.querySelectorAll('[data-frame]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.frame===frame)));paintCard();});
     const preview=modal.querySelector('[data-preview]');if(preview)preview.onclick=()=>{step='preview';render();};
     const save=modal.querySelector('[data-save]');if(save)save.onclick=download;
     const share=modal.querySelector('[data-share]');if(share)share.onclick=shareCard;
@@ -166,8 +169,8 @@ export function mountKeepsake(journal,section){
     if(!fixed&&step==='preview'){await paintCompleteCard(stamp);return;}
     if(fixed&&(ordered||digitalOnly)){if(digitalOnly){try{const loaded=await loadDefault('/api/print/digital/image');file=new File([loaded.blob],`pixelbook-${journal.year}-digital.jpg`,{type:'image/jpeg'});}catch(error){setStatus(error.message);}}busy=false;updateExport();if(digitalFlow.canUse())void digitalFlow.prewarm();return;}
     if(fixed){
-      try{const {blob,url}=await loadDefault(defaultSrc());if(stamp!==revision||!modal.open)return;modal.querySelectorAll('[data-default-image]').forEach(image=>image.src=url);file=new File([blob],`pixel-picked-${journal.year}.jpg`,{type:'image/jpeg'});busy=false;updateExport();if(digitalFlow.canUse())void digitalFlow.prewarm();}
-      catch(error){if(error.name==='AbortError'||stamp!==revision)return;busy=false;setStatus(error.message);updateExport();}
+      try{const {blob,url}=await loadDefault(defaultSrc());if(stamp!==revision||!modal.open)return;await Promise.all([...modal.querySelectorAll('[data-default-image]')].map(async image=>{image.src=url;await image.decode();}));if(stamp!==revision||!modal.open)return;borderTransition?.finish();file=new File([blob],`pixel-picked-${journal.year}.jpg`,{type:'image/jpeg'});busy=false;updateExport();if(digitalFlow.canUse())void digitalFlow.prewarm();}
+      catch(error){if(error.name==='AbortError'||stamp!==revision)return;borderTransition?.cancel();busy=false;setStatus(error.message);updateExport();}
       return;
     }
     const canvas=modal.querySelector('.ks-preview');if(!canvas)return;
@@ -184,6 +187,7 @@ export function mountKeepsake(journal,section){
       if(stamp!==revision||!modal.open)return;
       cardImages=loaded;
       drawCard(canvas,loaded);
+      borderTransition?.finish();
       if(assemble)assembleKeepsake(canvas,cardSlots,loaded[4]);
       const [printPhotos,printBackground]=await Promise.all([Promise.all(selected.map(p=>loadImage(p.viewerSrc||p.src))),loadImage(frameBackground(frame))]);
       if(stamp!==revision||!modal.open)return;
@@ -195,7 +199,7 @@ export function mountKeepsake(journal,section){
       if(!blob)throw new Error('Your card couldn’t be prepared. Please try again.');
       cardImages=[...printPhotos,loaded[3],loaded[4]];
       file=new File([blob],`a-little-postcard-${journal.year||'our-year'}.jpg`,{type:'image/jpeg'});busy=false;updateExport();if(digitalFlow.canUse())void digitalFlow.prewarm();
-    }catch(error){if(stamp!==revision||error.name==='AbortError')return;busy=false;updateExport();setStatus(error.message);const retry=document.createElement('button');retry.className='ks-text';retry.textContent='Try again';retry.onclick=paintCard;modal.querySelector('.ks-status').append(' ',retry);}
+    }catch(error){if(stamp!==revision||error.name==='AbortError')return;borderTransition?.cancel();busy=false;updateExport();setStatus(error.message);const retry=document.createElement('button');retry.className='ks-text';retry.textContent='Try again';retry.onclick=paintCard;modal.querySelector('.ks-status').append(' ',retry);}
   }
   async function paintCompleteCard(stamp){
     try{
@@ -207,9 +211,11 @@ export function mountKeepsake(journal,section){
       file=complete;
       if(digitalPreviewUrl){URL.revokeObjectURL(digitalPreviewUrl);urls.delete(digitalPreviewUrl);}
       digitalPreviewUrl=URL.createObjectURL(complete);urls.add(digitalPreviewUrl);
-      modal.querySelector('.ks-complete-preview').src=digitalPreviewUrl;
+      const preview=modal.querySelector('.ks-complete-preview');preview.src=digitalPreviewUrl;await preview.decode();
+      if(stamp!==revision||!modal.open||step!=='preview')return;
+      borderTransition?.finish();
       busy=false;updateExport();
-    }catch(error){if(stamp!==revision||error.name==='AbortError')return;busy=false;setStatus(error.message);updateExport();const retry=document.createElement('button');retry.className='ks-text';retry.textContent='Try again';retry.onclick=paintCard;modal.querySelector('.ks-status')?.append(' ',retry);}
+    }catch(error){if(stamp!==revision||error.name==='AbortError')return;borderTransition?.cancel();busy=false;setStatus(error.message);updateExport();const retry=document.createElement('button');retry.className='ks-text';retry.textContent='Try again';retry.onclick=paintCard;modal.querySelector('.ks-status')?.append(' ',retry);}
   }
   function exportFile(){
     const texture=frame==='santa'?'candy-cane':frame,timestamp=new Date().toISOString().replace(/[:.]/g,'-');
