@@ -231,3 +231,6 @@ html:lang(mr) h1,html:lang(mr) h2,html:lang(mr) h3,html:lang(mr) p,html:lang(mr)
  #photo #previous-photo::after,#photo #next-photo::after{inset:-6px}
  #photo #previous-photo svg,#photo #next-photo svg{width:17px;height:17px}
 }
+
+.grid .card[data-photo-opening]{visibility:hidden}
+#photo .photo-slide-rail>img{border:0;padding:0;background:transparent;box-shadow:none}

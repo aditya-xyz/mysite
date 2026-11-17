@@ -1,3 +1,4 @@
+import {openDialog,closeDialog} from './dialog-motion.js';
 import {readResource} from './read-resource.js';
 import {esc,householdOrderNote} from './pixelbook.js';
 import {foldedCardMarkup,bindFoldedCard} from './folded-card.js';
@@ -37,8 +38,8 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   delivery=prepareDelivery();deliveryChanged=renderAddress;renderAddress();
   function release(){URL.revokeObjectURL(proofUrl);deliveryChanged=()=>{};delivery.destroy();if(preparedDelivery===delivery)preparedDelivery=null;sheet.remove();if(dialog===sheet)dialog=null;}
   dialog.addEventListener('close',release,{once:true});
-  dialog.querySelector('[data-close-print]').onclick=()=>sheet.close();
-  dialog.querySelector('[data-cancel-print]').onclick=()=>sheet.close();
+  dialog.querySelector('[data-close-print]').onclick=()=>closeDialog(sheet);
+  dialog.querySelector('[data-cancel-print]').onclick=()=>closeDialog(sheet);
   function bindPictures(region){bindFoldedCard(region,{onSwap:swapPictures,onView:view=>activeView=view});}
   function cardMarkup(){
    const swapped=data.personalized&&data.recipe.frontDesign==='default';
@@ -52,7 +53,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
    sheet.querySelector('[data-swap-card]')?.focus({preventScroll:true});
   }
   function finish(order){
-   status={...status,eligible:false,canOrder:false,order,remaining:0};onChange(status);sheet.close();
+   status={...status,eligible:false,canOrder:false,order,remaining:0};onChange(status);closeDialog(sheet);
    onOrdered(order.testMode?'Test postcard ordered. No physical mail will be sent.':order.status==='simulated'?'Test postcard order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your postcard gift is headed your way 💌':'Your print request is recorded.',!order.testMode&&order.status==='simulated',order);
   }
   submit.onclick=async()=>{
@@ -70,7 +71,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
    }catch(error){await refresh();if(dialog!==sheet)return;if(status?.order){finish(status.order);}else{requestKey=crypto.randomUUID();submitting=false;if(data.personalized)sheet.querySelector('[data-swap-card]')?.removeAttribute('disabled');submit.disabled=!delivery.ready;message(error.message+' No additional order will be created if one is already recorded.');}}
 
   };
-  dialog.showModal();dialog.querySelector('#print-title').focus({preventScroll:true});
+  openDialog(dialog);dialog.querySelector('#print-title').focus({preventScroll:true});
  }
  return {buttonMarkup,prepare,bind:container=>{const b=container.querySelector('[data-print]');if(b)b.onclick=open;},refresh:()=>{closed=false;return refresh();},close:()=>{closed=true;controller?.abort();deliveryChanged=()=>{};preparedDelivery?.destroy();preparedDelivery=null;if(dialog?.open)dialog.close();}};
 }

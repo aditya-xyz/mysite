@@ -1,0 +1,10 @@
+/* Shared paper-sheet motion, including nested gift and confirmation dialogs. */
+:is(.pb-gift-dialog,#keepsake,.ks-print-dialog,.ks-digital-confirm)[data-dialog-motion][open]{animation:none}
+:is(.pb-gift-dialog,#keepsake,.ks-print-dialog,.ks-digital-confirm)[data-dialog-motion]::backdrop{animation:none}
+:is(.pb-gift-dialog,#keepsake,.ks-print-dialog,.ks-digital-confirm)[data-dialog-motion=enter]::backdrop{animation:pb-sheet-backdrop-in 280ms ease-out both}
+:is(.pb-gift-dialog,#keepsake,.ks-print-dialog,.ks-digital-confirm)[data-dialog-motion=leave]{pointer-events:none}
+:is(.pb-gift-dialog,#keepsake,.ks-print-dialog,.ks-digital-confirm)[data-dialog-motion=leave]::backdrop{animation:pb-sheet-backdrop-out 200ms ease-out both}
+.pb-gift-dialog[open] .pb-design{animation:none}
+@keyframes pb-sheet-backdrop-in{from{opacity:0}to{opacity:1}}
+@keyframes pb-sheet-backdrop-out{from{opacity:1}to{opacity:0}}
+@media(prefers-reduced-motion:reduce){:is(.pb-gift-dialog,#keepsake,.ks-print-dialog,.ks-digital-confirm)[data-dialog-motion]::backdrop{animation:none}}

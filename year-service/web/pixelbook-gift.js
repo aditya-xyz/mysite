@@ -1,3 +1,4 @@
+import {openDialog,closeDialog} from './dialog-motion.js';
 import {sessionImages} from './session-images.js';
 import {readResource} from './read-resource.js';
 import {openMugCustomizer} from './mug-customizer.js';
@@ -57,7 +58,7 @@ export function mountPixelGift(journal,root){
     const pending=step==='loading'||step==='error',finished=step==='done'||pending;
     const title=step==='loading'?'your household’s gift.':step==='error'?'couldn’t load your gift.':step==='pick'?'pick your mugshot.':step==='address'?'where’s home?':step==='review'?'the details':'that’s a wrap.';
     modal.innerHTML=`<div class="pb-dialog-top"><div><p class="pb-eyebrow">a gift from Pixel</p><h2 id="pb-order-title" tabindex="-1">${title}</h2></div><button type="button" class="pb-close" data-close-gift aria-label="Close gift picker">${closeIcon}</button></div>${!ordering&&!finished?'<p class="pb-preview-banner">Gift ordering opens soon. You can browse the mugshots for now.</p>':''}${journal.adminPreview?'<p class="pb-preview-banner">Admin preview · Final ordering is disabled. No allowance is used.</p>':''}${finished?'':steps()}<div class="pb-dialog-body">${pending?(step==='loading'?'<p role="status">Loading your gift…</p>':''):step==='pick'?pickMarkup():step==='address'?addressMarkup():step==='review'?reviewMarkup():doneMarkup()}<p class="pb-gift-status error" role="alert"></p></div><div class="pb-dialog-bottom">${householdNote?`<p class="pb-household-note" id="pb-household-note">${esc(householdNote)} <img class="pb-dog-face-emoji" src="/pixel-face-emoji.png" width="30" height="30" alt="" aria-hidden="true"></p>`:''}${finished?'<button class="button" data-close-gift>back to my scrapbook</button>':`<button class="button pb-secondary-button" data-gift-back>${step==='pick'?'keep browsing':'← back'}</button>${step==='review'?`<button type="button" class="button pb-secondary-button" data-customize-mug>Customize</button>`:''}${step==='address'&&!delivery.ready?'':`<button class="button" data-gift-next ${householdNote?'aria-describedby="pb-household-note"':''} ${(step==='pick'&&(!selected||!ordering||opening)||step==='address'&&!canConfirm())?'disabled':''}>${step==='pick'?ordering?'this is the one →':'ordering opens soon':step==='review'?'proceed →':'confirm & order'}</button>`}`}</div>`;
-    modal.querySelectorAll('[data-close-gift]').forEach(b=>b.onclick=()=>modal.close());
+    modal.querySelectorAll('[data-close-gift]').forEach(b=>b.onclick=()=>closeDialog(modal));
     modal.querySelectorAll('[data-design]').forEach(b=>b.onclick=()=>{
       selected=designs.find(d=>d.id===b.dataset.design);
       modal.querySelectorAll('[data-design]').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.design===selected.id)));
@@ -67,7 +68,7 @@ export function mountPixelGift(journal,root){
     modal.querySelector('[data-customize-mug]')?.addEventListener('click',()=>{
       customizer=openMugCustomizer(selected,configuration,value=>{configuration=value;customizer=null;render();modal.querySelector('[data-customize-mug]').focus();},styles,(element,design,value)=>{mockups.update(element,design,value);warmOptions(design,value);},previewMarkup,(design,value)=>mockups.available(design,value));
     });
-    modal.querySelector('[data-gift-back]')?.addEventListener('click',()=>{if(step==='pick')modal.close();else{step=step==='address'?'review':'pick';render();}});
+    modal.querySelector('[data-gift-back]')?.addEventListener('click',()=>{if(step==='pick')closeDialog(modal);else{step=step==='address'?'review':'pick';render();}});
     modal.querySelector('[data-edit-address]')?.addEventListener('click',()=>{step='address';render();});
     modal.querySelector('[data-gift-next]')?.addEventListener('click',next);
     sessionImages.bind(modal);
@@ -123,7 +124,7 @@ export function mountPixelGift(journal,root){
     // A new selection opens once its status is known, without a household-receipt flash.
     const deferOpen=ordering&&!receipt&&!journal.gift.hasOrder;
     if(deferOpen)launch.disabled=true;
-    else{render();modal.showModal();modal.querySelector('h2').focus();}
+    else{render();openDialog(modal);modal.querySelector('h2').focus();}
     try{
       if(!ordering&&!journal.gift.hasOrder&&!receipt){contextReady=true;step='pick';selected=previewDesign;render();modal.querySelector('h2').focus();return;}
       const displayedReceipt=receipt;
@@ -132,11 +133,11 @@ export function mountPixelGift(journal,root){
       if(livePricing&&!receipt){const catalog=await preloadCatalog();styles=catalog.styles;mockups.configure(catalog);configuration=preferredMugOptions(styles);}
       if(!modal.isConnected)return;
       if(receipt)selectReceipt();else{step='pick';selected=selected||previewDesign;requestKey=crypto.randomUUID();launch.textContent='pick your mugshot';}
-      if(deferOpen){render();modal.showModal();}
+      if(deferOpen){render();openDialog(modal);}
       if(!modal.open)return;contextReady=true;
       if(!deferOpen&&(!displayedReceipt||receiptKey(displayedReceipt)!==receiptKey(receipt)))render();
       // The chooser needs only small cutouts. Supplier mockups load when review opens.
-    }catch(error){if(error.name!=='AbortError'){if(deferOpen&&modal.isConnected&&!modal.open){step='error';render();modal.showModal();}if(modal.open){if(!receipt){step='error';render();}modal.querySelector('.pb-gift-status').textContent=error.message;}if(!receipt){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}}
+    }catch(error){if(error.name!=='AbortError'){if(deferOpen&&modal.isConnected&&!modal.open){step='error';render();openDialog(modal);}if(modal.open){if(!receipt){step='error';render();}modal.querySelector('.pb-gift-status').textContent=error.message;}if(!receipt){let status=root.querySelector('.pb-gift-launch-error');if(!status){status=document.createElement('p');status.className='pb-gift-launch-error error';status.setAttribute('role','alert');launch.after(status);}status.textContent=error.message;}}}
     finally{opening=false;launch.disabled=false;if(modal.open&&step==='pick')modal.querySelector('[data-gift-next]').disabled=!selected||!ordering||!contextReady;}
   };
   modal.addEventListener('close',()=>{controller?.abort();returnFocus?.focus({preventScroll:true});});

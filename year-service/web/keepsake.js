@@ -1,3 +1,4 @@
+import {openDialog,closeDialog} from './dialog-motion.js';
 import {beginPreviewTransition} from './preview-transition.js';
 import {sessionImages} from './session-images.js';
 import {readBlob} from './read-resource.js';
@@ -60,7 +61,7 @@ export function mountKeepsake(journal,section){
     clearOrderToast();printFlow.close();digitalFlow.close();revision++;abort?.abort();abort=null;images.forEach(p=>p.then(image=>image.close?.()).catch(()=>{}));images.clear();defaultArt.clear();file=null;
     urls.forEach(url=>URL.revokeObjectURL(url));urls.clear();modal.querySelectorAll('canvas').forEach(canvas=>{canvas.width=0;canvas.height=0;});busy=false;returnFocus?.focus({preventScroll:true});
   }
-  function close(){modal.close();}
+  function close(){closeDialog(modal);}
   modal.addEventListener('close',cleanup);
   modal.addEventListener('click',event=>{if(event.target===modal){const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)close();}});
   async function loadImage(src){
@@ -223,6 +224,6 @@ export function mountKeepsake(journal,section){
   }
   function download(){if(digitalFlow.canUse()||digitalOnly){void digitalFlow.requestCopy(false);return;}if(fixed||!file)return;const exported=exportFile(),url=URL.createObjectURL(exported);urls.add(url);const a=document.createElement('a');a.href=url;a.download=exported.name;document.body.append(a);a.click();a.remove();setStatus('Your postcard is ready. Your browser chooses where it saves.');setTimeout(()=>{URL.revokeObjectURL(url);urls.delete(url);},60000);}
   async function shareCard(){if(digitalFlow.canUse()||digitalOnly){void digitalFlow.requestCopy(true);return;}if(fixed||!file)return;const exported=exportFile();try{if(navigator.canShare?.({files:[exported]}))await navigator.share({files:[exported],title:'A little postcard'});else{shareFallback=true;updateExport();setStatus('File sharing isn’t supported in this browser. You can save the image as a file instead.');}}catch(error){if(error.name!=='AbortError'){shareFallback=true;updateExport();setStatus('Sharing couldn’t open. You can save the image as a file instead.');}}}
-  launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();preloadFrames();shareFallback=false;step=fixed?'edit':'pick';render();modal.showModal();modal.querySelector('#ks-title').focus({preventScroll:true});if(!fixed||!ordered){printFlow.refresh();void digitalFlow.refresh();}};
+  launch.onclick=()=>{returnFocus=document.activeElement;abort=new AbortController();preloadFrames();shareFallback=false;step=fixed?'edit':'pick';render();openDialog(modal);modal.querySelector('#ks-title').focus({preventScroll:true});if(!fixed||!ordered){printFlow.refresh();void digitalFlow.refresh();}};
   return {destroy(){if(modal.open)modal.close();else cleanup();modal.remove();entry.remove();}};
 }

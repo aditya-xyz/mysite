@@ -1,3 +1,4 @@
+import {openDialog,closeDialog} from './dialog-motion.js';
 import {mugStyles,mugFonts,preferredMugOptions} from './mug-options.js';
 import {mugPreview} from './mug-preview.js';
 import {customSelectMarkup,bindCustomSelect} from './custom-select.js';
@@ -22,8 +23,8 @@ export function openMugCustomizer(design,current,finish,styles=mugStyles,preview
   preview(dialog.querySelector('.pb-mug-preview'),design,configuration);
   if(focusKey)focusControl(focusKey);
  }
- function complete(value){selectBinding?.destroy();dialog.close();dialog.remove();finish({...value});}
+ function complete(value){selectBinding?.destroy();closeDialog(dialog).then(()=>{dialog.remove();finish({...value});});}
  dialog.addEventListener('cancel',event=>event.preventDefault());
- document.body.append(dialog);render();dialog.showModal();dialog.querySelector('[data-select-control]').focus();
+ document.body.append(dialog);render();openDialog(dialog);dialog.querySelector('[data-select-control]').focus();
  return {refresh(nextStyles=styles){styles=nextStyles;const key=document.activeElement?.closest('[data-select-control],[data-select-option]')?.dataset;render(key?.selectControl||key?.selectOption);},destroy(){selectBinding?.destroy();dialog.close();dialog.remove();}};
 }

@@ -169,7 +169,7 @@ function openPhoto(photo) {
   viewerReturnFocus=document.activeElement;
   clearTimeout(closeTimer);dialog.classList.remove('is-closing');
   const thumb=[...app.querySelectorAll('.card')].find(card=>card.dataset.photo===photo.id)?.querySelector('img');
-  showPhoto(photo,0,thumb?.complete&&thumb.naturalWidth?{src:thumb.src,width:thumb.naturalWidth,height:thumb.naturalHeight,origin:thumb.getBoundingClientRect(),preview:true}:null);dialog.showModal();dialog.focus({preventScroll:true});
+  showPhoto(photo,0,thumb?.complete&&thumb.naturalWidth?{src:thumb.src,width:thumb.naturalWidth,height:thumb.naturalHeight,origin:thumb.getBoundingClientRect(),element:thumb.closest('.card'),preview:true}:null);dialog.showModal();dialog.focus({preventScroll:true});
 }
 function showPhoto(photo,direction=0,thumbnail=null){
   originalRequest?.abort();originalRequest=null;
@@ -186,7 +186,7 @@ function showPhoto(photo,direction=0,thumbnail=null){
   const ready=thumbnail||(direction&&photoSlide.ready(direction)),settled=direction&&!ready?photoSlide.settle():Promise.resolve();
   const viewerOptions={resolveSource:source=>sessionImages.url(source),isCurrent:()=>current===generation&&!preparedFile,
     async reveal(src,width,height){await settled;if(current!==generation||preparedFile)return;const sliding=photoSlide.reveal(src,width,height,direction);loader.hidden=true;frame.removeAttribute('aria-busy');await sliding;
-      if(thumbnail&&current===generation&&dialog.open){photoOpening=openPhotoFromThumbnail(dialog,image,thumbnail.origin);await photoOpening.finished;}
+      if(thumbnail&&current===generation&&dialog.open){photoOpening=openPhotoFromThumbnail(dialog,image,thumbnail.origin,thumbnail.element);await photoOpening.finished;}
       if(current!==generation||!dialog.open)return;
       for(const step of [-1,1]){const adjacent=viewerPhotos[viewerIndex+step];if(adjacent){const thumb=[...app.querySelectorAll('.card')].find(card=>card.dataset.photo===adjacent.id)?.querySelector('img');if(thumb?.complete&&thumb.naturalWidth)photoSlide.neighbor(step,thumb.src,false);loadViewerPhoto(adjacent,{resolveSource:source=>sessionImages.url(source),isCurrent:()=>current===generation&&dialog.open,reveal:source=>photoSlide.neighbor(step,source),fail(){}});}}
     },

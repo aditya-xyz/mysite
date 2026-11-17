@@ -1,3 +1,4 @@
+import {openDialog,closeDialog} from './dialog-motion.js';
 import {readBlob,readResource} from './read-resource.js';
 import {digitalCardFile} from './digital-card.js';
 import {translateText} from './localization.js';
@@ -16,7 +17,7 @@ export function createDigitalFlow({journal,getData,loadImage,onChange,onSaved}){
  }
  function confirm(file,recipe,share){return new Promise(resolve=>{const url=URL.createObjectURL(file),d=document.createElement('dialog');dialog=d;d.className='ks-digital-confirm';d.setAttribute('aria-labelledby','digital-title');
   d.innerHTML=`<div class="ks-top"><h2 id="digital-title" tabindex="-1">joining the paperless fan club? 🌿</h2><button class="ks-icon" data-cancel aria-label="Close digital postcard confirmation">×</button></div><div class="ks-digital-confirm-body"><img src="${url}" alt="Your complete digital postcard"><p>all the Pixel, none of the postage. save your postcard and we’ll skip mailing one to your household.</p><p class="ks-status" role="status"></p></div><div class="ks-bottom"><button class="ks-secondary" data-cancel>Not yet</button><button class="ks-primary" data-confirm ${journal.adminPreview?'disabled':''}>paperless fans, that’s us</button></div>`;
-  let finished=false,committing=false;const finish=result=>{if(finished)return;finished=true;cancelConfirmation=null;URL.revokeObjectURL(url);d.close();d.remove();dialog=null;resolve(result);};
+  let finished=false,committing=false;const finish=result=>{if(finished)return;finished=true;cancelConfirmation=null;closeDialog(d).then(()=>{URL.revokeObjectURL(url);d.remove();if(dialog===d)dialog=null;resolve(result);});};
   cancelConfirmation=()=>finish(null);d.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=()=>finish(null));d.addEventListener('cancel',e=>{e.preventDefault();if(!committing)finish(null);});
   d.querySelector('[data-confirm]').onclick=async()=>{committing=true;const button=d.querySelector('[data-confirm]');button.disabled=true;d.querySelectorAll('[data-cancel]').forEach(b=>b.disabled=true);d.querySelector('.ks-status').textContent='Saving your digital-only choice…';
    try{const form=new FormData();form.set('artwork',file);form.set('recipe',JSON.stringify({confirmed:true,contentVersion:state.contentVersion,defaultRevision:state.defaultRevision,frame:recipe.frame,photoIds:recipe.photoIds,crops:recipe.crops}));const saving=fetch('/api/print/digital',{method:'POST',body:form,signal:controller?.signal});
@@ -25,7 +26,7 @@ export function createDigitalFlow({journal,getData,loadImage,onChange,onSaved}){
     const r=await saving,result=await r.json();if(closed)return;if(!r.ok)throw new Error(result.error||'Your choice could not be saved. Please try again.');state=result;if(!result.reused){cachedFile=file;cachedKey=recipeKey();}onChange(state);onSaved(state);const shareResult=await sharing;finish({...result,shareResult});}
    catch(error){committing=false;d.querySelector('.ks-status').textContent=error instanceof TypeError?'Your choice could not be saved. Please try again.':error.message;button.disabled=false;d.querySelectorAll('[data-cancel]').forEach(b=>b.disabled=false);}
   };
-  document.body.append(d);d.showModal();d.querySelector('h2').focus();
+  document.body.append(d);openDialog(d);d.querySelector('h2').focus();
  });}
  async function requestCopy(share=false){
   if(!canUse()||working)return;working=true;
