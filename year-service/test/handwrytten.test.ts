@@ -21,7 +21,7 @@ test('Handwrytten diagnostics and preview preparation require test mode and neve
  }finally{mocked.mock.restore();}
 });
 
-test('folded picture placements use the measured match and design-only requests',async()=>{
+test('folded picture placements use approved maximum sizes and design-only requests',async()=>{
  const calls:string[]=[];let body:any,imageId=10;
  const fake=mock.method(globalThis,'fetch',async(url:string,init:RequestInit)=>{
   const path=new URL(url).pathname;calls.push(path);
@@ -32,5 +32,5 @@ test('folded picture placements use the measured match and design-only requests'
   if(path.endsWith('/createCustomCard')){body=JSON.parse(String(init.body));return Response.json({status:'ok',card_id:123});}
   assert.equal(path,'/v2/cards/view');return Response.json({status:'ok',card:{images:Object.fromEntries(['front','inside','back'].map(side=>[side,[{image:'https://d3e924qpzqov0g.cloudfront.net/cardimages/customCards/test-'+side+'.png'}]]))}});
  });
- try{const image=new File(['test'],'test.jpg',{type:'image/jpeg'});await prepareHandwryttenFoldedCard({HANDWRYTTEN_API_KEY:'fake'},{name:'Measured frame',front:image,inside:image,back:image,onBack:async()=>{},onCard:async()=>{}});assert.deepEqual(handwryttenArtPlacement,{cover:74,inside:100});assert.equal(body.cover_size_percent,74);assert.equal(body.main_logo_size_percent,100);assert.equal(body.back_size_percent,40);assert.ok(calls.every(path=>!path.includes('/orders/')&&!path.includes('/basket/')));}finally{fake.mock.restore();}
+ try{const image=new File(['test'],'test.jpg',{type:'image/jpeg'});await prepareHandwryttenFoldedCard({HANDWRYTTEN_API_KEY:'fake'},{name:'Measured frame',front:image,inside:image,back:image,onBack:async()=>{},onCard:async()=>{}});assert.deepEqual(handwryttenArtPlacement,{cover:100,inside:100});assert.equal(body.cover_size_percent,100);assert.equal(body.main_logo_size_percent,100);assert.equal(body.back_size_percent,40);assert.ok(calls.every(path=>!path.includes('/orders/')&&!path.includes('/basket/')));}finally{fake.mock.restore();}
 });

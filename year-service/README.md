@@ -944,7 +944,7 @@ Its immutable revision hashes the inputs, frame assets, layout and approved copy
 The provisioner uploads the three new variants and retains legacy R2 references;
 it does not change edition publication, gift permissions or existing orders.
 
-Handwrytten folded design v4 uses cover size 74 / inside logo size 100. Their
+The earlier Handwrytten folded design v4 used cover size 74 / inside logo size 100. Their
 percentages refer to different placement areas. A real Test Mode preview with
 identical Starry Night artwork measured 320×400px on the cover and 321×402px on the
 inside left, on 408×528px panel proofs. The local folded-card preview uses the same
@@ -1055,3 +1055,5 @@ US recipients can use **Edit address** in the shared mug/postcard address step. 
 Supplied source-matched recipient translations publish in the same transaction as the English scrapbook, without a separate language approval. Save draft remains private; missing or outdated translations fall back to English. Hidden/removed photo drafts are excluded. Accessibility descriptions always use English.
 
 Migration 0040 retires Marathi and Traditional Chinese photo accessibility descriptions, removing only `photo:*:alt` entries from translation drafts and publications. Original English descriptions, captions, invitations and photos remain intact. Translation settings is an optional editor with no approval checkbox or language-publish action. Its blank fields use English; all supplied, source-matched translations publish with the scrapbook.
+
+Approved maximum postcard placement (November 16): new Handwrytten folded designs use front 100%, inside-left 100%, with preview version v5. The front fills the trim and the inside retains the provider’s fixed logo inset. Ordinary folded-card previews use the measured corresponding geometry; ready vendor proofs and frozen existing orders remain unchanged.

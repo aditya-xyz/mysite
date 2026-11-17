@@ -9,7 +9,7 @@
 .fc-art img{display:block;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
 .fc-spread{max-width:450px;container-type:inline-size}
 .fc-spread>.fc-page{width:50%;flex:0 0 50%}
-.fc-spread>.fc-page:first-child{border-right:1px solid #d9d4c6}
+.fc-spread>.fc-page:first-child{box-shadow:inset -1px 0 #d9d4c6}
 .fc-note canvas{display:block;width:100%;height:100%}
 .fc-back{display:flex;align-items:flex-end;justify-content:center;padding:0 12% 13%;font:600 13px/1.4 Georgia,serif;letter-spacing:.04em}
 @media(max-width:420px){.fc-surface{max-width:190px}.fc-spread{max-width:380px}.fc-preview .fc-views button{padding:8px 16px}}
@@ -43,10 +43,10 @@
  .fc-swap span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 }
 
-/* Match the vendor picture-page insets without fetching a vendor render. */
-.fc-spread .fc-art:not(.fc-vendor-inside){padding:0}
-.fc-spread .fc-art:not(.fc-vendor-inside) img{width:78%}
-
-/* New design proofs use the same ~78.5% panel width on front and inside left. */
+/* Match the approved 100%/100% API proof at the provider's 408px panel scale.
+   Cover: 432px wide, centered into the 408px trim. Inside: 321.6px wide,
+   beginning 57.6px from the left edge, centered vertically. */
 .fc-art:not(.fc-vendor-art):not(.fc-vendor-inside){padding:0}
-.fc-art:not(.fc-vendor-art):not(.fc-vendor-inside) img{width:78.5%;height:auto}
+[data-card-panel="front"] .fc-art:not(.fc-vendor-art) img{width:105.882353%;height:auto;max-width:none;flex:0 0 105.882353%}
+.fc-spread .fc-art:not(.fc-vendor-inside){justify-content:flex-start}
+.fc-spread .fc-art:not(.fc-vendor-inside) img{width:78.823529%;height:auto;margin-left:14.117647%;max-width:none;flex:0 0 78.823529%}

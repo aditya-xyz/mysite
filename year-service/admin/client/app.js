@@ -1,3 +1,4 @@
+import {previewRecipientChoices,previewRecipientPickerMarkup,bindPreviewRecipientPicker} from './preview-recipient-picker.js';
 import {storyTranslationMarkup,bindStoryTranslations,refreshStoryTranslationStatuses} from './story-translations.js';
 import {captionTranslationMarkup,bindCaptionTranslations,saveCaptionTranslations,refreshCaptionStatuses} from './caption-translations.js';
 import {openTranslationEditor} from './translations.js';
@@ -286,9 +287,6 @@ function previewMarkup(d){
   const chapter=personal=>d.photos.filter(p=>p.personal===personal).map(p=>`<figure><img src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async"><figcaption>${esc(p.caption)}${p.canSave?' · Original can be saved':''}</figcaption></figure>`).join('');
   return `<article class="preview"><div class="preview-opening-note"><span class="preview-edition-stamp"><img class="header-pixel" src="/pixel-santa.png" alt="Pixel wearing a Santa hat" width="369" height="400" decoding="async"><span class="kicker">${state.year} · ${esc(d.authors)}</span></span>${winterLights}</div><div class="recipient-greeting"><h1 class="recipient-name">Hey <strong>${esc(d.name)}</strong>,</h1><p class="recipient-welcome">we’re glad you’re here.</p></div>${themePhoto(d,'welcome','Pixel tilting her head on a sunny trail','preview-theme-photo')}<p class="prose">${esc(d.note)}</p><p><em>With love, ${esc(d.authors)}</em></p>${d.photos.some(p=>p.personal)?`<section aria-label="Photos selected for ${esc(d.name)}"><div class="gallery">${chapter(true)}</div></section>`:''}<h2>${esc(sharedHeading(d.sharedTitle))}</h2><div class="gallery">${chapter(false)}</div>${d.stories.map(s=>`<section><h2>${esc(s.title)}</h2><p class="prose">${esc(s.body)}</p></section>`).join('')}${d.gift?.enabled?`<section class="mug-preview"><h2>i got you something.</h2>${themePhoto(d,'gift','Pixel resting on a lounger','preview-theme-photo')}<div class="gallery">${d.gift.designs.map(m=>`<figure><img src="${esc(m.src)}" alt="${esc(m.alt)}"><figcaption>${esc(m.caption)}</figcaption></figure>`).join('')}</div></section>`:''}${previewFooter(d.shareSocials,d.themeAssets)}</article>`;
 }
-function previewOptions(){
-  return `<option value="" ${!previewRecipient?'selected':''}>Shared photos only</option><optgroup label="Invitations">${state.people.map(i=>`<option value="invite:${esc(i.id)}" ${previewRecipient==='invite:'+i.id?'selected':''}>${esc(i.addressedTo)}</option>`).join('')}</optgroup><optgroup label="Individual people">${contacts.map(p=>`<option value="${esc(p.id)}" ${previewRecipient===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</optgroup>`;
-}
 const previewLoader=createPreviewLoader({
   load:({year,recipient},signal)=>requestApi(`editions/${year}/preview?`+(recipient.startsWith('invite:')?'invitation='+encodeURIComponent(recipient.slice(7)):'recipient='+encodeURIComponent(recipient)),undefined,signal),
   onLoading:()=>{previewData=null;byId('edition-preview').setAttribute('aria-busy','true');byId('edition-preview').innerHTML='<p class="preview-loading" role="status">Opening this edition…</p>';},
@@ -304,11 +302,11 @@ async function openPreview(){
     if(view==='preview')render();
     modalReturnFocus=()=>byId('open-preview')?.focus({preventScroll:true});
     modal.classList.add('recipient-preview-dialog');
-    showModal(`<div class="preview-dialog-header"><p class="kicker">${state.year} · Private draft</p><h2>Preview scrapbook</h2><p class="hint">Saved draft · No SMS sent · Nothing is published</p><label class="field"><span>Preview for</span><span class="select-control"><select id="preview-person">${previewOptions()}</select></span></label><p><a class="button" id="open-full-pixelbook" target="_blank" rel="noopener">Open full Pixelbook ↗</a></p></div>`);
+    showModal(`<div class="preview-dialog-header"><p class="kicker">${state.year} · Private draft</p><h2>Preview scrapbook</h2><p class="hint">Saved draft · No SMS sent · Nothing is published</p>${previewRecipientPickerMarkup()}<p><a class="button" id="open-full-pixelbook" target="_blank" rel="noopener">Open full Pixelbook ↗</a></p></div>`);
     document.querySelector('.modal-close').setAttribute('aria-label','Close preview');
     const updateFullPreview=()=>{byId('open-full-pixelbook').href='/pixelbook-preview/?year='+state.year+'&'+(previewRecipient.startsWith('invite:')?'invitation='+encodeURIComponent(previewRecipient.slice(7)):'recipient='+encodeURIComponent(previewRecipient));};
     updateFullPreview();
-    byId('preview-person').onchange=event=>{previewRecipient=event.target.value;updateFullPreview();};
+    bindPreviewRecipientPicker(modalContent.querySelector('.preview-recipient-picker'),{choices:previewRecipientChoices(state.people,contacts),value:previewRecipient,onChange:value=>{previewRecipient=value;updateFullPreview();}});
   }catch(error){toast(error.message);}
 }
 function render(){

@@ -1,6 +1,6 @@
 import {drawFoldedNote} from './print-design.js';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-// A2 portrait: artwork is contained without cropping; the inside opens to two pages.
+// A2 portrait: front bleed and inside-left insets match the approved provider proof.
 export function foldedCardControlsMarkup({frontDesign='personal',canSwap=false,activeView='front'}={}){
  const swapLabel=frontDesign==='default'?'Put your postcard on the front and Pixel’s pick inside':'Put Pixel’s pick on the front and your postcard inside';
  return `<div class="fc-views" role="group" aria-label="Card view">${['Front','Inside','Back'].map(name=>`<button type="button" data-card-view="${name.toLowerCase()}" aria-pressed="${activeView===name.toLowerCase()}">${name}</button>`).join('')}${canSwap?`<button type="button" class="fc-swap" data-swap-card aria-label="${esc(swapLabel)}" title="${esc(swapLabel)}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg><span>Swap pictures</span></button>`:''}</div>`;

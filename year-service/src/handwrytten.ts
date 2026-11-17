@@ -34,8 +34,8 @@ export async function prepareHandwryttenCard(env:HandwryttenEnv,artwork:File,nam
 }
 
 
-// Measured on the provider's 408px-wide folded-panel proofs: approximately 320×400px on both sides.
-export const handwryttenArtPlacement={cover:74,inside:100} as const;
+// Approved API proof: full-size front; largest uncropped inside-left logo region.
+export const handwryttenArtPlacement={cover:100,inside:100} as const;
 export const handwryttenPrintFont={font:'hwMadeline',font_size:13,auto_font_size:true} as const;
 // Only prepares an immutable design. No message, address, basket or payment is sent.
 export async function prepareHandwryttenFoldedCard(env:HandwryttenEnv,input:{front:File;inside?:File;back:File;backId?:number;cardId?:number;name:string;onBack:(id:number)=>Promise<void>;onCard:(id:number)=>Promise<void>}){

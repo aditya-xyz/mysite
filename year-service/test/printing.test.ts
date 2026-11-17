@@ -288,7 +288,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    const route='editions/2026/print-orders/'+receipt.id+'/prepare-proof';assert.equal((await admin(route,{})).status,409);
    assert.equal(vendorCalls.filter(c=>c.path.endsWith('/uploadCustomLogo')).length,vendorCalls.slice(0,before).filter(c=>c.path.endsWith('/uploadCustomLogo')).length);
    hwMode=1;const proof=await admin(route,{});assert.equal(proof.status,200,await proof.clone().text());
-   const card=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).at(-1)!.body;assert.equal(card.cover_size_percent,74);assert.equal(card.main_type,'text');assert.equal(card.main_text,'');assert.equal(card.main_logo_id,undefined);
+   const card=vendorCalls.filter(c=>c.path.endsWith('/createCustomCard')).at(-1)!.body;assert.equal(card.cover_size_percent,100);assert.equal(card.main_type,'text');assert.equal(card.main_text,'');assert.equal(card.main_logo_id,undefined);
    const payload=JSON.parse((await db.prepare('SELECT handwrytten_order_json FROM print_orders').first<any>()).handwrytten_order_json);assert.equal(payload.addresses[0].message,greeted('The real default note 🐾'));assert.equal(payload.font_size,13);
    const manifest=(await (await proofGuest('journal')).json() as any).keepsake;assert.equal(manifest.order.pictures,undefined);assert.equal(manifest.order.preview.note,foldedPreviewNote);
   });

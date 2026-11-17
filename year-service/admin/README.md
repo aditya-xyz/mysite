@@ -1371,3 +1371,7 @@ Photo translation workflow: enter translated zingers beneath their English capti
 Review & publish no longer contains a Publication check panel. Preview, Save draft and Publish remain in the header, alongside optional Translation settings. Missing required content is still enforced and named directly when publishing.
 
 The separate language approval workflow is retired. Translation settings now only edits optional drafts, and the normal scrapbook publication includes all supplied current translations atomically. Marathi/Traditional Chinese accessibility fields are removed; migration 0040 also removes their old JSON entries while preserving original English descriptions and every caption.
+
+New postcard proofs use the approved 100% front / 100% inside-left placement. Studio recipient previews share the guest geometry. Existing prepared proofs and orders keep their saved designs; the sixth mugshot is still being prepared separately.
+
+Preview scrapbook uses an alphabetical searchable recipient combobox. Search matches the invite label or household member names; keyboard arrows, Enter and Escape select or dismiss without opening another page. Existing preview routes and permissions are unchanged.
