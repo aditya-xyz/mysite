@@ -30,7 +30,9 @@ test('72 simultaneous households retain isolated journal/media reads and immedia
    const response=await get('journal',i);assert.equal(response.status,200);const journal=await response.json() as {photos:{id:string}[]};
    assert.equal(journal.photos.length,26);assert.equal(journal.photos[0].id,'p-'+i);
    assert.match(response.headers.get('Server-Timing')!,/auth;dur=/);
-   await Promise.all(['p-'+i,'p-72','p-73','p-74'].map(async id=>{const r=await get('media/'+id,i);assert.equal(r.status,200);assert.equal(await r.text(),'small display fixture');assert.match(r.headers.get('Server-Timing')!,/storage;dur=/);}));
+   // Keep one outstanding HTTP/1 connection per household in the local runner.
+   // All 72 households still run concurrently; this is not a production burst benchmark.
+   for(const id of ['p-'+i,'p-72','p-73','p-74']){const r=await get('media/'+id,i);assert.equal(r.status,200);assert.equal(await r.text(),'small display fixture');assert.match(r.headers.get('Server-Timing')!,/storage;dur=/);}
   }));
   assert.equal((await get('media/p-1')).status,404,'Other households remain private');
   // Legacy manifests may assign an old invitation ID instead of the directory person.
