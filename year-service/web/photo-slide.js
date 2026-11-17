@@ -19,7 +19,7 @@ export function createPhotoSlide(frame,image){
   return current.finished.then(()=>{if(animation===current){complete=null;animation=null;done();current.cancel();rail.style.willChange='';}},()=>{});
  }
  function settle(){return travel(0,()=>{position(0);width=0;});}
- function ready(direction){const side=sides.get(direction);return prepared.has(direction)&&side?.getAttribute('src')&&side.complete&&side.naturalWidth?{src:side.src,width:side.naturalWidth,height:side.naturalHeight}:null;}
+ function ready(direction){const side=sides.get(direction);return side?.getAttribute('src')&&side.complete&&side.naturalWidth?{src:side.src,width:side.naturalWidth,height:side.naturalHeight,preview:!prepared.has(direction)}:null;}
  function neighbor(direction,src,canNavigate=true){sides.get(direction).src=src;if(canNavigate)prepared.add(direction);else prepared.delete(direction);}
  function reveal(src,naturalWidth,naturalHeight,direction=0){
   const from=offset;cancel(true);position(from);width=frame.getBoundingClientRect().width;
@@ -28,5 +28,6 @@ export function createPhotoSlide(frame,image){
   neighbor(direction,src);
   return travel(-Math.sign(direction)*width,commit);
  }
- return {reveal,cancel,begin,drag,settle,neighbor,ready,clearNeighbors};
+ function upgrade(src){image.src=src;}
+ return {reveal,cancel,begin,drag,settle,neighbor,ready,upgrade,clearNeighbors};
 }

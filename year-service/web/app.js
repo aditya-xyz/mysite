@@ -181,15 +181,15 @@ function showPhoto(photo,direction=0){
   if(!loader){loader=document.createElement('div');loader.className='photo-loading';loader.setAttribute('role','status');frame.append(loader);}
   loader.hidden=false;loader.innerHTML=loadingPaw()+'<span>Loading photo…</span>';
   document.querySelector('#photo-caption').textContent=photo.caption;
+  const ready=direction&&photoSlide.ready(direction),settled=direction&&!ready?photoSlide.settle():Promise.resolve();
   const viewerOptions={resolveSource:source=>sessionImages.url(source),isCurrent:()=>current===generation&&!preparedFile,
-    reveal(src,width,height){photoSlide.reveal(src,width,height,direction).then(()=>{
+    async reveal(src,width,height){await settled;if(current!==generation||preparedFile)return;const sliding=photoSlide.reveal(src,width,height,direction);loader.hidden=true;frame.removeAttribute('aria-busy');await sliding;
       if(current!==generation||!dialog.open)return;
       for(const step of [-1,1]){const adjacent=viewerPhotos[viewerIndex+step];if(adjacent){const thumb=[...app.querySelectorAll('.card')].find(card=>card.dataset.photo===adjacent.id)?.querySelector('img');if(thumb?.complete&&thumb.naturalWidth)photoSlide.neighbor(step,thumb.src,false);loadViewerPhoto(adjacent,{resolveSource:source=>sessionImages.url(source),isCurrent:()=>current===generation&&dialog.open,reveal:source=>photoSlide.neighbor(step,source),fail(){}});}}
-    });loader.hidden=true;frame.removeAttribute('aria-busy');},
+    },
     fail(){photoSlide.cancel();image.style.visibility='hidden';frame.removeAttribute('aria-busy');loader.textContent='Couldn’t load this photo. ';const retry=document.createElement('button');retry.type='button';retry.textContent='Try again';retry.onclick=()=>showPhoto(photo);loader.append(retry);}
   };
-  const ready=direction&&photoSlide.ready(direction);
-  if(ready)viewerOptions.reveal(ready.src,ready.width,ready.height);else loadViewerPhoto(photo,viewerOptions);
+  if(ready){const rendered=viewerOptions.reveal(ready.src,ready.width,ready.height);if(ready.preview)rendered.then(()=>{if(current!==generation)return;loadViewerPhoto(photo,{resolveSource:source=>sessionImages.url(source),isCurrent:()=>current===generation&&dialog.open&&!preparedFile,reveal:src=>photoSlide.upgrade(src),fail(){}});});}else loadViewerPhoto(photo,viewerOptions);
   document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full res';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');
   previousPhoto.disabled=viewerIndex===0;nextPhoto.disabled=viewerIndex===viewerPhotos.length-1;
   document.querySelector('#photo-count').textContent=`Photo ${viewerIndex+1} of ${viewerPhotos.length}`;
