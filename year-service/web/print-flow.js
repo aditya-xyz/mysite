@@ -24,7 +24,16 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   const message=text=>{sheet.querySelector('.ks-status').textContent=text;};
   const submit=dialog.querySelector('[data-submit-print]');
   if(previewOnly)message('Admin preview · Final ordering is disabled. No allowance is used.');
-  function renderAddress(){if(!sheet.isConnected)return;const region=sheet.querySelector('[data-delivery-address]');region.innerHTML=delivery.markup();delivery.bind(region);submit.disabled=previewOnly||submitting||!delivery.ready;}
+  let addressStep=false;
+  function renderAddress(){
+   if(!sheet.isConnected)return;
+   const previous=addressStep;addressStep=!delivery.ready;
+   sheet.className=addressStep?'ks-print-dialog ks-address-step':'ks-print-dialog';
+   sheet.querySelector('#print-title').textContent=addressStep?(delivery.state?.verified?'Edit address':'where’s home?'):'Mail this postcard?';
+   const region=sheet.querySelector('[data-delivery-address]');region.innerHTML=delivery.markup();delivery.bind(region);
+   submit.disabled=previewOnly||submitting||!delivery.ready;
+   if(previous!==addressStep&&sheet.open){sheet.scrollTop=0;(addressStep?region.querySelector('input:not([type="hidden"])'):sheet.querySelector('#print-title'))?.focus({preventScroll:true});}
+  }
   delivery=prepareDelivery();deliveryChanged=renderAddress;renderAddress();
   function release(){URL.revokeObjectURL(proofUrl);deliveryChanged=()=>{};delivery.destroy();if(preparedDelivery===delivery)preparedDelivery=null;sheet.remove();if(dialog===sheet)dialog=null;}
   dialog.addEventListener('close',release,{once:true});
