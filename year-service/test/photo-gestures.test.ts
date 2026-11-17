@@ -11,7 +11,7 @@ function viewer(){
  const handlers=new Map<string,(event:any)=>void>(),steps:number[]=[],animations:unknown[]=[];let closed=0;
  const photoStage={style:{transform:'',opacity:''},getAnimations:()=>[],animate:(frames:unknown)=>animations.push(frames),setPointerCapture:()=>{},addEventListener:(name:string,handler:(event:any)=>void)=>handlers.set(name,handler)};
  const viewport={scale:1,addEventListener:()=>{}};
- runInNewContext(wiring,{photoStage,dialog:{classList:{toggle:()=>{}}},window:{visualViewport:viewport},matchMedia:()=>({matches:false}),swipeStep,dismissDrag,movePhoto:(step:number)=>steps.push(step),closePhoto:()=>closed++});
+ runInNewContext(wiring,{photoStage,photoSlide:{cancel:()=>{}},dialog:{classList:{toggle:()=>{}}},window:{visualViewport:viewport},matchMedia:()=>({matches:false}),swipeStep,dismissDrag,movePhoto:(step:number)=>steps.push(step),closePhoto:()=>closed++});
  const pointer=(type:string,x:number,y:number,id=1,pointerType='touch')=>handlers.get(type)!({clientX:x,clientY:y,pointerId:id,pointerType,button:0,target:{closest:(selector:string)=>selector==='.photo-image'?{}:null}});
  return {pointer,photoStage,steps,animations,viewport,closed:()=>closed};
 }
