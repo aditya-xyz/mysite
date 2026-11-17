@@ -5,10 +5,10 @@ import {runInNewContext} from 'node:vm';
 const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
 const startup=source.slice(source.indexOf('async function start()'),source.indexOf('function showCode('));
 async function openGuest(hash:string,responses:Record<string,unknown>){
- const calls:string[]=[],footer={hidden:false,replaceChildren(){}},app={innerHTML:''};let offline=0,shown=0,error:unknown;
- const context:any={sessionImages:{clear(){}},app,document:{querySelector:(selector:string)=>selector==='footer'?footer:{}},location:{hash,pathname:'/'},history:{replaceState(){}},clearBrand(){},showOffline(){offline++;},showJournal(){shown++;},applyBrand(){},renderFooter(){},escape:(s:unknown)=>s,message(e:unknown){error=e;},api:async(path:string)=>{calls.push(path);const result=responses[path];if(result instanceof Error)throw result;return result;}};
+ const calls:string[]=[],footer={hidden:false,replaceChildren(){}},app={innerHTML:''};let offline=0,shown=0,footers=0,error:unknown;
+ const context:any={sessionImages:{clear(){}},app,document:{querySelector:(selector:string)=>selector==='footer'?footer:{}},location:{hash,pathname:'/'},history:{replaceState(){}},clearBrand(){},showOffline(){offline++;},showJournal(){shown++;},applyBrand(){},renderFooter(){footers++;},installLocalization(){},invitationEntryMarkup:()=>"invitation",escape:(s:unknown)=>s,message(e:unknown){error=e;},api:async(path:string)=>{calls.push(path);const result=responses[path];if(result instanceof Error)throw result;return result;}};
  runInNewContext(startup,context);await context.start();
- return {calls,offline,shown,error,footer};
+ return {calls,offline,shown,error,footer,footers};
 }
 const offlineError=()=>Object.assign(new Error('This scrapbook has been taken offline.'),{code:'SCRAPBOOK_OFFLINE'});
 test('offline fragment invitation stops before journal, verification or branding',async()=>{
@@ -27,4 +27,9 @@ test('valid sessions see offline immediately while invalid invitations retain th
 
 test('temporary journal failures show recovery instead of asking an already verified guest to sign in',async()=>{
  const error=Object.assign(new Error('Temporarily unavailable'),{status:503});const result=await openGuest('',{journal:error});assert.deepEqual(result.calls,['journal']);assert.equal(result.error,error);
+});
+
+test('unverified invitations keep the footer hidden',async()=>{
+ const result=await openGuest('',{journal:Object.assign(new Error('Verify first'),{status:401}),invitation:{year:2026}});
+ assert.equal(result.error,undefined);assert.equal(result.footer.hidden,true);assert.equal(result.footers,0);assert.equal(result.shown,0);
 });

@@ -1111,3 +1111,5 @@ mailing data remain unchanged.
 ## Photo viewer navigation
 
 Photo navigation waits for the display image to decode, then slides the image layer in the navigation direction. Controls stay anchored, and temporary outgoing image snapshots are released after completion or cancellation. Reduced-motion navigation updates immediately. Display caching and full-resolution permissions are unchanged.
+
+Photo swipes track the finger with edge resistance, spring back when canceled or too short, and continue from the release offset on navigation. The footer appears only after journal authentication succeeds. Viewer action buttons use translucent neutral backgrounds.

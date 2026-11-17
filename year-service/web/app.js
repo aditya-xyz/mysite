@@ -79,7 +79,6 @@ async function start() {
     const invite = await api('invitation');
     installLocalization(invite);
     applyBrand(invite.authors,invite.year);
-    renderFooter();
     app.innerHTML = invitationEntryMarkup(invite);
     document.querySelector('#send').onclick = async e => { e.target.disabled = true; try { await api('send', {}); showCode(invite); } catch (error) { if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;} document.querySelector('#error').textContent = error.message; e.target.disabled = false; } };
   } catch (error) { message(error); }
@@ -174,7 +173,7 @@ function showPhoto(photo,direction=0){
   if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}
   selected=photo;preparedFile=null;saveMode='share';const current=++generation;
   const image=dialog.querySelector('img'),frame=dialog.querySelector('.photo-image');
-  photoSlide.cancel();image.draggable=false;image.alt=photo.alt;
+  photoSlide.cancel(!!direction);image.draggable=false;image.alt=photo.alt;
   if(!direction||!image.getAttribute('src')){image.style.visibility='hidden';image.removeAttribute('src');frame.style.setProperty('--photo-ratio',String(photo.width&&photo.height?photo.width/photo.height:1));}
   frame.setAttribute('aria-busy','true');
   let loader=frame.querySelector('.photo-loading');
@@ -213,7 +212,7 @@ function syncPhotoZoom(){const zoomed=(window.visualViewport?.scale||1)>1;dialog
 window.visualViewport?.addEventListener('resize',syncPhotoZoom);syncPhotoZoom();
 photoStage.addEventListener('pointerdown',event=>{
   pointers.add(event.pointerId);
-  if(pointers.size>1){swipeStart=null;resetPhotoDrag();return;}
+  if(pointers.size>1){photoSlide.cancel();swipeStart=null;resetPhotoDrag();return;}
   if(event.button!==0||event.target.closest('button')||(window.visualViewport?.scale||1)>1)return;
   photoSlide.cancel();photoStage.getAnimations().forEach(animation=>animation.cancel());resetPhotoDrag();
   swipeStart={id:event.pointerId,x:event.clientX,y:event.clientY,dismiss:event.pointerType==='touch'&&!!event.target.closest('.photo-image'),dragging:false,horizontal:false};photoStage.setPointerCapture(event.pointerId);
@@ -223,6 +222,7 @@ photoStage.addEventListener('pointermove',event=>{
   const dx=event.clientX-swipeStart.x,dy=event.clientY-swipeStart.y;
   if(!swipeStart.dragging&&Math.abs(dx)>8&&Math.abs(dx)>Math.abs(dy)*1.2)swipeStart.horizontal=true;
   if(!swipeStart.horizontal&&dy>8&&dy>Math.abs(dx)*1.2)swipeStart.dragging=true;
+  if(swipeStart.horizontal){const step=dx<0?1:-1;photoSlide.drag(dx,adjacentIndex(viewerIndex,step,viewerPhotos.length)===viewerIndex);return;}
   if(!swipeStart.dragging)return;
   if(!matchMedia('(prefers-reduced-motion: reduce)').matches){photoStage.style.transform=`translateY(${Math.max(0,dy)}px)`;photoStage.style.opacity=String(Math.max(.55,1-Math.max(0,dy)/700));}
 });
@@ -232,9 +232,9 @@ photoStage.addEventListener('pointerup',event=>{
   const dx=event.clientX-swipeStart.x,dy=event.clientY-swipeStart.y,dragging=swipeStart.dragging,dismiss=swipeStart.dismiss&&swipeStart.dragging&&!swipeStart.horizontal&&dismissDrag(dx,dy);swipeStart=null;
   if(dismiss){closePhoto();return;}
   resetPhotoDrag(true);
-  if(!dragging){const step=swipeStep(dx,dy);if(step)movePhoto(step);}
+  if(!dragging){const step=swipeStep(dx,dy);if(step&&adjacentIndex(viewerIndex,step,viewerPhotos.length)!==viewerIndex)movePhoto(step);else photoSlide.settle();}
 });
-photoStage.addEventListener('pointercancel',event=>{pointers.delete(event.pointerId);swipeStart=null;resetPhotoDrag();});
+photoStage.addEventListener('pointercancel',event=>{photoSlide.settle();pointers.delete(event.pointerId);swipeStart=null;resetPhotoDrag();});
 const wheelStep=wheelNavigation(movePhoto);
 dialog.addEventListener('wheel',event=>{if((window.visualViewport?.scale||1)===1&&wheelStep(event))event.preventDefault();},{passive:false});
 
