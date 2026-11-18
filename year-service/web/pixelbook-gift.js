@@ -55,7 +55,7 @@ export function mountPixelGift(journal,root){
     const details=[['Style',style?.label||'Photo mug'],['Size',configuration.size],['Color',configuration.color],['Caption font',font?.label||configuration.font]];
     return `<div class="pb-order-review">${previewMarkup(selected,configuration)}<div class="pb-mug-details"><dl class="pb-gift-price"><div><dt>You pay</dt><dd><span class="pb-gift-zero">$0</span><span class="pb-gift-covered">dad’s got it</span></dd></div></dl><dl class="pb-mug-specs">${details.map(([label,value])=>`<div><dt>${label}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>${style?.careNote?`<p class="delivery-note">${esc(style.careNote)}</p>`:''}</div></div>`;
   }
-  function doneMarkup(){return `<div class="pb-gift-done"><p class="pb-eyebrow">${receipt?.live?(receipt.fulfillment==='submitted'?'mug ordered':receipt.fulfillment==='review'?'gift needs review':receipt.fulfillment==='unknown'?'checking your order':'gift request saved'):receipt?.approvalRequired?'awaiting approval':local?'preview claim saved':receipt?.status==='simulated'?'test order saved':'gift request received'}</p><p>Pixel perfect. one of my favorite photos of me.</p>${receipt?.approvalRequired?'<p>Your chosen mug is saved. Mom or dad will review the delivery cost before approving it.</p>':''}${previewMarkup(receipt?.design||selected,receipt?.configuration||configuration)}<p>${esc(mugOptionsLabel(receipt?.configuration||configuration))}</p>${['simulated','submitted'].includes(receipt?.status)?'<p class="pb-dialog-budget">text dad if you need a second one. just don’t mention i told you this.</p>':''}${receipt?.live?'<p>'+esc(receipt.fulfillment==='submitted'?'Your mug order is with Printful.':receipt.fulfillmentError||'Pixel’s on it. Your order is being prepared; please don’t submit another one.')+'</p>':local?'<p>That’s the whole flow. No mug has been ordered or charged.</p>':receipt?.status==='simulated'?'':'<p>Your household’s gift request is saved. Check back here for updates.</p>'}</div>`;}
+  function doneMarkup(){return `<div class="pb-gift-done"><p class="pb-eyebrow">${receipt?.live?(receipt.fulfillment==='submitted'?'mug ordered':receipt.fulfillment==='review'?'gift needs review':receipt.fulfillment==='unknown'?'checking your order':'order received'):receipt?.approvalRequired?'awaiting approval':local?'preview claim saved':receipt?.status==='simulated'?'test order saved':'gift request received'}</p><p>Pixel perfect. one of my favorite photos of me.</p>${receipt?.approvalRequired?'<p>Your chosen mug is saved. Mom or dad will review the delivery cost before approving it.</p>':''}${previewMarkup(receipt?.design||selected,receipt?.configuration||configuration)}<p>${esc(mugOptionsLabel(receipt?.configuration||configuration))}</p>${['simulated','submitted'].includes(receipt?.status)?'<p class="pb-dialog-budget">text dad if you need a second one. just don’t mention i told you this.</p>':''}${receipt?.live?'<p>'+esc(receipt.fulfillment==='submitted'?'Your mug order is with Printful.':receipt.fulfillmentError||'Your request is saved. You can head back to your scrapbook while Pixel takes care of the rest. Reopen your household’s gift for updates.')+'</p>':local?'<p>That’s the whole flow. No mug has been ordered or charged.</p>':receipt?.status==='simulated'?'':'<p>Your household’s gift request is saved. Check back here for updates.</p>'}</div>`;}
   function render(){
     modal.className='pb-gift-dialog'+(step==='review'?' pb-mug-review':step==='done'?' pb-mug-confirmation':step==='submitting'?' pb-mug-submitting':'');
     const householdNote=step==='address'&&delivery.ready?householdOrderNote(journal.name,journal.householdSize):'';
@@ -99,13 +99,8 @@ export function mountPixelGift(journal,root){
     busy=true;step='submitting';render();
     try{
       const result=await request('claim',{designId:selected.id,configuration,addressVersion:delivery.state.version,requestKey,mockupId:mockups.id(selected,configuration),preparedPreviewId:mockups.preparedId(selected,configuration)});receipt={...result.claim,design:result.claim.design||{...selected}};
-      if(receipt.live){
-        for(let attempt=0;attempt<30&&modal.open&&modal.isConnected&&!['submitted','review','unknown'].includes(receipt.fulfillment);attempt++){
-          await new Promise(resolve=>setTimeout(resolve,2000));
-          if(!modal.open||!modal.isConnected)return;
-          try{const status=await request('status');if(status.claim)receipt=status.claim;}catch{break;}
-        }
-      }
+      // The persisted claim is the receipt. Supplier fulfillment continues server-side;
+      // reopening the gift refreshes its status without keeping this dialog blocked.
       if(!modal.isConnected)return;selectReceipt();render();
     }catch(error){if(error.name!=='AbortError'&&modal.open){step='address';render();modal.querySelector('.pb-gift-status').textContent=error.message;}}
     finally{busy=false;if(step==='submitting')step='address';}

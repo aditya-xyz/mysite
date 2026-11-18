@@ -140,7 +140,7 @@ test('the chooser warms only the selected saved proof and catalog refresh does n
  t.mock.timers.tick(30000);await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(calls,['/api/gift/status','/api/gift/catalog','/supplier.jpg']);
 });
 
-for(const failFirst of [false,true])test(`mug submission shows a paw until the server responds and ${failFirst?'restores a safe retry':'prevents duplicate taps'}`,async t=>{
+for(const live of [false,true])for(const failFirst of [false,true])test(`${live?'live':'simulated'} mug submission shows a paw until the server responds and ${failFirst?'restores a safe retry':'prevents duplicate taps'}`,async t=>{
  const {launch,modal,next,designs,status}=fixture(t,{hasOrder:false});
  const claims:any[]=[];let respond!:(value:Response)=>void;
  const fetch=mock.method(globalThis,'fetch',async(path:string,init?:RequestInit)=>{
@@ -153,8 +153,9 @@ for(const failFirst of [false,true])test(`mug submission shows a paw until the s
  let pending=next.listeners.click();assert.match(modal.innerHTML,/pb-mug-submission/);assert.match(modal.innerHTML,/pb-paw-fill/);assert.doesNotMatch(modal.innerHTML,/data-gift-next|test order saved/);
  await next.listeners.click();assert.equal(claims.length,1,'A second tap never creates another request');
  if(failFirst){respond(Response.json({error:'Please try again.'},{status:503}));await pending;assert.equal(status.textContent,'Please try again.');assert.match(modal.innerHTML,/confirm & order/);assert.doesNotMatch(modal.innerHTML,/pb-mug-submission/);pending=next.listeners.click();assert.equal(claims.length,2);assert.deepEqual(claims[0],claims[1],'Retry preserves the idempotency key and chosen mug');}
- respond(Response.json({claim:{status:'simulated',configuration:claims[0].configuration,designId:designs[0].id,design:designs[0]}}));await pending;
+ respond(Response.json({claim:{live,fulfillment:live?'pending':undefined,status:'simulated',configuration:claims[0].configuration,designId:designs[0].id,design:designs[0]}}));await pending;
  assert.match(modal.innerHTML,/Pixel perfect. one of my favorite photos of me./);assert.doesNotMatch(modal.innerHTML,/<h3>Pixel perfect|excellent choice|that’s a wrap|pb-mug-submission/);assert.match(modal.className,/pb-mug-confirmation/);
+ if(live){assert.match(modal.innerHTML,/order received/);assert.match(modal.innerHTML,/head back to your scrapbook/);assert.doesNotMatch(modal.innerHTML,/mug ordered|Your mug order is with Printful/);assert.equal(fetch.mock.calls.filter(call=>call.arguments[0]==='/api/gift/status').length,1,'No supplier-status polling after the saved claim');}
 });
 
 test('reopening a saved gift reconnects both prepared handle angles while preserving its saved image',async t=>{
