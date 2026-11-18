@@ -1,0 +1,13 @@
+a { color: inherit; text-underline-offset: .2em; }
+#new-invite { display: grid; gap: 10px; }
+#history { list-style: none; padding: 0; }
+#history li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+#history span { color: var(--muted); font-size: .875rem; grid-column: 1; }
+#history button { grid-column: 2; grid-row: 1 / 3; width: auto; }

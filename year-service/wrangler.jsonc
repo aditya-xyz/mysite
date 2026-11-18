@@ -4,7 +4,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-06",
   "workers_dev": true,
-  "routes": [{ "pattern": "scrapbook.adityapatil.xyz", "custom_domain": true }],
+  "routes": [
+    { "pattern": "scrapbook.adityapatil.xyz", "custom_domain": true },
+    { "pattern": "sms-test.adityapatil.xyz", "custom_domain": true }
+  ],
   "preview_urls": false,
   "observability": { "enabled": false },
   "triggers": { "crons": ["23 9 * * *", "* * * * *"] },
@@ -12,6 +15,7 @@
   "vars": {
     "SMS_DAILY_LIMIT": "200",
     "SMS_MONTHLY_LIMIT": "500",
+    "SMS_TEST_ORIGIN": "https://sms-test.adityapatil.xyz",
     "ORDER_MODE": "simulation",
     "PRINT_ORDER_MODE": "handwrytten_live",
     "LIVE_GIFT_ORDERING": "true",

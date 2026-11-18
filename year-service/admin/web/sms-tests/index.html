@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>SMS delivery tests · Pixelbook Studio</title>
+  <link rel="stylesheet" href="/pixelbook-preview/sms-test/styles.css">
+  <link rel="stylesheet" href="./tools.css">
+  <script src="./tools.js" type="module"></script>
+</head>
+<body>
+  <main>
+    <p><a href="/#scrapbooks/2026/sharing">Back to Studio</a></p>
+    <h1>SMS delivery tests</h1>
+    <p>Create a one-time link for an Indian or Dutch mobile number. Share it with that tester within 48 hours.</p>
+    <form id="create">
+      <label for="phone">Tester’s mobile number</label>
+      <input id="phone" type="tel" autocomplete="off" placeholder="+91 or +31, then the mobile number" maxlength="30" required>
+      <button type="submit">Generate test link</button>
+    </form>
+    <section id="new-invite" hidden>
+      <label for="invite-link">One-time test link</label>
+      <input id="invite-link" type="text" readonly>
+      <button id="copy" type="button">Copy test link</button>
+    </section>
+    <p id="status" role="status"></p>
+    <section>
+      <h2>Recent tests</h2>
+      <button id="refresh" type="button">Refresh results</button>
+      <ul id="history"></ul>
+      <p id="empty" hidden>No tests yet.</p>
+    </section>
+  </main>
+</body>
+</html>

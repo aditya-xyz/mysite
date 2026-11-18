@@ -6,6 +6,7 @@ import {mugImageResponse} from './mug-images.ts';
 import {digitalStatus,digitalImage,claimDigitalPostcard} from './digital-postcards.ts';
 import {tickPrintFulfillment} from './handwrytten-fulfillment.ts';
 import {reserveSmsSend,SmsBudgetError,type SmsBudgetEnv} from './sms-budget.ts';
+import {cleanSmsTests, smsTestRoute, SmsTestProblem} from './sms-tests.ts';
 import {handwryttenPreviewStatus,handwryttenPreviewImage} from './handwrytten-previews.ts';
 import {keepsakeManifest,keepsakeDefaultImage} from './keepsake-defaults.ts';
 import {preparedMugCatalog,preparedMugImage,preparedMugSource,tickPreparedMugs} from './prepared-mugs.ts';
@@ -35,6 +36,7 @@ interface Env extends AddressEnv, SmsBudgetEnv {
   PRINTFUL_STORE_ID?:string;
   JOURNAL_ORIGIN?:string;
   SOCIAL_JOURNAL_ORIGIN?:string;
+  SMS_TEST_ORIGIN?: string;
   TWILIO_ACCOUNT_SID: string;
   TWILIO_API_KEY_SID: string;
   TWILIO_API_KEY_SECRET: string;
@@ -43,6 +45,7 @@ interface Env extends AddressEnv, SmsBudgetEnv {
 interface Invite extends InvitationAudience { version:number; person_id: string | null; edition_year: number; id: string; name: string; phone: string; expires_at: number; challenge_expires_at: number }
 interface Photo { id: string; invite_id: string | null; preview_key: string; original_key: string | null; filename: string | null; caption: string; alt: string }
 const INVITE = "__Host-year_invite", SESSION = "__Host-year_session";
+const SMS_TEST_ASSETS = new Set(['/sms-test', '/sms-test/', '/sms-test/index.html', '/sms-test/styles.css', '/sms-test/test.js']);
 class Failure extends Error { constructor(public status: number, message: string, public retryAfter?:number, public code?:string) { super(message); } }
 const json = (data: unknown, status = 200, headers?: HeadersInit) =>
   Response.json(data, { status, headers });
@@ -113,7 +116,7 @@ async function twilio(env: Env, resource: string, params: Record<string, string>
       body: new URLSearchParams(params), signal: AbortSignal.timeout(15000)
     });
   } catch { throw new Failure(503, "The verification service is unavailable. Please try again shortly."); }
-  const data = await response.json() as { status?: string; code?: number };
+  const data = await response.json() as { status?: string; code?: number; sid?: string };
   // Never log provider payloads: they can contain the recipient's phone number.
   if (!response.ok) {
     if (resource === "VerificationCheck" && [400, 404].includes(response.status))
@@ -129,6 +132,23 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
   }
   const url = new URL(request.url), path = url.pathname;
   if (request.method === "POST" && !sameOrigin(request)) throw new Failure(403, "Please use this site's invitation page.");
+  const smsTestApi = path.startsWith('/api/sms-test/');
+  const smsTestAsset = SMS_TEST_ASSETS.has(path);
+  if (env.SMS_TEST_ORIGIN) {
+    if (url.origin === env.SMS_TEST_ORIGIN) {
+      if (path === '/' && ['GET', 'HEAD'].includes(request.method)) return Response.redirect(new URL('/sms-test/', url).href, 302);
+      if (!smsTestApi && !smsTestAsset) throw new Failure(404, 'Not found.');
+    } else if (smsTestApi || smsTestAsset) {
+      throw new Failure(404, 'Not found.');
+    }
+  }
+  if (smsTestApi) {
+    if (request.method === 'POST') {
+      const hash = await digest(request.headers.get('CF-Connecting-IP') || 'local');
+      await limited(env, 'sms-test-ip:' + hash, 60, 3600);
+    }
+    return smsTestRoute(request, path, env, () => body(request), (resource, params) => twilio(env, resource, params));
+  }
   if (path.startsWith("/api/") && request.method === "POST") {
     const ip = request.headers.get("CF-Connecting-IP") || "local";
     const hash=await digest(ip);
@@ -354,7 +374,16 @@ export default {
     const requestStarted=performance.now(),timings:string[]=[];
     let response: Response;
     try { response = await route(request, env, ctx,timings); }
-    catch (error) { response = error instanceof PrintProblem ? json({error:error.message,...(error.retryAfter?{retryAfter:error.retryAfter}:{})},error.status,error.retryAfter?{'Retry-After':String(error.retryAfter)}:undefined) : error instanceof Failure || error instanceof SmsBudgetError ? json({ error: error.message,...(error.code?{code:error.code}:{}),...(error.retryAfter?{retryAfter:error.retryAfter}:{}) }, error.status,error.retryAfter?{"Retry-After":String(error.retryAfter)}:undefined) : json({ error: "Something went wrong. Please try again later." }, 500); }
+    catch (error) {
+      if (error instanceof PrintProblem || error instanceof Failure || error instanceof SmsBudgetError || error instanceof SmsTestProblem) {
+        const retryAfter = error.retryAfter;
+        const code = error instanceof Failure || error instanceof SmsBudgetError ? error.code : undefined;
+        response = json({error: error.message, ...(code ? {code} : {}), ...(retryAfter ? {retryAfter} : {})}, error.status,
+          retryAfter ? {'Retry-After': String(retryAfter)} : undefined);
+      } else {
+        response = json({error: 'Something went wrong. Please try again later.'}, 500);
+      }
+    }
     const headers = new Headers(response.headers);
     headers.set("Server-Timing",[...timings,`app;dur=${(performance.now()-requestStarted).toFixed(1)}`].join(", "));
     const assetUrl=new URL(request.url),versionedShell=/^\/(app\.bundle\.js|app\.styles\.css|theme\.js|fonts\/(asap-variable\.woff2|caveat-400\.ttf))$/.test(assetUrl.pathname)&&/^[a-f0-9]{16}$/.test(assetUrl.searchParams.get('v')||'')&&response.status===200;
@@ -372,6 +401,7 @@ export default {
     if(_event.cron==='23 9 * * *'){
     await clearExpiredAddressVerifications(env.DB);
     await cleanMugMockups(env);
+    await cleanSmsTests(env.DB);
     await env.DB.batch([
       env.DB.prepare('DELETE FROM contact_address_checks WHERE expires_at<=?1').bind(now()),
       env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?1").bind(now()),

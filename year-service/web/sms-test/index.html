@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>SMS verification test</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./test.js" type="module"></script>
+</head>
+<body>
+  <main>
+    <h1>SMS verification test</h1>
+    <p>Check that a text code reaches your phone and can be verified.</p>
+    <noscript><p>Turn on JavaScript to run the test.</p></noscript>
+    <form id="invite" hidden>
+      <label for="invite-code">Test invite code</label>
+      <input id="invite-code" type="text" maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+      <button type="submit">Open test</button>
+    </form>
+    <section id="test" hidden>
+      <p id="destination"></p>
+      <form id="verify" hidden>
+        <label for="sms-code">Six-digit text code</label>
+        <input id="sms-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+        <button type="submit">Verify code</button>
+      </form>
+      <button id="send" type="button">Text me a code</button>
+      <p id="send-limit" hidden>Ask the person who invited you for a fresh test link if you need another try.</p>
+    </section>
+    <section id="complete" hidden>
+      <h2 id="result" tabindex="-1">Code verified</h2>
+      <p>The SMS test worked. You can close this tab.</p>
+    </section>
+    <p id="status" role="status"></p>
+  </main>
+</body>
+</html>

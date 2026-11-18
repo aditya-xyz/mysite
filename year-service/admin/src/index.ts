@@ -26,9 +26,10 @@ import { adminIdentity, type AuthConfig } from "./auth.ts";
 import { photoUploadRoute, UploadProblem } from "./uploads.ts";
 import { mediaLibraryRoute } from './media-library.ts';
 import { token, digest, now, sameOrigin } from "../../src/security.ts";
+import {createSmsTest, listSmsTests, revokeSmsTest, SmsTestProblem} from '../../src/sms-tests.ts';
 import { clientEdition, MAX_MUG_DESIGNS, type Draft, type Published, type PublishedPhoto, type PublishedMugDesign } from "../../src/edition.ts";
 
-interface Env extends AuthConfig, LinkConfig, AddressEnv { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string }
+interface Env extends AuthConfig, LinkConfig, AddressEnv { DB: D1Database; MEDIA: R2Bucket; ASSETS: Fetcher; JOURNAL_ORIGIN: string; SMS_TEST_ORIGIN?: string }
 interface EditionRow { draft_json: string; draft_version: number; published_version: number | null; published_at: number | null; is_active:number; taken_offline_at:number|null; publication_revision:number }
 interface Media { id: string; preview_key: string; viewer_key:string|null; original_key: string | null; filename: string; mime: string; bytes: number }
 class Problem extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -150,6 +151,15 @@ async function route(request: Request, env: Env, actor: string) {
   const url = new URL(request.url); let path = url.pathname;
   if (!["GET","HEAD","POST"].includes(request.method)) throw new Problem(405,"Method not allowed.");
   if (request.method === "POST" && !sameOrigin(request)) throw new Problem(403,"Use the admin dashboard to make changes.");
+  if (path === '/api/sms-tests') {
+    if (request.method === 'GET') return json(await listSmsTests(env.DB));
+    if (request.method === 'POST') {
+      const data = await body(request);
+      return json(await createSmsTest(env.DB, env.SMS_TEST_ORIGIN || env.JOURNAL_ORIGIN, data.phone), 201);
+    }
+  }
+  const smsTestRevoke = /^\/api\/sms-tests\/([a-f0-9-]{36})\/revoke$/.exec(path);
+  if (smsTestRevoke && request.method === 'POST') return json(await revokeSmsTest(env.DB, smsTestRevoke[1]));
   if(path==='/api/contacts/new/address/verify'&&request.method==='POST')return verifyNewContactAddress(request,env,actor,await body(request));
   if(path.startsWith('/api/contacts/')||path.startsWith('/api/address-verification/')){const autocomplete=await addressAutocompleteRoute(request,env,path,()=>body(request));if(autocomplete)return autocomplete;const address=await addressAdminRoute(request,env,path,()=>body(request));if(address)return address;}
   if (path === "/api/contacts") {
@@ -483,7 +493,7 @@ export default {
       const actor = await adminIdentity(request,env);
       response = actor ? await route(request,env,actor) : json({error:"Sign in with the approved admin Google account to continue."},401);
     } catch (error) {
-      if (error instanceof Problem || error instanceof PrintProblem || error instanceof UploadProblem) response=json({error:error.message},error.status);
+      if (error instanceof Problem || error instanceof PrintProblem || error instanceof UploadProblem || error instanceof SmsTestProblem) response=json({error:error.message},error.status);
       else if(error instanceof Error&&error.message.includes('photo is no longer available'))response=json({error:'A photo was deleted in another tab. Remove it from this draft before saving or publishing.'},409);
       else if (error instanceof Error && error.message.includes("UNIQUE constraint failed: invites.edition_year, invites.phone"))
         response=json({error:"That phone number is already in this scrapbook. Refresh to see the latest invitations."},409);

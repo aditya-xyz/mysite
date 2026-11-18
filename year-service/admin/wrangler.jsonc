@@ -21,6 +21,7 @@
     "ACCESS_AUD": "4e3ce74bfb8b88284386d0717ab85ab84a236ace37b649fbeb2e0dc63c85a0aa",
     "JOURNAL_ORIGIN": "https://aditya-year-2026.aditya-year-service.workers.dev",
     "SOCIAL_JOURNAL_ORIGIN": "https://scrapbook.adityapatil.xyz",
+    "SMS_TEST_ORIGIN": "https://sms-test.adityapatil.xyz",
     "ADDRESS_VERIFICATION_PROVIDER": "google",
     "GOOGLE_PLACES_ENABLED": "true",
     "ADDRESS_VALIDATION_DAILY_LIMIT": "100",
