@@ -2,7 +2,7 @@ const byId = id => document.getElementById(id);
 const inviteForm = byId('invite'), verifyForm = byId('verify'), send = byId('send');
 const inviteCode = byId('invite-code'), smsCode = byId('sms-code'), status = byId('status');
 const countries = {IN: 'India (+91)', NL: 'Netherlands (+31)', US: 'US (+1)'};
-let state = null, busy = false, retryAt = 0, timer;
+let state = null, pendingInvite = '', busy = false, retryAt = 0, timer;
 
 async function request(action, data) {
   const response = await fetch('/api/sms-test/' + action, data === undefined ? {} : {
@@ -44,15 +44,29 @@ function show(next) {
 async function run(action, data, focus) {
   if (busy) return;
   busy = true;
-  status.textContent = action === 'send' ? 'Requesting the text…' : '';
-  render();
+  let currentAction = action;
+  status.textContent = action === 'send' ? 'Requesting the text…' : action === 'preview' ? 'Checking the test link…' : '';
+  if (action !== 'preview' || !location.hash) render();
   try {
+    if (action === 'send' && pendingInvite) {
+      currentAction = 'open';
+      show(await request('open', {token: pendingInvite}));
+      pendingInvite = '';
+      if (location.hash) history.replaceState(null, '', location.pathname);
+      currentAction = 'send';
+    }
     show(await request(action, data));
+    if (action === 'preview') pendingInvite = data.token;
     status.textContent = action === 'send' ? 'Text requested. Enter the code when it arrives.' : '';
     return true;
   } catch (error) {
     status.textContent = error.message;
-    if (action !== 'open') {
+    if (currentAction === 'open') {
+      if (error.status === 400 || error.status === 401) {
+        pendingInvite = '';
+        show(null);
+      }
+    } else if (currentAction !== 'preview') {
       try { show(await request('status')); }
       catch (refreshError) { if (refreshError.status === 401) show(null); }
     }
@@ -66,8 +80,7 @@ async function run(action, data, focus) {
 
 inviteForm.addEventListener('submit', async event => {
   event.preventDefault();
-  if (await run('open', {token: inviteCode.value.trim().toLowerCase()})) {
-    if (location.hash) history.replaceState(null, '', location.pathname);
+  if (await run('preview', {token: inviteCode.value.trim().toLowerCase()})) {
     inviteCode.value = '';
     send.focus();
   }
@@ -80,8 +93,7 @@ verifyForm.addEventListener('submit', event => {
 
 const fragment = location.hash.slice(1);
 if (fragment) {
-  if (/^[a-f0-9]{64}$/i.test(fragment)) inviteCode.value = fragment;
-  show(null);
+  await run('preview', {token: fragment.toLowerCase()}, send);
 } else {
   try { show(await request('status')); }
   catch (error) {

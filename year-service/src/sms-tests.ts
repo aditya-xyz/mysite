@@ -107,16 +107,24 @@ export async function smsTestRoute(request: Request, path: string, env: SmsTestE
   readBody: () => Promise<Record<string, unknown>>, verifyApi: VerifyApi) {
   const action = path.slice('/api/sms-test/'.length), db = env.DB;
   if (action === 'status' && request.method === 'GET') return Response.json(state(await testSession(request, db)));
-  if (!['open', 'send', 'verify'].includes(action) || request.method !== 'POST') {
+  if (!['preview', 'open', 'send', 'verify'].includes(action) || request.method !== 'POST') {
     throw new SmsTestProblem(404, 'Test action not found.');
   }
   const data = await readBody(), stamp = now();
-  if (action === 'open') {
+  if (action === 'preview' || action === 'open') {
     if (!validToken(data?.token)) throw new SmsTestProblem(400, 'Enter the test invite code you were sent.');
+    const tokenHash = await digest(data.token);
+    if (action === 'preview') {
+      const invite = await db.prepare(`SELECT * FROM sms_test_invites
+        WHERE token_hash=?1 AND expires_at>?2 AND redeemed_at IS NULL AND revoked_at IS NULL`)
+        .bind(tokenHash, stamp).first<TestInvite>();
+      if (!invite) throw new SmsTestProblem(401, 'This test invite was already used, expired, or revoked.');
+      return Response.json(state(invite, stamp));
+    }
     const session = token();
     const invite = await db.prepare(`UPDATE sms_test_invites SET redeemed_at=?1,session_hash=?2
       WHERE token_hash=?3 AND expires_at>?1 AND redeemed_at IS NULL AND revoked_at IS NULL RETURNING *`)
-      .bind(stamp, await digest(session), await digest(data.token)).first<TestInvite>();
+      .bind(stamp, await digest(session), tokenHash).first<TestInvite>();
     if (!invite) throw new SmsTestProblem(401, 'This test invite was already used, expired, or revoked.');
     return Response.json(state(invite, stamp), {
       headers: {'Set-Cookie': sessionCookie(TEST_SESSION, session, invite.expires_at - stamp)},

@@ -89,9 +89,19 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
     const indiaInvite = await invite('+91 98765 43210');
     assert.match(indiaInvite.url, /^https:\/\/sms\.test\/sms-test\/#([a-f0-9]{64})$/);
     assert.equal((await admin('', {phone: india})).status, 409);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const preview = await guest('preview', {token: linkCode(indiaInvite)});
+      assert.equal(preview.status, 200);
+      assert.equal(preview.headers.has('Set-Cookie'), false);
+      const previewBody = await preview.text();
+      assert.match(previewBody, /"phoneHint":"3210"/);
+      assert.ok(!previewBody.includes(india));
+    }
+    assert.equal(await db.prepare('SELECT redeemed_at FROM sms_test_invites WHERE id=?').bind(indiaInvite.id).first('redeemed_at'), null);
     assert.deepEqual(sent, []);
     const opened = await Promise.all([guest('open', {token: linkCode(indiaInvite)}), guest('open', {token: linkCode(indiaInvite)})]);
     assert.deepEqual(opened.map(response => response.status).sort(), [200, 401]);
+    assert.equal((await guest('preview', {token: linkCode(indiaInvite)})).status, 401);
     const indiaSession = opened.find(response => response.ok)!.headers.get('Set-Cookie')!;
     assert.match(indiaSession, /^__Host-sms_test_session=.*HttpOnly; Secure; SameSite=Strict/);
     const cookie = indiaSession.split(';')[0];
