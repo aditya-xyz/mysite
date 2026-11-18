@@ -1,0 +1,17 @@
+/* The icon reflects the preference; System can resolve to either palette. */
+:root[data-color-mode] .theme-toggle :is(.theme-system,.theme-moon,.theme-sun){display:none}
+:root[data-color-mode=system] .theme-toggle .theme-system,
+:root[data-color-mode=dark] .theme-toggle .theme-moon,
+:root[data-color-mode=light] .theme-toggle .theme-sun{display:block}
+.theme-toggle[aria-expanded=true]{background:var(--surface);outline:1px solid var(--line)}
+.theme-menu{position:fixed;z-index:1000;width:194px;max-width:calc(100vw - 16px);padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);box-shadow:0 8px 28px #0003}
+.theme-menu[hidden]{display:none}
+.theme-menu button{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:44px;margin:0;padding:10px 12px;border:0;border-radius:7px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.theme-menu button:hover,.theme-menu button:focus-visible{background:var(--surface)}
+.theme-menu button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.theme-menu button[aria-checked=true]{font-weight:650}
+.theme-check{visibility:hidden}
+.theme-menu [aria-checked=true] .theme-check{visibility:visible}
+
+/* Keep the chooser at the right edge even before an invitation is open. */
+header .theme-toggle{grid-column:-2}

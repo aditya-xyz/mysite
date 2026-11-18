@@ -27,3 +27,14 @@ export async function liveGiftState(env:PrintEnv,orderId:string){
  if(env.LIVE_GIFT_ORDERING!=='true')return null;
  return env.DB.prepare('SELECT state,error,provider_id,max_cents FROM live_gift_orders WHERE order_id=?1').bind(orderId).first<{state:string;error:string|null;provider_id:string|null;max_cents:number}>();
 }
+// An explicit admin allowance reset permits one more completed postcard checkout.
+// Keep the original order and fulfillment audit; uncertain orders stay reserved.
+export function releaseResetPostcardIntent(env:PrintEnv,orderId:string){
+ return env.DB.prepare(`DELETE FROM live_gift_orders WHERE order_id=?1 AND kind='postcard' AND state='submitted'
+ AND EXISTS(SELECT 1 FROM print_orders o WHERE o.id=live_gift_orders.order_id
+ AND o.invitation_id=live_gift_orders.invitation_id AND o.year=live_gift_orders.year
+ AND o.status='submitted' AND o.allowance_reset_at IS NOT NULL
+ AND o.provider_id=(CASE json_extract(o.handwrytten_quote_json,'$.testMode') WHEN 1 THEN 'handwrytten-test-' WHEN 0 THEN 'handwrytten-live-' END)||live_gift_orders.provider_id
+ AND json_extract(o.handwrytten_quote_json,'$.submitted')=1
+ AND EXISTS(SELECT 1 FROM print_fulfillment f WHERE f.order_id=o.id AND f.state='submitted'))`).bind(orderId).run();
+}

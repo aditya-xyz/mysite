@@ -1,6 +1,6 @@
 import {test,mock} from 'node:test';
 import assert from 'node:assert/strict';
-import {handwryttenStatus,prepareHandwryttenCard,prepareHandwryttenFoldedCard,handwryttenArtPlacement} from '../src/handwrytten.ts';
+import {handwryttenStatus,prepareHandwryttenCard,prepareHandwryttenFoldedCard,handwryttenArtPlacement,handwryttenMessage} from '../src/handwrytten.ts';
 test('Handwrytten diagnostics and preview preparation require test mode and never submit orders or payment',async()=>{
  let testMode=0;const calls:string[]=[];
  const mocked=mock.method(globalThis,'fetch',async(url:string,init:RequestInit)=>{
@@ -33,4 +33,11 @@ test('folded picture placements use approved maximum sizes and design-only reque
   assert.equal(path,'/v2/cards/view');return Response.json({status:'ok',card:{images:Object.fromEntries(['front','inside','back'].map(side=>[side,[{image:'https://d3e924qpzqov0g.cloudfront.net/cardimages/customCards/test-'+side+'.png'}]]))}});
  });
  try{const image=new File(['test'],'test.jpg',{type:'image/jpeg'});await prepareHandwryttenFoldedCard({HANDWRYTTEN_API_KEY:'fake'},{name:'Measured frame',front:image,inside:image,back:image,onBack:async()=>{},onCard:async()=>{}});assert.deepEqual(handwryttenArtPlacement,{cover:100,inside:100});assert.equal(body.cover_size_percent,100);assert.equal(body.main_logo_size_percent,100);assert.equal(body.back_size_percent,40);assert.ok(calls.every(path=>!path.includes('/orders/')&&!path.includes('/basket/')));}finally{fake.mock.restore();}
+});
+
+test('paw doodle follows the complete original sign-off exactly once',()=>{
+ const note='Dear friends,\n\nA note.\n\nwith love,\nPixel (plus mom & dad.. and that understudy, Ayce)';
+ const message=handwryttenMessage(note);
+ assert.equal(message,note+'\n\n<doodle:6 scale=1 rotate=0>');
+ assert.equal(handwryttenMessage(message),message);
 });

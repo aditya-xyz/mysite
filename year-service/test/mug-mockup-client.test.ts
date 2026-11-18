@@ -49,7 +49,7 @@ test('missing saved preview stops the spinner and never competes with the prepar
   assert.equal(fetch.mock.callCount(),0);assert.match(figure.children[0].textContent,/still being prepared/);assert.equal(figure.children[0].className,'pb-mockup-wait');
   client.configure({prepared:true,styles:[],previews:[{id:'now-ready',designId:'photo',caption:'Caption',configuration:{font:'clean',color:'white',size:'12oz',style:'latte'},src:'/api/gift/previews/now-ready'}]});
   assert.equal(client.available(design,configuration),true,'Configuration property order does not affect saved lookup');
-  client.preload(design,configuration);await settle();assert.equal(figure.children[0].tag,'img');assert.equal(fetch.mock.callCount(),1);
+  await settle();assert.equal(figure.children[0].tag,'img','A refreshed catalog resumes the waiting preview without a separate preload');assert.equal(fetch.mock.callCount(),1);
  }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
 });
 test('saved views default to handle-left and switch to handle-right without generation',async()=>{
@@ -160,4 +160,18 @@ test('an angle download failure stops loading and the same control can retry',as
  controls.children[1].onclick();assert.equal(f.figure.attrs.get('aria-busy'),'true');await settle();
  assert.equal(f.figure.attrs.get('aria-busy'),'false');assert.equal(f.figure.children[2].textContent,'Printful mockup · final placement may vary');
  assert.equal(fetch.mock.callCount(),3);
+});
+
+test('an older open scrapbook explains when its mugshot caption was updated',async()=>{
+ const previousDocument=(globalThis as any).document;
+ const figure={isConnected:true,dataset:{},children:[] as any[],querySelector(){return null;},replaceChildren(...nodes:any[]){this.children=nodes;}};
+ (globalThis as any).document={createElement(tag:string){return {tag,textContent:'',children:[] as any[],append(...nodes:any[]){this.children.push(...nodes);}};}};
+ const fetch=mock.method(globalThis,'fetch',async()=>{throw Error('Stale caption must not fetch an unrelated preview');});
+ const client=createMugMockups(),configuration={style:'classic',size:'11oz',color:'white',font:'clean'};
+ try{
+  client.configure({prepared:true,styles:[],previews:[{id:'current',designId:'photo',caption:'Updated caption',configuration,src:'/current-proof'}]});
+  client.update(figure,{id:'photo',caption:'Earlier caption'},configuration);await settle();
+  assert.match(figure.children[0].textContent,/updated.*Refresh Pixelbook/);
+  assert.equal(fetch.mock.callCount(),0);
+ }finally{client.destroy();fetch.mock.restore();(globalThis as any).document=previousDocument;}
 });

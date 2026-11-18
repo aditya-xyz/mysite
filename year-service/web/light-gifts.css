@@ -114,7 +114,7 @@
   :root[data-palette=moss] .pb-presents .pb-present-card {transition: none}
 }
 
-/* Decorative strokes and small arrows share the existing component structure. */
+/* Decorative strokes keep the existing component structure. */
 :root[data-palette=night] .pb-presents .keepsake-section {--pb-gift-doodle: var(--pb-night-sage)}
 :root[data-palette=night] #pb-gift {--pb-gift-doodle: #bca6c5}
 .pb-presents .pb-present-art::after {
@@ -129,14 +129,3 @@
   pointer-events: none;
 }
 .pb-presents #pb-gift .pb-present-art::after {left: auto;right: 5%;top: 4%;scale: -1 1}
-.pb-presents .pb-present-copy > .button {gap: 12px}
-.pb-presents .pb-present-copy > .button::before {
-  content: '';
-  order: 1;
-  flex: none;
-  width: 18px;
-  height: 18px;
-  background: currentColor;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 12h15m-6-6 6 6-6 6' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") center / contain no-repeat;
-  pointer-events: none;
-}

@@ -1,6 +1,8 @@
 import {PrintProblem,type PrintEnv} from './printing.ts';
 import {requireLiveGift} from './live-gifts.ts';
 import {digest,now,token} from './security.ts';
+// @ts-expect-error Shared verified artwork versions, including per-area calibrations.
+import {verifiedMugLayoutVersion} from '../web/mug-layout.js';
 
 // Separate from the read-only catalog adapter: every mutation needs a persisted,
 // household-scoped checkout intent. Draft creation never confirms an order.
@@ -49,7 +51,7 @@ export async function tickLiveMugFulfillment(env:PrintEnv,preferredId?:string){
  let mutated=false;
  try{
   await requireLiveGift(env,job.order_id,'mug');
-  if(!job.print_artwork_key||job.print_layout_version!==4)throw new PrintProblem(409,'The print-ready mug artwork needs review.');
+  if(!job.print_artwork_key||!verifiedMugLayoutVersion(job.print_layout_version))throw new PrintProblem(409,'The print-ready mug artwork needs review.');
   let payload=job.payload_json?JSON.parse(job.payload_json):null,remote:any;
   if(job.state==='pending'){
    const quote=JSON.parse(job.estimate_json||'null');

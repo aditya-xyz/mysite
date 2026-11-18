@@ -1,11 +1,9 @@
 // Curated identifiers; availability and account prices come from the server.
 // These static choices also support receipts and offline design previews.
 export const mugStyles=[
- {id:'enamel',label:'Enamel mug',sizes:['12oz'],colors:['white'],careNote:'Not dishwasher safe · hand wash only'},
  {id:'classic',label:'Classic ceramic',sizes:['11oz','15oz','20oz'],colors:['white']},
  {id:'color-inside',label:'Color inside',sizes:['11oz','15oz'],colors:['black','red','blue','dark blue']},
  {id:'black-glossy',label:'Black glossy mug',sizes:['11oz','15oz'],colors:['black']},
- {id:'latte',label:'Latte',sizes:['12oz'],colors:['white']},
 ];
 export const mugFonts=[{id:'clean',label:'Clean',family:'Asap, sans-serif'},{id:'serif',label:'Bookish',family:'Georgia, serif'},{id:'handwritten',label:'Handwritten',family:'Caveat, cursive'}];
 export const pixelMugOptions=()=>({style:'color-inside',size:'15oz',color:'dark blue',font:'clean'});
@@ -21,10 +19,19 @@ export function mugConfiguration(value){
  return {style:value.style,size:value.size,color:value.color,font:value.font};
 }
 export function validMugOptions(value,styles=mugStyles){
- const o=mugConfiguration(value),style=o&&styles.find(s=>s.id===o.style);
+ const o=mugConfiguration(value),style=o&&!['enamel','latte'].includes(o.style)&&styles.find(s=>s.id===o.style);
  return style&&style.sizes.includes(o.size)&&style.colors.includes(o.color)&&(!style.variants||style.variants.some(v=>v.size===o.size&&v.color===o.color))?o:null;
 }
 export function mugOptionsLabel(value,styles=mugStyles){
  const o=mugConfiguration(value)||legacyMugOptions();
- return `${styles.find(s=>s.id===o.style)?.label||'Photo mug'} · ${o.size} · ${o.color} · ${mugFonts.find(f=>f.id===o.font).label}`;
+ return `${styles.find(s=>s.id===o.style)?.label||(o.style==='enamel'?'Enamel mug':o.style==='latte'?'Latte':'Photo mug')} · ${o.size} · ${o.color} · ${mugFonts.find(f=>f.id===o.font).label}`;
+}
+
+// Apply retirement to saved catalogs/manifests as well as fresh supplier data.
+/** @template {{styles: Array<any>, previews?: Array<any>}} T
+ * @param {T} catalog
+ * @returns {T}
+ */
+export function activeMugCatalog(catalog){
+ return {...catalog,styles:catalog.styles.filter(s=>!['enamel','latte'].includes(s.id)&&![407,837].includes(s.productId)),...(Array.isArray(catalog.previews)?{previews:catalog.previews.filter(p=>!['enamel','latte'].includes(p.configuration?.style))}:{})};
 }

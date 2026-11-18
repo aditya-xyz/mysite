@@ -1,6 +1,6 @@
 import {PrintProblem,type PrintEnv,type MailingAddress} from './printing.ts';
 // @ts-expect-error Shared, deliberately curated style/font identifiers.
-import {mugStyles,validMugOptions,mugConfiguration} from '../web/mug-options.js';
+import {mugStyles,validMugOptions,mugConfiguration,activeMugCatalog} from '../web/mug-options.js';
 
 export const MAX_MUG_CENTS=2500;
 // Planning reserves, not a tax quote. Nov12 API audit: highest STANDARD mug
@@ -14,6 +14,7 @@ export const printfulEnabled=(env:PrintEnv)=>env.PRINTFUL_ENABLED==='true';
 interface Variant {id:number;size:string;color:string;price:string;in_stock:boolean;availability_regions?:Record<string,string>;color_code?:string|null}
 export interface MugVariant {id:number;size:string;color:string;colorCode:string;baseCents:number;shippingReserveCents:number;productCeilingCents:number;printWidth?:number;printHeight?:number}
 export interface MugStyle {id:string;label:string;productId:number;sizes:string[];colors:string[];variants:MugVariant[];mockupGroup?:string;mockupOptions?:string[];careNote?:string}
+export interface MugCatalog {provider:string;currency:string;maxCents:number;shippingReserveCents:number;taxReserveCents:number;styles:MugStyle[];destination:MailingAddress['country'];requiresDestinationEstimate:boolean}
 export interface MugQuote {provider:'printful';currency:'USD';variantId:number;productId:number;subtotalCents:number;shippingCents:number;taxCents:number;otherCents:number;totalCents:number;maxCents:number;withinBudget:boolean;estimatedAt:number;destination?:string;shippingMethod?:string}
 const aliases:Record<number,string>={19:'classic',403:'color-inside',837:'latte',300:'black-glossy',407:'enamel'};
 interface Product {id:number;type:string;title:string}
@@ -41,7 +42,7 @@ async function style(env:PrintEnv,item:Collection,country:MailingAddress['countr
  const variants=data.variants.filter(v=>v.in_stock===true&&(country!=='US'||v.availability_regions?.US)&&typeof v.size==='string'&&typeof v.color==='string').map(v=>({id:v.id,size:v.size.replace(/\s/g,''),color:v.color.toLowerCase(),colorCode:v.color_code||colors[v.color.toLowerCase()]||'#ffffff',baseCents:cents(v.price),shippingReserveCents:country==='US'?shippingReserve(item.productId,v.size.replace(/\s/g,'')):0,productCeilingCents:country==='US'?MAX_MUG_CENTS-MUG_TAX_RESERVE_CENTS-shippingReserve(item.productId,v.size.replace(/\s/g,'')):MAX_MUG_CENTS})).filter(v=>Number.isInteger(v.id)&&v.baseCents<=v.productCeilingCents);
  return {...item,...(/hand.wash only|not dishwasher/i.test(data.product?.description||'')||item.productId===407?{careNote:'Not dishwasher safe · hand wash only'}:{}),sizes:[...new Set(variants.map(v=>v.size))],colors:[...new Set(variants.map(v=>v.color))],variants};
 }
-export async function printfulCatalog(env:PrintEnv,refresh=false,country:MailingAddress['country']='US'){
+export async function printfulCatalog(env:PrintEnv,refresh=false,country:MailingAddress['country']='US'):Promise<MugCatalog>{
  if(!printfulEnabled(env)||!env.PRINTFUL_API_TOKEN)throw new PrintProblem(503,'Live mug pricing is temporarily unavailable. Please try again later.');
  const key=env.PRINTFUL_API_TOKEN+':'+(env.PRINTFUL_STORE_ID||'store')+':'+country;
  if(refresh)catalogs.delete(key);
@@ -49,12 +50,12 @@ export async function printfulCatalog(env:PrintEnv,refresh=false,country:Mailing
  if(!cached||cached.until<Date.now()){
   if(!loading.has(key))loading.set(key,(async()=>{
    // Private persistent cache avoids refetching every product on cold isolates.
-   const cacheKey=`providers/printful/${env.PRINTFUL_STORE_ID||'store'}/catalog-v6-${country}.json`;
+   const cacheKey=`providers/printful/${env.PRINTFUL_STORE_ID||'store'}/catalog-v8-${country}.json`;
    const stored=await env.MEDIA?.get(cacheKey);
    if(stored&&!refresh){const value=await stored.json<{until:number;styles:MugStyle[]}>();if(value.until>Date.now())return value.styles;}
    const products=await printfulApi(env,'/products') as Product[];
    if(!Array.isArray(products))throw new PrintProblem(503,'Printful’s mug catalog is temporarily unavailable.');
-   const collection=products.filter(p=>p.type==='MUG').map(p=>({id:aliases[p.id]||`mug-${p.id}`,productId:p.id,label:mugStyles.find((s:{id:string})=>s.id===aliases[p.id])?.label||p.title}));
+   const collection=products.filter(p=>p.type==='MUG'&&![407,837].includes(p.id)).map(p=>({id:aliases[p.id]||`mug-${p.id}`,productId:p.id,label:mugStyles.find((s:{id:string})=>s.id===aliases[p.id])?.label||p.title}));
    const styles:MugStyle[]=[];
    for(const item of collection){
     const result=await style(env,item,country);if(!result.variants.length)continue;
@@ -71,7 +72,7 @@ export async function printfulCatalog(env:PrintEnv,refresh=false,country:Mailing
   })());
   try{cached={until:Date.now()+300000,styles:await loading.get(key)!};catalogs.set(key,cached);}finally{loading.delete(key);}
  }
- return {provider:'printful',currency:'USD',maxCents:MAX_MUG_CENTS,shippingReserveCents:country==='US'?MUG_SHIPPING_RESERVE_CENTS:0,taxReserveCents:country==='US'?MUG_TAX_RESERVE_CENTS:0,styles:cached.styles,destination:country,requiresDestinationEstimate:country!=='US'};
+ return activeMugCatalog({provider:'printful',currency:'USD',maxCents:MAX_MUG_CENTS,shippingReserveCents:country==='US'?MUG_SHIPPING_RESERVE_CENTS:0,taxReserveCents:country==='US'?MUG_TAX_RESERVE_CENTS:0,styles:cached.styles,destination:country,requiresDestinationEstimate:country!=='US'});
 }
 
 export async function reserveMugEstimate(env:PrintEnv,invitationId:string){

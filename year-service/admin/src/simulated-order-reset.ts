@@ -1,4 +1,5 @@
 import {PrintProblem,type PrintEnv} from '../../src/printing.ts';
+import {releaseResetPostcardIntent} from '../../src/live-gifts.ts';
 export async function resetSimulatedOrder(env:PrintEnv,kind:'print'|'mug',year:number,invite:string,data:Record<string,unknown>){
  if(kind==='print')return resetPrintAllowance(env,year,invite,data);
  if(data.confirm!==true||typeof data.orderId!=='string'||!new RegExp(`^${kind}-[a-z0-9]+$`).test(data.orderId))throw new PrintProblem(400,'Confirm clearing this simulated order and its saved design.');
@@ -20,5 +21,6 @@ export async function resetPrintAllowance(env:PrintEnv,year:number,invite:string
  AND NOT EXISTS(SELECT 1 FROM print_fulfillment f WHERE f.order_id=print_orders.id AND NOT (f.state='submitted' OR (f.state='review' AND f.basket_item_id IS NULL)))
  RETURNING id,allowance_reset_at`).bind(data.orderId,invite,year).first<{id:string;allowance_reset_at:number}>();
  if(!order)throw new PrintProblem(409,'The print allowance changed, or the order is still processing or uncertain. Refresh before resetting.');
+ if(env.LIVE_GIFT_ORDERING==='true')await releaseResetPostcardIntent(env,order.id);
  return {reset:true,remaining:1,historyCleared:false,orderId:order.id,resetAt:order.allowance_reset_at};
 }

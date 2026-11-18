@@ -71,7 +71,7 @@ export function createMugMockups(){
     }else element.replaceChildren(image,caption);
     element.dataset.mockupImage=record.imageUrl;
    }else{
-    if(record.waiting){const status=document.createElement('div');status.className='pb-mockup-wait';status.textContent='This mug preview is still being prepared. Ready options are available in Customize.';element.replaceChildren(status);}else{const status=element.querySelector('[data-mockup-status]');if(status)status.textContent=record.error||'Preparing your mug preview…';}
+    if(record.waiting){const status=document.createElement('div');status.className='pb-mockup-wait';status.textContent=record.waitingMessage||'This mug preview is still being prepared. Ready options are available in Customize.';element.replaceChildren(status);}else{const status=element.querySelector('[data-mockup-status]');if(status)status.textContent=record.error||'Preparing your mug preview…';}
    }
   }
  }
@@ -98,7 +98,7 @@ export function createMugMockups(){
  }
  async function run(record,design,configuration){
   if(disposed||!connected(record)){record.started=false;return;}
-  if(prepared){const saved=prepared.get(key(design,configuration,record.view));if(!saved){record.waiting=true;paint(record);later(()=>run(record,design,configuration),30000);return;}record.waiting=false;try{await accept(record,{id:saved.id,src:saved.src});}catch(error){record.error=error.message;record.started=false;paint(record);}return;}
+  if(prepared){const saved=prepared.get(key(design,configuration,record.view));if(!saved){record.waiting=true;record.waitingMessage=[...prepared.values()].some(p=>p.designId===design.id&&p.caption!==design.caption)?'This mugshot was updated. Refresh Pixelbook to load the current preview.':'';paint(record);later(()=>run(record,design,configuration),30000);return;}record.waiting=false;try{await accept(record,{id:saved.id,src:saved.src});}catch(error){record.error=error.message;record.started=false;paint(record);}return;}
   try{
    await lookup(record,design,configuration);if(record.imageUrl){paint(record);return;}
    if(!connected(record)){record.started=false;return;}
@@ -123,6 +123,9 @@ export function createMugMockups(){
   if(!element||!catalog||disposed)return;
   for(const record of records.values())record.elements.delete(element);
   const record=recordFor(design,configuration);record.elements.add(element);
+  // A refreshed saved catalog can make a waiting preview ready. Resume it now,
+  // without requiring a hover/preload or another 30-second retry timer.
+  if(record.waiting&&prepared?.has(key(design,configuration,record.view))){record.waiting=false;record.started=false;}
   if(!record.started&&!record.imageUrl){record.error='';record.started=true;later(()=>run(record,design,{...configuration}),0);}
   paint(record);
  }

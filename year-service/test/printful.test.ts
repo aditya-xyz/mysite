@@ -28,10 +28,10 @@ test('Printful catalog and estimates fail closed and never create orders',async 
  const env={PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'test-read-only'} as PrintEnv;
  try{
   await t.test('filters sizes, colors, stock and US fulfillment while preserving valid tuples',async()=>{
-   const catalog=await printfulCatalog(env);assert.equal(catalog.maxCents,2500);assert.equal(catalog.styles.length,5);
+   const catalog=await printfulCatalog(env);assert.equal(catalog.maxCents,2500);assert.equal(catalog.styles.length,3);
    assert.deepEqual(catalog.styles[0].sizes,['11oz','20oz']);assert.deepEqual(catalog.styles[0].variants.map(v=>v.id),[1320,16586]);
    const inside=catalog.styles.find(s=>s.id==='color-inside')!;assert.equal(inside.variants.length,3);assert.deepEqual(inside.colors,['black','red','pink']);
-   assert.ok(catalog.styles.some(s=>s.id==='enamel'));assert.ok(!catalog.styles.some(s=>s.productId===663));
+   assert.ok(!catalog.styles.some(s=>s.id==='enamel'));assert.ok(!catalog.styles.some(s=>s.id==='latte'));assert.ok(!calls.some(c=>['/products/407','/products/837'].includes(c.path)));assert.ok(!catalog.styles.some(s=>s.productId===663));
    for(const style of catalog.styles)for(const v of style.variants)assert.ok(v.baseCents+v.shippingReserveCents+catalog.taxReserveCents<=2500);
   });
   await t.test('includes shipping and tax, rounds floating point prices and checks the delivered cap',async()=>{
@@ -53,4 +53,16 @@ test('Printful catalog and estimates fail closed and never create orders',async 
   });
   assert.ok(calls.every(c=>c.path==='/products'||/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(c.path)||c.path==='/orders/estimate-costs'));
  }finally{mocked.mock.restore();}
+});
+
+// @ts-expect-error Shared browser/server catalog helpers are plain JavaScript.
+import {activeMugCatalog,validMugOptions,mugOptionsLabel} from '../web/mug-options.js';
+test('retired mug styles disappear from saved catalogs and previews and cannot be selected',()=>{
+ const config=(style:string)=>({style,size:'12oz',color:'white',font:'clean'});
+ const cached={styles:[{id:'classic',productId:19,sizes:['12oz'],colors:['white']},{id:'enamel',productId:407,sizes:['12oz'],colors:['white']},{id:'latte',productId:837,sizes:['12oz'],colors:['white']}],previews:['classic','enamel','latte'].map(style=>({configuration:config(style)}))};
+ const active=activeMugCatalog(cached);
+ assert.deepEqual(active.styles.map((s:any)=>s.id),['classic']);assert.deepEqual(active.previews.map((p:any)=>p.configuration.style),['classic']);
+ for(const style of ['enamel','latte'])assert.equal(validMugOptions(config(style),cached.styles),null);
+ assert.match(mugOptionsLabel(config('enamel')),/^Enamel mug/);assert.match(mugOptionsLabel(config('latte')),/^Latte/);
+ assert.equal(cached.styles.length,3,'historical catalog records are not mutated');
 });

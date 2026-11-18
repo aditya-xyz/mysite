@@ -5,7 +5,7 @@ import {sessionImages} from './session-images.js';
 import {readResource} from './read-resource.js';
 import {openMugCustomizer} from './mug-customizer.js';
 import {createMugMockups} from './mug-mockups.js';
-import {pixelMugOptions,preferredMugOptions,mugStyles,mugOptionsLabel} from './mug-options.js';
+import {pixelMugOptions,preferredMugOptions,mugStyles,mugOptionsLabel,mugFonts,activeMugCatalog} from './mug-options.js';
 import {createDeliveryAddress} from './delivery-address.js';
 import {mugPreview,mugLoadingPreview} from './mug-preview.js';
 import {esc,assetPath,hasMugChoices,householdOrderNote} from './pixelbook.js';
@@ -51,7 +51,9 @@ export function mountPixelGift(journal,root){
     return step==='done'&&receiptPreview?markup.replace(`src="${esc(receiptPreview.src)}"`,'data-saved-gift-image'):markup;
   };
   function reviewMarkup(){
-    return `<div class="pb-order-review">${previewMarkup(selected,configuration)}<div><dl class="pb-gift-price"><div><dt>You pay</dt><dd><span class="pb-gift-zero">$0</span> · dad’s got it</dd></div></dl><div class="pb-mug-summary"><p>${esc(mugOptionsLabel(configuration,styles))}</p>${styles.find(s=>s.id===configuration.style)?.careNote?`<p class="delivery-note">${configuration.style==='enamel'?'not dishwasher safe':esc(styles.find(s=>s.id===configuration.style).careNote)}</p>`:''}</div></div></div>`;
+    const style=styles.find(s=>s.id===configuration.style),font=mugFonts.find(f=>f.id===configuration.font);
+    const details=[['Style',style?.label||'Photo mug'],['Size',configuration.size],['Color',configuration.color],['Caption font',font?.label||configuration.font]];
+    return `<div class="pb-order-review">${previewMarkup(selected,configuration)}<div class="pb-mug-details"><dl class="pb-gift-price"><div><dt>You pay</dt><dd><span class="pb-gift-zero">$0</span><span class="pb-gift-covered">dad’s got it</span></dd></div></dl><dl class="pb-mug-specs">${details.map(([label,value])=>`<div><dt>${label}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>${style?.careNote?`<p class="delivery-note">${esc(style.careNote)}</p>`:''}</div></div>`;
   }
   function doneMarkup(){return `<div class="pb-gift-done"><p class="pb-eyebrow">${receipt?.live?(receipt.fulfillment==='submitted'?'mug ordered':receipt.fulfillment==='review'?'gift needs review':receipt.fulfillment==='unknown'?'checking your order':'gift request saved'):receipt?.approvalRequired?'awaiting approval':local?'preview claim saved':receipt?.status==='simulated'?'test order saved':'gift request received'}</p><p>Pixel perfect. one of my favorite photos of me.</p>${receipt?.approvalRequired?'<p>Your chosen mug is saved. Mom or dad will review the delivery cost before approving it.</p>':''}${previewMarkup(receipt?.design||selected,receipt?.configuration||configuration)}<p>${esc(mugOptionsLabel(receipt?.configuration||configuration))}</p>${['simulated','submitted'].includes(receipt?.status)?'<p class="pb-dialog-budget">text dad if you need a second one. just don’t mention i told you this.</p>':''}${receipt?.live?'<p>'+esc(receipt.fulfillment==='submitted'?'Your mug order is with Printful.':receipt.fulfillmentError||'Pixel’s on it. Your order is being prepared; please don’t submit another one.')+'</p>':local?'<p>That’s the whole flow. No mug has been ordered or charged.</p>':receipt?.status==='simulated'?'':'<p>Your household’s gift request is saved. Check back here for updates.</p>'}</div>`;}
   function render(){
@@ -128,7 +130,7 @@ export function mountPixelGift(journal,root){
   let opening=false,contextReady=false,catalogPromise=null,catalogLoadedAt=0;const catalogController=new AbortController();
   function preloadCatalog(){
     if(catalogPromise&&catalogLoadedAt&&Date.now()-catalogLoadedAt>25000){catalogPromise=null;catalogLoadedAt=0;}
-    catalogPromise??=readResource('/api/gift/catalog',{signal:catalogController.signal}).then(result=>{catalogLoadedAt=Date.now();return result;}).catch(error=>{catalogPromise=null;throw error;});
+    catalogPromise??=readResource('/api/gift/catalog',{signal:catalogController.signal}).then(result=>{catalogLoadedAt=Date.now();return activeMugCatalog(result);}).catch(error=>{catalogPromise=null;throw error;});
     return catalogPromise;
   }
   function warmCatalog(){if(!journal.gift.livePricing||!ordering)return;preloadCatalog().then(catalog=>{if(modal.open)return;mockups.configure(catalog);}).catch(()=>{});}

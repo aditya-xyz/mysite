@@ -33,14 +33,14 @@ test('shared mug library includes every font, queues only affordable variants an
   for(const design of designs)await db.prepare('INSERT INTO media_objects(id,year,preview_key,filename,mime,bytes) VALUES(?1,2026,?2,?3,?4,?5)').bind(design.id,design.preview_key,design.id+'.png','image/png',png.length).run();
   await db.prepare('UPDATE editions SET is_active=1,published_json=?1 WHERE year=2026').bind(JSON.stringify({mugDesigns:designs,photos:[]})).run();
   const env={DB:db,MEDIA:bucket,PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'prepared-test',JOURNAL_ORIGIN:'https://guest.test'} as unknown as PrintEnv;
-  const plans=await preparedMugPlans(env,2026);assert.equal(plans.length,36);assert.deepEqual([...new Set(plans.map(p=>p.font))].sort(),['clean','handwritten','serif']);
+  const plans=await preparedMugPlans(env,2026);assert.equal(plans.length,24);assert.deepEqual([...new Set(plans.map(p=>p.font))].sort(),['clean','handwritten','serif']);
   for(const plan of plans){new DataView(png.buffer).setUint32(16,plan.renderWidth);new DataView(png.buffer).setUint32(20,Math.round(plan.renderWidth*plan.printHeight/plan.printWidth));const response=await preparedMugAdminRoute(new Request('https://admin.test',{method:'POST',headers:{'Content-Type':'image/png'},body:png}),env,'/api/mug-preview-library/sources/'+plan.id,2026);assert.equal(response?.status,200);}
   await syncPreparedMugs(env,2026);
-  assert.equal((await db.prepare('SELECT desired_count FROM mug_preview_sync').first<any>()).desired_count,96);
-  const beforeAdmin=calls.length;assert.equal((await preparedMugPlans({...env,PRINTFUL_ENABLED:undefined,PRINTFUL_API_TOKEN:undefined},2026)).length,36);assert.equal(calls.length,beforeAdmin,'Admin source planning uses the saved supplier catalog without provider credentials');
+  assert.equal((await db.prepare('SELECT desired_count FROM mug_preview_sync').first<any>()).desired_count,72);
+  const beforeAdmin=calls.length;assert.equal((await preparedMugPlans({...env,PRINTFUL_ENABLED:undefined,PRINTFUL_API_TOKEN:undefined},2026)).length,24);assert.equal(calls.length,beforeAdmin,'Admin source planning uses the saved supplier catalog without provider credentials');
   const empty=await preparedMugCatalog(env,2026);assert.equal(empty.prepared,true);assert.equal(empty.previews.length,0,'Initial fill stays in saved-only mode with no live-generation fallback');
   failed=true;assert.equal(await startPreparedJob(env),false);failed=false;
-  assert.equal((await db.prepare("SELECT count(*) n FROM mug_preview_jobs WHERE status='queued'").first<any>()).n,36);
+  assert.equal((await db.prepare("SELECT count(*) n FROM mug_preview_jobs WHERE status='queued'").first<any>()).n,24);
   await db.prepare('UPDATE mug_preview_jobs SET next_check_at=0').run();await db.prepare("DELETE FROM rate_limits WHERE key='printful-mockup-lease'").run();
   assert.equal(await startPreparedJob(env),true);assert.equal(await startPreparedJob(env),false,'Persistent lease prevents generation bursts');
   const pending=await db.prepare("SELECT source_token FROM mug_preview_jobs WHERE status='pending'").first<any>();assert.equal((await preparedMugSource(env,pending.source_token)).status,200);
@@ -50,10 +50,10 @@ test('shared mug library includes every font, queues only affordable variants an
    await db.prepare('UPDATE mug_preview_jobs SET next_check_at=0').run();await finishPreparedJobs(env);
    await db.prepare("DELETE FROM rate_limits WHERE key='printful-mockup-lease'").run();await startPreparedJob(env);
   }
-  const manifest=await preparedMugCatalog(env,2026);assert.equal(manifest.prepared,true);assert.equal(manifest.previews.length,96);assert.equal(manifest.styles.reduce((n:number,s:any)=>n+s.variants.length,0),4);
+  const manifest=await preparedMugCatalog(env,2026);assert.equal(manifest.prepared,true);assert.equal(manifest.previews.length,72);assert.equal(manifest.styles.reduce((n:number,s:any)=>n+s.variants.length,0),3);
   assert.ok(manifest.previews.every((p:any)=>p.configuration.font&&p.src.startsWith('/api/gift/previews/')));
-  assert.equal(manifest.previews.filter((p:any)=>p.view==='handle-right').length,48);assert.equal(manifest.previews.filter((p:any)=>p.view==='handle-left').length,48);
-  const before=calls.length;assert.equal((await preparedMugCatalog(env,2026)).previews.length,96);assert.equal(calls.length,before,'Guest catalog reads never contact Printful');
+  assert.equal(manifest.previews.filter((p:any)=>p.view==='handle-right').length,36);assert.equal(manifest.previews.filter((p:any)=>p.view==='handle-left').length,36);
+  const before=calls.length;assert.equal((await preparedMugCatalog(env,2026)).previews.length,72);assert.equal(calls.length,before,'Guest catalog reads never contact Printful');
   await assert.rejects(()=>preparedMugSource(env,pending.source_token),/not found/);
   await syncPreparedMugs(env,2026);assert.equal((await db.prepare("SELECT count(*) n FROM mug_preview_jobs WHERE status='queued'").first<any>()).n,0,'Nightly sync does not regenerate unchanged completed previews');
   const frontKeys=(await db.prepare("SELECT id,image_key FROM mug_preview_images WHERE view='handle-left' ORDER BY id").all<any>()).results;
@@ -63,4 +63,24 @@ test('shared mug library includes every font, queues only affordable variants an
   designs[0].caption='Changed caption';await db.prepare('UPDATE editions SET published_json=?1 WHERE year=2026').bind(JSON.stringify({mugDesigns:designs,photos:[]})).run();assert.deepEqual((await preparedMugCatalog(env,2026)).previews,[],'Changed captions cannot reuse old prepared proofs or start a guest generation burst');
   assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);assert.ok(!calls.includes('/orders'));
  }finally{mocked.mock.restore();await mf.dispose();}
+});
+
+test('black mug calibration changes both black source identities while retaining other saved sources',async()=>{
+ const {createHash}=await import('node:crypto');
+ const design={id:'dog-only',caption:'hello',alt:'A dog',cutoutVersion:'a'.repeat(32),preview_key:'approved.png'};
+ const designs=Array.from({length:4},(_,i)=>({...design,id:design.id+'-'+i}));
+ const catalog={styles:[
+  {id:'black-glossy',productId:300,variants:[{printWidth:2250,printHeight:925},{printWidth:2253,printHeight:1084}]},
+  {id:'classic',productId:19,variants:[{printWidth:2700,printHeight:1050}]},
+ ]};
+ const env={DB:{prepare(sql:string){return {bind(){return this;},async first(){return sql.includes('catalog_json')?{catalog_json:JSON.stringify(catalog)}:{published_json:JSON.stringify({mugDesigns:designs,photos:[]})};}};}},PRINTFUL_ENABLED:'false'} as unknown as PrintEnv;
+ const plans=await preparedMugPlans(env,2026);
+ assert.equal(plans.length,36);
+ for(const plan of plans){
+  const affected=plan.productId===300;
+  const legacy=[4,2026,plan.design_id,design.cutoutVersion,design.caption,plan.font,plan.ink,plan.printWidth,plan.printHeight,plan.productId];
+  const hash=(parts:unknown[])=>createHash('sha256').update(JSON.stringify(parts)).digest('hex');
+  if(affected){assert.notEqual(plan.id,hash(legacy));assert.equal(plan.id,hash([6,...legacy.slice(1)]));}
+  else assert.equal(plan.id,hash(legacy));
+ }
 });

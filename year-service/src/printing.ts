@@ -1,6 +1,6 @@
 import {liveGiftAllowed,liveGiftIntentStatement,liveGiftState} from './live-gifts.ts';
 import {giftWindow,giftReservationOpenSQL} from './gift-deadline.ts';
-import {handwryttenPrintFont} from './handwrytten.ts';
+import {handwryttenPrintFont,handwryttenMessage} from './handwrytten.ts';
 import {keepsakeDefault} from './keepsake-defaults.ts';
 import {addressVerificationCurrent,type AddressState} from './address-state.ts';
 import {digest,now,token} from './security.ts';
@@ -39,7 +39,7 @@ export const foldedPreviewNote='a little note is hiding here. i’d tell you wha
 export const printedGreeting=(invite:Pick<InvitationAudience,'addressed_to'|'name'>)=>`Dear ${(invitationName(invite).trim()||invite.name.trim()||'friend').replace(/\s+/g,' ')},\n\n`;
 const guestFoldedPreview=(backText:string)=>({note:foldedPreviewNote,authors:'Pixel',backText});
 export const foldedBackText=(year:number)=>`pixelbook ’${String(year).slice(-2)}`;
-export interface PrintOrderProof {id:string;status:string;created_at:number;card_count:number;format?:string;back_text?:string|null;note?:string;authors?:string;handwrytten_preview_id?:string|null;recipe_json?:string;fulfillment_state?:string|null;fulfillment_error?:string|null;live?:boolean}
+export interface PrintOrderProof {id:string;status:string;created_at:number;card_count:number;format?:string;back_text?:string|null;note?:string;authors?:string;handwrytten_preview_id?:string|null;recipe_json?:string;fulfillment_state?:string|null;fulfillment_error?:string|null;live?:boolean;provider_id?:string|null}
 export async function printContext(request:Request,env:PrintEnv,invite:InvitationAudience){
  const i=await env.DB.prepare('SELECT * FROM invites WHERE id=?1 AND revoked_at IS NULL AND expires_at>?2').bind(invite.id,now()).first<InvitationAudience&{version:number}>();
  if(!i)throw new PrintProblem(401,'This invitation is no longer available.');
@@ -48,10 +48,10 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  const published:Published|null=edition?.published_json?JSON.parse(edition.published_json):null;
  const photos=published?visiblePhotos(published,i.id,await invitationAudience(env.DB,i)).filter(p=>p.recipients.length):[];
  const defaults=edition?.is_active&&edition.allow_print_orders&&i.allow_print?await keepsakeDefault(env,i.edition_year):null;
- const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json,(SELECT state FROM print_fulfillment f WHERE f.order_id=print_orders.id) AS fulfillment_state FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
+ const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json,provider_id,(SELECT state FROM print_fulfillment f WHERE f.order_id=print_orders.id) AS fulfillment_state FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
  const window=await giftWindow(env.DB,i);
  const digital=await digitalPostcard(env.DB,i);
- if(existing)existing.live=!!await liveGiftState(env,existing.id);
+ if(existing)existing.live=!!await liveGiftState(env,existing.id)&&!existing.provider_id?.startsWith('handwrytten-test-');
  const live=await liveGiftAllowed(env,i.id,i.edition_year,'postcard');
  const mode=live&&env.PRINT_ORDER_MODE==='handwrytten_live'?'handwrytten_live':env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':simulatedOrders(request,env)?'local_mock':'disabled';
  let reason='';
@@ -143,7 +143,7 @@ export async function finishSavedPrintOrder(env:PrintEnv,id:string,year:number,l
  const snapshot=await env.DB.prepare('SELECT note,recipient_name,address_json FROM print_orders WHERE id=?1 AND year=?2').bind(id,year).first<{note:string;recipient_name:string;address_json:string}>();
  if(!snapshot)throw new PrintProblem(404,'Saved card order not found.');
  const address=JSON.parse(snapshot.address_json) as MailingAddress,name=snapshot.recipient_name.trim().split(/\s+/);
- const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:({US:'United States',IN:'India',NL:'Netherlands'})[address.country],message:snapshot.note}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
+ const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:({US:'United States',IN:'India',NL:'Netherlands'})[address.country],message:handwryttenMessage(snapshot.note)}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
  if(liveInvitationId&&!await liveGiftAllowed(env,liveInvitationId,year,'postcard'))throw new PrintProblem(403,'Live postcard ordering is not enabled for this household.');
  const statements=[env.DB.prepare("UPDATE print_orders SET handwrytten_order_json=?1 WHERE id=?2 AND year=?3 AND status='preparing'").bind(JSON.stringify(payload),id,year)];
  if(liveInvitationId)statements.push(liveGiftIntentStatement(env,id,'postcard',liveInvitationId,year));

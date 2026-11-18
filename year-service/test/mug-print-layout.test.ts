@@ -5,7 +5,7 @@ import {renderMugPrint} from '../web/mug-print.js';
 // @ts-expect-error Shared supplier calibration.
 import {mugPlacementGuides} from '../web/mug-placement-guides.js';
 // @ts-expect-error Shared deterministic geometry.
-import {mugPrintLayout} from '../web/mug-layout.js';
+import {mugPrintLayout,mugLayoutVersion} from '../web/mug-layout.js';
 test('one full wrap contains the selected captioned cutout and Santa signature in opposite handle-facing panels',async()=>{
  const previousDocument=(globalThis as any).document,previousImage=(globalThis as any).Image;
  const draws:any[]=[],texts:any[]=[];let canvas:any;
@@ -55,4 +55,33 @@ test('printing loads the full-resolution source instead of its display thumbnail
   await renderMugPrint({src:'/small-display.webp',printSrc:'/full-resolution.png',caption:'hello'},{font:'clean',style:'enamel'},{productId:407,printWidth:2400,printHeight:720,renderWidth:2400});
   assert.deepEqual(loaded,['/full-resolution.png','/pixel-santa.png']);
  }finally{(globalThis as any).document=previousDocument;(globalThis as any).Image=previousImage;}
+});
+
+test('black 15oz artwork aligns with black 11oz and versions both black sizes independently of other mugs',()=>{
+ const small={productId:300,printWidth:2250,printHeight:925};
+ const large={productId:300,printWidth:2253,printHeight:1084};
+ const a=mugPrintLayout(2400,987,small),b=mugPrintLayout(2400,1155,large);
+ assert.equal(b.selectedCenter,a.selectedCenter);
+ assert.equal(b.santaCenter,a.santaCenter);
+ assert.equal(mugLayoutVersion(large),6);assert.equal(mugLayoutVersion(small),6);
+ for(const key of Object.keys(mugPlacementGuides)){
+   const [productId,area]=key.split(':'),[printWidth,printHeight]=area.split('x').map(Number);
+   if(!key.startsWith('300:'))assert.equal(mugLayoutVersion({productId:Number(productId),printWidth,printHeight}),4,key);
+ }
+});
+
+test('Santa uses the full height on both black sizes with safe signature margins',async()=>{
+ const previousDocument=(globalThis as any).document;
+ try{for(const [printWidth,printHeight] of [[2250,925],[2253,1084]]){
+  const draws:any[]=[],texts:any[]=[],height=Math.round(2400*printHeight/printWidth);
+  const context={font:'',drawImage(...args:any[]){draws.push(args);},measureText(){return {width:20};},fillText(...args:any[]){texts.push([...args,Number(/([0-9.]+)px/.exec(this.font)![1])]);}};
+  (globalThis as any).document={fonts:{async load(){}},createElement(){return {width:0,height:0,getContext(){return context;},toBlob(fn:any){fn(new Blob(['png']));}};}};
+  await renderMugPrint({caption:'hello'},{font:'clean',style:'black-glossy'},{productId:300,printWidth,printHeight,renderWidth:2400,sourceImage:{naturalWidth:1200,naturalHeight:1200},santaImage:{naturalWidth:369,naturalHeight:400}});
+  const [,x,y,w,h]=draws[1];
+  assert.ok(h>=height*.70,'Santa fills at least 70% of the full print height');
+  assert.ok(x>=0&&x+w<=2400&&y>=0&&y+h<height);
+  const [,cx,cy,maxWidth,fontSize]=texts.at(-1);
+  assert.ok(cy>y+h&&cy+fontSize*1.2<=height);
+  assert.ok(cx-maxWidth/2>=0&&cx+maxWidth/2<=2400);
+ }}finally{(globalThis as any).document=previousDocument;}
 });

@@ -28,13 +28,17 @@ export const mugPlacementGuides={
   "templateId": 198682
  },
  "300:2250x925": {
+  "layoutVersion": 6,
   "left": 0.1673611111111111,
   "right": 0.8305555555555556,
   "templateId": 117633
  },
+ // The 15oz supplier proof wraps the template's side guides too far away
+ // from the handle. Match the verified black 11oz side centers instead.
  "300:2253x1084": {
-  "left": 0.20347222222222222,
-  "right": 0.7993055555555556,
+  "left": 0.1673611111111111,
+  "right": 0.8305555555555556,
+  "layoutVersion": 6,
   "templateId": 117634
  },
  "407:2400x720": {

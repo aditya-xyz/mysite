@@ -55,7 +55,7 @@ export function mountKeepsake(journal,section){
     clearOrderToast();orderToast=document.createElement('div');orderToast.className='ks-order-toast';orderToast.setAttribute('role','status');orderToast.setAttribute('aria-live','polite');
     const text=document.createElement('p');text.textContent=message;orderToast.append(text);
     if(simulated){const note=document.createElement('small');note.textContent='Local preview only · Nothing mailed';orderToast.append(note);}
-    modal.append(orderToast);toastTimer=setTimeout(clearOrderToast,8000);
+    modal.append(orderToast);toastTimer=setTimeout(clearOrderToast,2500);
   }
   function cleanup(){
     borderTransition?.cancel();borderTransition=null;

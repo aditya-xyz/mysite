@@ -24,9 +24,13 @@ export async function renderMugPrint(design,configuration,variant){
   context.fillStyle=configuration.style==='black-glossy'?'#ffffff':'#20392f';context.textAlign='center';context.textBaseline='top';lines.forEach((line,i)=>context.fillText(line,layout.selectedCenter,imageTop+imageHeight+canvas.height*.02+i*fontSize*1.2,maxWidth));
  }
  const santa=variant.santaImage||new Image();if(!variant.santaImage){santa.src='/pixel-santa.png';await santa.decode();}
- const santaHeight=h*.76,santaScale=Math.min(h*.8/santa.naturalWidth,santaHeight/santa.naturalHeight),sw=santa.naturalWidth*santaScale,sh=santa.naturalHeight*santaScale;
- context.drawImage(santa,layout.santaCenter-sw/2,padding+(santaHeight-sh)/2,sw,sh);
- context.fillStyle=configuration.style==='black-glossy'?'#ffffff':'#20392f';context.font=`600 ${h*.06}px Georgia, serif`;context.textAlign='center';context.textBaseline='top';
- context.fillText('pixelbook ’26',layout.santaCenter,padding+santaHeight+h*.035,h*.95);
+ // Black mugs have narrower guide panels. Use the full print height for Santa,
+ // as for the selected mugshot, while retaining the safe side-panel width.
+ const black=configuration.style==='black-glossy';
+ const santaHeight=black?canvas.height*.78:h*.76,santaWidth=black?imageWidth:h*.8;
+ const santaScale=Math.min(santaWidth/santa.naturalWidth,santaHeight/santa.naturalHeight),sw=santa.naturalWidth*santaScale,sh=santa.naturalHeight*santaScale;
+ context.drawImage(santa,layout.santaCenter-sw/2,black?imageTop+(santaHeight-sh)/2:padding+(santaHeight-sh)/2,sw,sh);
+ context.fillStyle=black?'#ffffff':'#20392f';context.font=`600 ${(black?canvas.height:h)*.06}px Georgia, serif`;context.textAlign='center';context.textBaseline='top';
+ context.fillText('pixelbook ’26',layout.santaCenter,black?imageTop+santaHeight+canvas.height*.02:padding+santaHeight+h*.035,black?room*1.9:h*.95);
  return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Could not prepare the mug artwork.')),'image/png'));
 }

@@ -38,6 +38,9 @@ export async function prepareHandwryttenCard(env:HandwryttenEnv,artwork:File,nam
 // Approved API proof: full-size front; largest uncropped inside-left logo region.
 export const handwryttenArtPlacement={cover:100,inside:100} as const;
 export const handwryttenPrintFont={font:'hwMadeline',font_size:13,auto_font_size:true} as const;
+// Inline placement follows the complete frozen note, including its sign-off.
+export const handwryttenPawDoodle='<doodle:6 scale=1 rotate=0>';
+export function handwryttenMessage(note:string){return note.trimEnd().endsWith(handwryttenPawDoodle)?note:note+'\n\n'+handwryttenPawDoodle;}
 // Only prepares an immutable design. No message, address, basket or payment is sent.
 export async function prepareHandwryttenFoldedCard(env:HandwryttenEnv,input:{front:File;inside?:File;back:File;backId?:number;cardId?:number;name:string;onBack:(id:number)=>Promise<void>;onCard:(id:number)=>Promise<void>}){
  const status=await handwryttenStatus(env);
@@ -123,7 +126,10 @@ export async function handwryttenTestOrder(env:HandwryttenEnv,id:number){return 
 
 export async function requireHandwryttenLiveMode(env:PrintEnv,orderId:string){
  await requireLiveGift(env,orderId,'postcard');
- if(env.PRINT_ORDER_MODE!=='handwrytten_live'||Number((await api(env,'/checkauth/auth')).test_mode)!==0)throw new PrintProblem(409,'Live postcard ordering is not ready. Nothing was submitted.');
+ if(env.PRINT_ORDER_MODE!=='handwrytten_live')throw new PrintProblem(409,'Postcard ordering is not ready. Nothing was submitted.');
+ const mode=Number((await api(env,'/checkauth/auth')).test_mode);
+ if(mode!==0&&mode!==1)throw new PrintProblem(502,'Handwrytten did not identify its checkout mode.');
+ return mode===1;
 }
 export async function handwryttenLiveMutation(env:PrintEnv,orderId:string,path:'/orders/placeBasket'|'/basket/send'|'/basket/remove',body:Record<string,unknown>){
  await requireHandwryttenLiveMode(env,orderId);

@@ -330,16 +330,18 @@ in admin/README.md. No scrapbook is published by a code deployment.
 ## Reader colors and Safari Adaptive Dark Mode
 
 The guest scrapbook declares `color-scheme: light dark` in HTML before styles load,
-matching the portfolio's Safari fix. Moss and cream remain the default even when
-the operating system prefers dark colors. The header's sun/moon icon button is an
-explicit opt-in to a dark moss palette, and remembers the reader's choice on that
-browser/hostname. The small same-origin theme.js runs before CSS to restore that
-choice before paint; blocked local storage falls back safely to the default.
-Both palette rules keep `light dark` support declared on the root; overriding
-that declaration with light-only colors may let Safari beta transform the
-light palette again. Inputs select their native scheme separately. The original
-light colors remain #ecf0e5 paper and #20392f ink. Pixel sits to the left of the
-sun/moon button on phones and desktop. Photos and the viewer are not recolored.
+matching the portfolio's Safari fix. System is the default theme and follows OS
+preference changes. The header icon opens System, Dark, and Light
+choices. Everyone starts on System for this rollout: the versioned preference
+key ignores earlier saved overrides. New explicit Dark/Light choices persist on
+that browser/hostname. The same-origin theme.js applies the choice
+before CSS loads, including on login and policy pages. Blocked local storage
+falls back to System. Changes in other tabs stay synchronized.
+
+Both palette rules and the bootstrap keep `light dark` support declared on the
+root and meta tag. Do not replace this with a single scheme or `only light`:
+Safari 27.3 beta can then transform the authored colors. Inputs select their
+native scheme separately. Photos and the viewer are not recolored.
 
 WebKit's Safari 27.3 Adaptive Dark Mode documentation says declaring support for
 both schemes opts the page out of its automatic recoloring. Verify the beta's
@@ -1156,3 +1158,14 @@ inside each option's width so both end stops have matching insets.
 The shared Places autocomplete/details cap is configured at 1,000 requests per
 UTC day in both Workers, with the monthly cap at 2,000. Existing usage counters
 are retained. This app-level change does not alter Google Cloud billing or quotas.
+
+
+### Black glossy 15 oz placement correction
+
+The black glossy 15 oz supplier proofs placed the artwork farther from the
+handle than the 11 oz proofs. Its two side centers now use the black 11 oz
+calibration, verified with actual Printful left/right mockups. Both black print areas now use layout version 6, which also sizes Santa from
+the full printable height with safe panel-width limits. Other mug areas retain
+version 4 and their saved source identities. Regenerate the affected artwork and both handle proofs together so
+new orders freeze the same corrected wrap shown in the preview. Existing order
+files and receipts remain frozen.

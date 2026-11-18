@@ -134,3 +134,50 @@
     padding: 12px 18px;
   }
 }
+
+/* A single aligned summary, shared by light and dark mug review screens. */
+.pb-order-review > .pb-mug-details{width:100%;max-width:340px;justify-self:center;align-self:center;min-width:0}
+.pb-order-review .pb-mug-details .pb-gift-price{margin:0 0 18px;padding:0 0 16px;border-bottom:1px solid var(--line);background:transparent}
+.pb-mug-details .pb-gift-price > div{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.pb-mug-details .pb-gift-price dt{font-size:14px;color:var(--muted)}
+.pb-mug-details .pb-gift-price dd{display:flex;align-items:baseline;gap:8px;margin:0}
+.pb-gift-covered{font-size:13px;font-weight:500;color:var(--muted)}
+.pb-order-review .pb-mug-specs{display:grid;gap:12px;margin:0}
+.pb-order-review .pb-mug-specs > div{display:grid;grid-template-columns:minmax(84px,1fr) minmax(0,1.3fr);align-items:baseline;gap:16px;margin:0}
+.pb-mug-specs dt{font-size:14px;color:var(--muted)}
+.pb-order-review .pb-mug-specs dd{margin:0;font-size:16px;font-weight:500;line-height:1.4;overflow-wrap:anywhere;text-align:right}
+.pb-mug-specs dd::first-letter{text-transform:uppercase}
+@media(max-width:700px){
+ .pb-order-review > .pb-mug-details{max-width:460px}
+ .pb-order-review .pb-mug-details .pb-gift-price{margin:0 0 10px;padding:0 0 8px}
+ .pb-order-review .pb-mug-specs{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 20px}
+ .pb-order-review .pb-mug-specs > div{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+ .pb-mug-specs dt{font-size:12px}
+ .pb-order-review .pb-mug-specs dd{font-size:14px;text-align:left}
+}
+
+/* Match the existing mobile reminder placement on wider screens. */
+@media (min-width: 801px) {
+  .pb-dialog-bottom:has(.pb-household-note) {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+  }
+  .pb-dialog-bottom .pb-household-note {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: center;
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    height: auto;
+    overflow-wrap: anywhere;
+  }
+  .pb-dialog-bottom:has(.pb-household-note) [data-gift-back] {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .pb-dialog-bottom:has(.pb-household-note) [data-gift-next] {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
