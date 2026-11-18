@@ -20,11 +20,12 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
  await db.prepare("INSERT INTO live_gift_permissions(year,invitation_id,person_id,member_ids,postcard_enabled,mug_enabled,enabled,expires_at) VALUES(2026,'home','owner','[\"owner\",\"partner\"]',1,1,1,unixepoch()+86400)").run();
  const env={DB:db as any,MEDIA:media as any,LIVE_GIFT_ORDERING:'true',PRINT_ORDER_MODE:'handwrytten_live',PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'synthetic',PRINTFUL_STORE_ID:'123',SOCIAL_JOURNAL_ORIGIN:'https://live.test',HANDWRYTTEN_API_KEY:'synthetic',HANDWRYTTEN_PREVIEWS_ENABLED:'true'};
  const address={line1:'1 Synthetic Lane',line2:'',city:'Testville',state:'CA',postalCode:'90001',country:'US'};
- const calls:string[]=[];let mug:any=null,mugPayload:any=null,mugCost='19.99',loseConfirm=false,loseCreate=false,costsPending=false,mode=0,previewTotal=4.86,basket:any[]=[],basketTotal=4.86,postcardAccepted=false;
+ const calls:string[]=[];let mug:any=null,mugPayload:any=null,mugCost='19.99',loseConfirm=false,loseCreate=false,costsPending=false,readOnlyOrderToken=false,mode=0,previewTotal=4.86,basket:any[]=[],basketTotal=4.86,postcardAccepted=false;
  const cents=(v:number)=>Math.round(v*100)/100;
  const fetch=mock.method(globalThis,'fetch',async(url:string,init:RequestInit={})=>{
   const u=new URL(url),path=u.pathname,body=init.body?JSON.parse(String(init.body)):null;calls.push((init.method||'GET')+' '+path);
   if(u.hostname==='api.printful.com'){
+   if(path==='/oauth/scopes')return Response.json({result:{scopes:[{scope:readOnlyOrderToken?'orders/read':'orders'}]}});
    if(path==='/orders'){
     assert.equal(u.searchParams.get('confirm'),'0');assert.equal(u.searchParams.get('update_existing'),'0');
     mugPayload=body;mug={id:123,external_id:body.external_id,status:'draft',shipping:'STANDARD',recipient:body.recipient,items:body.items,costs:{currency:'USD',total:mugCost,subtotal:'10.00',discount:'0.00',shipping:'8.00',tax:cents(Number(mugCost)-18),vat:'0.00'}};
@@ -49,7 +50,7 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
   assert.fail('Unexpected provider request '+path);
  });
  async function reset(){
-  calls.length=0;mug=null;mugPayload=null;mugCost='19.99';loseConfirm=false;loseCreate=false;costsPending=false;mode=0;previewTotal=4.86;basket=[];basketTotal=4.86;postcardAccepted=false;
+  calls.length=0;mug=null;mugPayload=null;mugCost='19.99';loseConfirm=false;loseCreate=false;costsPending=false;readOnlyOrderToken=false;mode=0;previewTotal=4.86;basket=[];basketTotal=4.86;postcardAccepted=false;
   await db.exec('DELETE FROM live_gift_orders; DELETE FROM mug_orders; DELETE FROM print_orders; DELETE FROM print_fulfillment_lock; DELETE FROM handwrytten_previews;');
  }
  async function seedMug(){
@@ -81,6 +82,12 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
     await reset();await seedMug();await db.prepare("UPDATE mug_orders SET print_layout_version=?1 WHERE id='mug-live'").bind(version).run();
     await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'review');assert.equal(calls.length,0);
    }
+  });
+  await t.test('read-only order access stops before exporting checkout data or creating a supplier draft',async()=>{
+   await reset();await seedMug();readOnlyOrderToken=true;await tickLiveMugFulfillment(env);await tickLiveMugFulfillment(env);
+   assert.equal(await liveState('mug-live'),'review');assert.deepEqual(calls,['GET /oauth/scopes']);
+   const saved=await db.prepare("SELECT error,payload_json,asset_token_hash FROM live_gift_orders WHERE order_id='mug-live'").first<any>();
+   assert.match(saved.error,/connection is read-only/);assert.equal(saved.payload_json,null);assert.equal(saved.asset_token_hash,null);
   });
   await t.test('lost confirmation response reconciles without another charge',async()=>{await reset();await seedMug();loseConfirm=true;await tickLiveMugFulfillment(env);await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'submitted');assert.equal(calls.filter(c=>c==='POST /orders/123/confirm').length,1);});
   await t.test('lost draft response is held and never automatically recreated',async()=>{await reset();await seedMug();loseCreate=true;await tickLiveMugFulfillment(env);await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'unknown');assert.equal(calls.filter(c=>c==='POST /orders').length,1);assert.equal(calls.some(c=>c.includes('/confirm')),false);});

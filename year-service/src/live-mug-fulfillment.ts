@@ -1,4 +1,5 @@
 import {PrintProblem,type PrintEnv} from './printing.ts';
+import {printfulApi} from './printful.ts';
 import {requireLiveGift} from './live-gifts.ts';
 import {digest,now,token} from './security.ts';
 // @ts-expect-error Shared verified artwork versions, including per-area calibrations.
@@ -52,6 +53,9 @@ export async function tickLiveMugFulfillment(env:PrintEnv,preferredId?:string){
  try{
   await requireLiveGift(env,job.order_id,'mug');
   if(!job.print_artwork_key||!verifiedMugLayoutVersion(job.print_layout_version))throw new PrintProblem(409,'The print-ready mug artwork needs review.');
+  // Check the deployed credential before exporting a recipient or creating a draft.
+  const access=await printfulApi(env,'/oauth/scopes') as {scopes?:{scope:string}[]};
+  if(!Array.isArray(access.scopes)||!access.scopes.some(scope=>scope.scope==='orders'))throw new PrintProblem(503,'Printful’s connection is read-only. Pixelbook admins need to enable order creation before this gift can be submitted.');
   let payload=job.payload_json?JSON.parse(job.payload_json):null,remote:any;
   if(job.state==='pending'){
    const quote=JSON.parse(job.estimate_json||'null');

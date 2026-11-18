@@ -26,9 +26,9 @@ function cents(value:unknown){
  if((typeof value!=='number'&&typeof value!=='string')||value==='')throw new PrintProblem(503,'Printful returned an incomplete price. Please try again later.');
  const number=Number(value);if(!Number.isFinite(number)||number<0)throw new PrintProblem(503,'Printful returned an incomplete price. Please try again later.');return Math.round(number*100);
 }
-// Only these catalog, mockup and estimate endpoints can be called. There is
+// Only these access-check, catalog, mockup and estimate endpoints can be called. There is
 // deliberately no order creation, confirmation, billing or fulfillment adapter.
-export async function printfulApi(env:PrintEnv,path:'/products'|`/products/${number}`|'/orders/estimate-costs'|'/shipping/rates'|`/mockup-generator/printfiles/${number}`|`/mockup-generator/create-task/${number}`|`/mockup-generator/task?task_key=${string}`,body?:unknown){
+export async function printfulApi(env:PrintEnv,path:'/oauth/scopes'|'/products'|`/products/${number}`|'/orders/estimate-costs'|'/shipping/rates'|`/mockup-generator/printfiles/${number}`|`/mockup-generator/create-task/${number}`|`/mockup-generator/task?task_key=${string}`,body?:unknown){
  if(!printfulEnabled(env)||!env.PRINTFUL_API_TOKEN)throw new PrintProblem(503,'Live mug pricing is temporarily unavailable. Please try again later.');
  try{
   const response=await fetch('https://api.printful.com'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+env.PRINTFUL_API_TOKEN,'Content-Type':'application/json',...(env.PRINTFUL_STORE_ID?{'X-PF-Store-Id':env.PRINTFUL_STORE_ID}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(12000),redirect:'manual'});
