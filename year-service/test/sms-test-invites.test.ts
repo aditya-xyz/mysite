@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {exportJWK, generateKeyPair, SignJWT} from 'jose';
 import {Miniflare, convertV4MiniflareOptions} from 'miniflare';
-import {now} from '../src/security.ts';
+import {digest, now} from '../src/security.ts';
 
 test('one-time SMS test links remain isolated from scrapbook access', async () => {
   const studio = 'https://admin.test', sandbox = 'https://sms.test', scrapbook = 'https://scrapbook.test';
@@ -14,7 +14,7 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
     .setIssuer(issuer).setAudience(audience).setIssuedAt().setExpirationTime('5m').sign(privateKey);
   const serviceSid = 'VA' + 'a'.repeat(32), verificationSid = 'VE' + 'b'.repeat(32);
   const sent: string[] = [];
-  const india = '+919876543210', netherlands = '+31612345678';
+  const india = '+919876543210', netherlands = '+31612345678', us = '+14155550123';
   const mf = new Miniflare(convertV4MiniflareOptions({workers: [{
     name: 'admin', modules: true, routes: ['admin.test/*'], compatibilityDate: '2026-08-06',
     scriptPath: '.wrangler/admin-test-bundle/index.js', d1Databases: {DB: 'shared'},
@@ -27,7 +27,7 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
   }, {
     name: 'guest', modules: true, routes: ['sms.test/*', 'scrapbook.test/*'],
     compatibilityDate: '2026-08-06', scriptPath: '.wrangler/test-bundle/index.js', d1Databases: {DB: 'shared'},
-    bindings: {SMS_TEST_ORIGIN: sandbox, SMS_ENABLED: 'true', SMS_DAILY_LIMIT: '2',
+    bindings: {SMS_TEST_ORIGIN: sandbox, SMS_ENABLED: 'true', SMS_DAILY_LIMIT: '3',
       TWILIO_API_KEY_SID: 'SK' + 'c'.repeat(32), TWILIO_API_KEY_SECRET: 'stub', TWILIO_VERIFY_SERVICE_SID: serviceSid},
     outboundService: async (request: Request) => {
       const params = new URLSearchParams(await request.text());
@@ -49,6 +49,15 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
     for (const file of ['0001_invites.sql', '0031_sms_send_usage.sql', '0042_sms_test_invites.sql']) {
       await db.exec((await readFile('migrations/' + file, 'utf8')).replace(/\n/g, ' '));
     }
+    const existingToken = 'e'.repeat(64), existingSession = 'f'.repeat(64), stamp = now();
+    await db.prepare(`INSERT INTO sms_test_invites
+      (id,token_hash,session_hash,phone,country,phone_hint,created_at,expires_at,redeemed_at,sends,attempts)
+      VALUES ('existing',?1,?2,'+31612345679','NL','5679',?3,?4,?3,1,2)`)
+      .bind(await digest(existingToken), await digest(existingSession), stamp, stamp + 3600).run();
+    const existingBefore = await db.prepare("SELECT * FROM sms_test_invites WHERE id='existing'").first();
+    await db.exec((await readFile('migrations/0043_us_sms_test_invites.sql', 'utf8')).replace(/\n/g, ' '));
+    assert.ok(existingBefore);
+    assert.deepEqual(await db.prepare("SELECT * FROM sms_test_invites WHERE id='existing'").first(), existingBefore);
     const req = (origin: string, path: string, data?: unknown, extra?: Record<string, string>) =>
       mf.dispatchFetch(origin + path, {
         method: data === undefined ? 'GET' : 'POST',
@@ -70,8 +79,12 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
     assert.equal((await req(sandbox, '/api/journal')).status, 404);
     assert.equal((await req(scrapbook, '/sms-test/')).status, 404);
     assert.equal((await req(scrapbook, '/api/sms-test/status')).status, 404);
-    assert.equal((await admin('', {phone: '+15555550101'})).status, 400);
+    assert.equal((await admin('', {phone: '+442079460123'})).status, 400);
+    assert.equal((await admin('', {phone: '+14150550123'})).status, 400);
     assert.equal((await guest('send', {})).status, 401);
+    const carriedOver = await guest('status', undefined, '__Host-sms_test_session=' + existingSession);
+    assert.equal(carriedOver.status, 200);
+    assert.equal((await carriedOver.json() as {country: string}).country, 'NL');
 
     const indiaInvite = await invite('+91 98765 43210');
     assert.match(indiaInvite.url, /^https:\/\/sms\.test\/sms-test\/#([a-f0-9]{64})$/);
@@ -100,12 +113,22 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
     assert.equal((await db.prepare('SELECT count(*) AS n FROM sessions').first<{n: number}>())?.n, 0);
     assert.equal(await db.prepare('SELECT phone FROM sms_test_invites WHERE id=?').bind(indiaInvite.id).first('phone'), null);
 
+    const usInvite = await invite('+1 (415) 555-0123');
+    const usOpened = await guest('open', {token: linkCode(usInvite)});
+    assert.equal(usOpened.status, 200);
+    assert.equal((await usOpened.json() as {country: string}).country, 'US');
+    const usCookie = usOpened.headers.get('Set-Cookie')!.split(';')[0];
+    assert.equal((await guest('send', {}, usCookie)).status, 200);
+    const usVerified = await guest('verify', {code: '123456'}, usCookie);
+    assert.equal(usVerified.status, 200);
+    assert.equal((await usVerified.json() as {verified: boolean}).verified, true);
+
     const dutchInvite = await invite(netherlands);
     const dutchCookie = (await guest('open', {token: linkCode(dutchInvite)})).headers.get('Set-Cookie')!.split(';')[0];
     assert.equal((await guest('send', {}, dutchCookie)).status, 200);
     await db.prepare('UPDATE sms_test_invites SET last_send_at=0 WHERE id=?').bind(dutchInvite.id).run();
-    assert.equal((await guest('send', {}, dutchCookie)).status, 429, 'Both countries share the production SMS budget');
-    assert.deepEqual(sent, [india, netherlands]);
+    assert.equal((await guest('send', {}, dutchCookie)).status, 429, 'All three countries share the production SMS budget');
+    assert.deepEqual(sent, [india, us, netherlands]);
     assert.equal((await admin('/' + dutchInvite.id + '/revoke', {})).status, 200);
     assert.equal((await guest('status', undefined, dutchCookie)).status, 401);
     const expired = await invite(netherlands);
@@ -114,7 +137,8 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
     const history = await (await admin('')).text();
     assert.match(history, /Verified/);
     assert.match(history, /Revoked/);
-    assert.ok(!history.includes(india) && !history.includes(netherlands) && !history.includes(linkCode(indiaInvite)));
+    assert.match(history, /"country":"US"/);
+    assert.ok(!history.includes(india) && !history.includes(netherlands) && !history.includes(us) && !history.includes(linkCode(indiaInvite)));
   } finally {
     await mf.dispose();
   }

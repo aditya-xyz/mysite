@@ -7,6 +7,11 @@ const CHALLENGE_LIFETIME = 10 * 60;
 const SEND_COOLDOWN = 60;
 const MAX_SENDS = 2;
 const MAX_CHECKS = 5;
+const PHONE_COUNTRIES = [
+  ['IN', /^\+91[6-9]\d{9}$/],
+  ['NL', /^\+316\d{8}$/],
+  ['US', /^\+1[2-9]\d{2}[2-9]\d{6}$/],
+] as const;
 
 export class SmsTestProblem extends Error {
   constructor(public status: number, message: string, public retryAfter?: number) { super(message); }
@@ -15,7 +20,7 @@ export class SmsTestProblem extends Error {
 interface TestInvite {
   id: string;
   phone: string | null;
-  country: 'IN' | 'NL';
+  country: typeof PHONE_COUNTRIES[number][0];
   phone_hint: string;
   expires_at: number;
   sent_at: number | null;
@@ -29,8 +34,8 @@ interface TestInvite {
 
 export async function createSmsTest(db: D1Database, origin: string, value: unknown) {
   const phone = typeof value === 'string' ? value.replace(/[\s().-]/g, '') : '';
-  const country = /^\+91[6-9]\d{9}$/.test(phone) ? 'IN' : /^\+316\d{8}$/.test(phone) ? 'NL' : null;
-  if (!country) throw new SmsTestProblem(400, 'Use an Indian (+91) or Dutch (+31) mobile number, including its country code.');
+  const country = PHONE_COUNTRIES.find(([, pattern]) => pattern.test(phone))?.[0];
+  if (!country) throw new SmsTestProblem(400, 'Use a mobile number starting with +1 (US), +91 (India), or +31 (Netherlands).');
   const raw = token(), id = crypto.randomUUID(), stamp = now(), expiresAt = stamp + INVITE_LIFETIME;
   const url = new URL('/sms-test/', origin);
   url.hash = raw;

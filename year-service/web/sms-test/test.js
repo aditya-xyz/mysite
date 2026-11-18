@@ -1,6 +1,7 @@
 const byId = id => document.getElementById(id);
 const inviteForm = byId('invite'), verifyForm = byId('verify'), send = byId('send');
 const inviteCode = byId('invite-code'), smsCode = byId('sms-code'), status = byId('status');
+const countries = {IN: 'India (+91)', NL: 'Netherlands (+31)', US: 'US (+1)'};
 let state = null, busy = false, retryAt = 0, timer;
 
 async function request(action, data) {
@@ -20,8 +21,7 @@ function render() {
   byId('complete').hidden = !state?.verified;
   verifyForm.hidden = !state?.codePending;
   if (state) {
-    const country = state.country === 'IN' ? 'India (+91)' : 'Netherlands (+31)';
-    byId('destination').textContent = `The text goes to the ${country} mobile number ending in ${state.phoneHint}.`;
+    byId('destination').textContent = `The text goes to the ${countries[state.country]} mobile number ending in ${state.phoneHint}.`;
   }
   const seconds = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
   const canSend = !!state?.sendsRemaining && !state?.attemptLimitReached;

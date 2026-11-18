@@ -2,6 +2,7 @@ const byId = id => document.getElementById(id);
 const form = byId('create'), phone = byId('phone'), link = byId('invite-link');
 const status = byId('status'), history = byId('history'), refresh = byId('refresh');
 const create = form.querySelector('button');
+const countries = {IN: 'India', NL: 'Netherlands', US: 'US'};
 const dates = new Intl.DateTimeFormat(undefined, {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'});
 let busy = false, currentInvite;
 
@@ -24,7 +25,7 @@ async function load() {
     const row = document.createElement('li');
     const name = document.createElement('strong');
     const details = document.createElement('span');
-    name.textContent = `${test.country === 'IN' ? 'India' : 'Netherlands'} · •••• ${test.phoneHint}`;
+    name.textContent = `${countries[test.country]} · •••• ${test.phoneHint}`;
     details.textContent = `${test.status} · expires ${dates.format(test.expiresAt * 1000)}`;
     row.append(name, details);
     if (!['Verified', 'Revoked', 'Expired'].includes(test.status)) {
