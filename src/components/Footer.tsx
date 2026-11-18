@@ -35,7 +35,7 @@ const Footer = ({
         <a className="wordmark" href="#home">
           aditya<span>.</span>
         </a>
-        <p>Southern California · Made with curiosity.</p>
+        <p>Southern California · Made with curiosity. <a href="/privacy.html">Privacy</a></p>
         <div className="palette-picker" role="group" aria-label="Color palette">
           <span>Palette</span>
           {[

@@ -1,0 +1,9 @@
+.pb-legal-links{font-size:13px;line-height:1.6;color:var(--muted);margin:12px 0 0}
+.pb-legal-links a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+.pb-legal-links a:hover{color:var(--ink)}
+.pb-legal-links a:focus-visible{outline:2px solid var(--ink);outline-offset:4px;border-radius:2px}
+.pb-code-content .pb-legal-links{margin-top:18px}
+footer .pb-legal-links{grid-column:1/-1;justify-self:start}
+.delivery-privacy{margin-bottom:14px}
+.delivery-privacy .delivery-note{margin:0}
+.delivery-privacy .pb-legal-links{margin-top:5px}

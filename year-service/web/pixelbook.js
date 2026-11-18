@@ -1,3 +1,4 @@
+import {policyLinks} from './policy-links.js';
 const sparkle='<svg viewBox="0 0 32 32" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M16 2v28M2 16h28M6.1 6.1l19.8 19.8M6.1 25.9 25.9 6.1"/></svg>';
 // Presentation only. Private images and gift capabilities arrive with the authorized journal.
 export const householdGiftLine = 'one per household. i have dad’s credit card, not generational wealth.';
@@ -29,7 +30,7 @@ export function giftMarkup(journal){
   return `<section class="pb-presents" aria-labelledby="pb-presents-title"><div class="pb-presents-heading"><p class="pb-eyebrow">a gift from Pixel</p><h2 id="pb-presents-title">i got you something.</h2></div><div class="pb-presents-grid">${keepsake?'<article class="keepsake-section pb-present-card" aria-labelledby="pb-keepsake-title"></article>':''}${mugCard}</div><p class="pb-presents-budget">${mug&&keepsake?'one of each per household. i have dad’s credit card, not generational wealth.':householdGiftLine}</p></section>`;
 }
 export function footerMarkup(journal){
-  return `${themePhoto(journal,'closing','Pixel sleeping against the couch','pb-closing-photo')}<p class="pb-eyebrow">that’s my year. thanks for being in it.</p><p class="footer-closing">same time next year?</p><p class="signoff">love, Pixel</p><span class="pb-footer-wordmark">pixelbook.</span><span class="pb-footer-credits"></span>`;
+  return `${themePhoto(journal,'closing','Pixel sleeping against the couch','pb-closing-photo')}<p class="pb-eyebrow">that’s my year. thanks for being in it.</p><p class="footer-closing">same time next year?</p><p class="signoff">love, Pixel</p><span class="pb-footer-wordmark">pixelbook.</span><span class="pb-footer-credits"></span>${policyLinks()}`;
 }
 
 export function householdOrderNote(addressedTo='',householdSize=0){

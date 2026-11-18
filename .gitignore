@@ -60,3 +60,9 @@ year-service/admin/web/fonts/Asap-OFL.txt
 /year-service/web/app.bundle.js
 
 /year-service/web/app.styles.css
+
+# Shared policy pages copied by the admin build.
+/year-service/admin/web/privacy.html
+/year-service/admin/web/terms.html
+/year-service/admin/web/legal.css
+/year-service/admin/web/policy-theme.js

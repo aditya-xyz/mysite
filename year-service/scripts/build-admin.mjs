@@ -13,6 +13,11 @@ await copyFile('web/folded-card.css','admin/web/folded-card.css');
 
 await copyFile('web/loading.css','admin/web/loading.css');
 
+// Match policy links in guest modals; all admin assets remain behind adminIdentity.
+for(const file of ['privacy.html','terms.html'])await writeFile('admin/web/'+file,(await readFile('web/'+file,'utf8')).replace('src="/theme.js"','src="/policy-theme.js"'));
+await copyFile('web/legal.css','admin/web/legal.css');
+await copyFile('web/theme.js','admin/web/policy-theme.js');
+
 await copyFile('web/pixel-santa.png','admin/web/pixel-santa.png');
 
 // The guest UI is a private admin asset; adminIdentity protects every request.
