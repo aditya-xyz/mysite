@@ -224,16 +224,16 @@ html:has(#keepsake[open]){overflow:hidden}
 .ks-digital-confirm button{font:inherit;color:inherit;cursor:pointer}.ks-digital-confirm button:disabled{opacity:.5;cursor:default}.ks-digital-confirm .ks-primary{display:flex;align-items:center;justify-content:center;flex:1;min-height:48px;padding:12px 22px;border:0;border-radius:25px;background:var(--button);color:var(--button-ink);font-size:14px}.ks-digital-confirm .ks-bottom{flex-wrap:wrap}.ks-digital-confirm button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 #keepsake .ks-complete-preview{display:block;width:min(100%,340px);height:auto;margin:0 auto;box-shadow:0 3px 16px #0002}#keepsake .ks-complete-stage{min-height:200px}#keepsake .ks-complete-preview:not([src]){display:none}
 #keepsake .ks-edit-body:has(.ks-complete-stage){overflow:hidden}#keepsake .ks-complete-stage{flex:1;min-height:0;align-self:stretch;display:flex;align-items:center;justify-content:center}#keepsake .ks-complete-preview{width:100%;height:100%;max-width:340px;max-height:100%;object-fit:contain;box-shadow:none}
-/* Fit each postcard stage to its dialog; longer photo lists use pages. */
-#keepsake .ks-select-body{display:flex;flex-direction:column;overflow:hidden;gap:6px}#keepsake .ks-pick-shell{display:flex;flex:1;min-height:0;flex-direction:column;width:100%;gap:12px}#keepsake .ks-picks{flex:1;min-height:0;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(var(--pick-rows),minmax(0,1fr));gap:12px;padding:4px}#keepsake .ks-pick{width:100%;height:100%;min-height:0;aspect-ratio:auto}#keepsake .ks-pick img{object-fit:contain}#keepsake .ks-pick-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none}#keepsake .ks-pick-pages .ks-secondary{font-size:12px;padding:8px 12px;min-height:44px}#keepsake .ks-pick-pages>span{font-size:12px}
+/* Fit each postcard stage to its dialog. */
+#keepsake .ks-select-body{display:flex;flex-direction:column;overflow:hidden;gap:6px}#keepsake .ks-pick-shell{display:flex;flex:1;min-height:0;flex-direction:column;width:100%;gap:12px}#keepsake .ks-picks{flex:1;min-height:0;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(var(--pick-rows),minmax(0,1fr));gap:12px;padding:4px}#keepsake .ks-pick{width:100%;height:100%;min-height:0;aspect-ratio:auto}#keepsake .ks-pick img{object-fit:contain}
 #keepsake .ks-edit-body{overflow:hidden}#keepsake .ks-editor-stage{flex:1;min-height:0;container-type:size;justify-content:center;margin:0}#keepsake .ks-editor-stage .ks-preview-wrap{width:min(100%,calc((100cqh - 60px)*.8));min-width:0;flex:none}#keepsake .ks-crop-hint{flex:none;text-align:center}
 #keepsake .ks-default-editor{flex:1;min-height:0;container-type:size;justify-content:center;margin:0}#keepsake .ks-default-editor .ks-preview-wrap{width:min(100%,calc((100cqh - 60px)*.8));min-width:0}#keepsake .ks-default-editor>.ks-default-image{flex:1;min-height:0;width:100%;object-fit:contain}
 .ks-digital-confirm{height:calc(100dvh - 32px);max-height:1000px;overflow:hidden}.ks-digital-confirm[open]{display:flex;flex-direction:column}.ks-digital-confirm-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;gap:12px;padding:0 24px 12px}.ks-digital-confirm-body>img{flex:1;min-height:0;width:100%;max-height:none;object-fit:contain;margin:0}.ks-digital-confirm-body p{flex:none;margin:0;width:100%;font-size:14px}.ks-digital-confirm .ks-bottom{flex:none;position:static}
 @media(max-width:600px){#keepsake .ks-picks{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(var(--pick-mobile-rows),minmax(0,1fr))}#keepsake .ks-crop-hint span{display:none}.ks-digital-confirm .ks-top h2{font-size:20px}.ks-digital-confirm-body{padding-inline:16px;gap:8px}.ks-digital-confirm-body p{font-size:13px}}
 /* Desktop postcard dialogs follow the artwork rather than the wide gallery. */
 @media(min-width:601px){#keepsake{width:min(780px,calc(100vw - 40px))}#keepsake:has(.ks-complete-stage){width:min(640px,calc(100vw - 40px))}#keepsake .ks-complete-preview{max-width:100%}#keepsake .ks-bottom:has([data-preview]){justify-content:flex-end}}
-#keepsake .ks-picks{grid-template-rows:repeat(2,minmax(0,1fr))}#keepsake .ks-picks[data-page-count="1"],#keepsake .ks-picks[data-page-count="2"],#keepsake .ks-picks[data-page-count="3"]{grid-template-rows:1fr}
-@media(max-width:600px){#keepsake .ks-picks{grid-template-rows:repeat(3,minmax(0,1fr))}#keepsake .ks-picks[data-page-count="3"],#keepsake .ks-picks[data-page-count="4"]{grid-template-rows:repeat(2,minmax(0,1fr))}#keepsake .ks-picks[data-page-count="1"],#keepsake .ks-picks[data-page-count="2"]{grid-template-rows:1fr}}
+#keepsake .ks-picks{grid-template-rows:repeat(2,minmax(0,1fr))}#keepsake .ks-picks[data-photo-count="1"],#keepsake .ks-picks[data-photo-count="2"],#keepsake .ks-picks[data-photo-count="3"]{grid-template-rows:1fr}
+@media(max-width:600px){#keepsake .ks-picks{grid-template-rows:repeat(3,minmax(0,1fr))}#keepsake .ks-picks[data-photo-count="3"],#keepsake .ks-picks[data-photo-count="4"]{grid-template-rows:repeat(2,minmax(0,1fr))}#keepsake .ks-picks[data-photo-count="1"],#keepsake .ks-picks[data-photo-count="2"]{grid-template-rows:1fr}}
 
 /* Match the mug picker and follow the currently visible mobile viewport. */
 @media(max-width:600px){
@@ -245,10 +245,10 @@ html:has(#keepsake[open]){overflow:hidden}
 /* Picker photos follow their own proportions, like the main gallery. */
 #keepsake .ks-select-body{overflow-y:auto}
 #keepsake .ks-select-body .ks-pick-shell{flex:none;min-height:auto}
-#keepsake .ks-select-body .ks-picks[data-page-count]{
+#keepsake .ks-select-body .ks-picks[data-photo-count]{
  flex:none;grid-template-rows:none;grid-auto-rows:auto;align-items:start;
 }
-#keepsake .ks-select-body .ks-picks[data-page-count] .ks-pick{
+#keepsake .ks-select-body .ks-picks[data-photo-count] .ks-pick{
  width:100%;height:auto;aspect-ratio:auto;align-self:start;
  border:7px solid var(--pb-sheet);background:var(--pb-sheet);
 }
@@ -266,4 +266,9 @@ html:has(#keepsake[open]){overflow:hidden}
 #keepsake:has(.ks-select-body){height:fit-content;max-height:min(1000px,calc(100dvh - 24px))}
 #keepsake:has(.ks-select-body)>.ks-shell{height:auto;max-height:min(998px,calc(100dvh - 26px))}
 #keepsake .ks-select-body{flex:0 1 auto;overflow:hidden}
-#keepsake .ks-select-body .ks-picks[data-page-count]{justify-items:center}
+#keepsake .ks-select-body .ks-picks[data-photo-count]{justify-items:center}
+
+/* Larger collections scroll inside the picker; the heading and actions stay put. */
+#keepsake:has(.ks-select-body .ks-pick:nth-child(7)){height:min(1000px,calc(100dvh - 24px))}
+#keepsake:has(.ks-select-body .ks-pick:nth-child(7))>.ks-shell{height:100%;min-height:0}
+#keepsake .ks-select-body:has(.ks-pick:nth-child(7)){flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;overscroll-behavior:contain}

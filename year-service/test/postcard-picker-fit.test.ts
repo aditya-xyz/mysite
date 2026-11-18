@@ -1,8 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error Shared browser layout calculation.
-import {fittedPickerWidth} from '../web/postcard-picker-fit.js';
-test('six mixed-aspect photos fit phone and desktop pages without cropping',()=>{
+import {fittedPickerWidth,fitPostcardPicker} from '../web/postcard-picker-fit.js';
+test('six mixed-aspect photos fit phone and desktop pickers without cropping',()=>{
  for(const [column,available,columns] of [[145,330,2],[230,540,3],[145,560,2],[230,880,3]]){
   const ratios=[.75,1.5,.75,.75,.75,.75],border=14,gap=12;
   const width=fittedPickerWidth(column,available,ratios,columns,gap,border);let height=0;
@@ -11,7 +11,15 @@ test('six mixed-aspect photos fit phone and desktop pages without cropping',()=>
   assert.ok(width<=column);assert.ok(height<=available+.1,`${height} exceeds ${available}`);
  }
 });
-test('a short page stays at natural column width when it fits',()=>{
+test('a short collection stays at natural column width when it fits',()=>{
  assert.equal(fittedPickerWidth(200,400,[.75,1.5],2,12),200);
  assert.ok(Number.isFinite(fittedPickerWidth(200,400,[0,NaN],2,12)));
+});
+
+test('collections above six bypass thumbnail shrinking and leave sizing to the scrolling grid',()=>{
+ const cards=Array.from({length:7},()=>({querySelector(){throw new Error('Scrolling photos must not be fitted');}}));
+ const grid={querySelectorAll:()=>cards};
+ const body={querySelector:()=>grid};
+ const cleanup=fitPostcardPicker({querySelector:()=>body});
+ assert.equal(typeof cleanup,'function');cleanup();
 });
