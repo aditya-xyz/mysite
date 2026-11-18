@@ -1,3 +1,4 @@
+import {liveGiftAllowed,liveGiftIntentStatement,liveGiftState} from './live-gifts.ts';
 import {giftWindow,giftReservationOpenSQL} from './gift-deadline.ts';
 import {preparedMugCatalog,preparedMugPrint} from './prepared-mugs.ts';
 // @ts-expect-error Shared browser/server simulation catalog.
@@ -19,8 +20,8 @@ export async function mugStatus(request:Request,env:PrintEnv,invite:InvitationAu
  const order=await env.DB.prepare("SELECT * FROM mug_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') LIMIT 1").bind(invite.id,invite.edition_year).first<Order>();
  if(order?.prepared_preview_id){const saved=await env.DB.prepare('SELECT image_key FROM mug_preview_images WHERE id=?1').bind(order.prepared_preview_id).first<{image_key:string}>();if(saved?.image_key)order.mockup_key=saved.image_key;}
  if(order?.mockup_id){const mockup=await env.DB.prepare('SELECT image_key FROM mug_mockups WHERE id=?1').bind(order.mockup_id).first<{image_key:string}>();if(mockup?.image_key)order.mockup_key=mockup.image_key;}
- const eligible=await allowed;
- return {eligible,claim:order?mugReceipt(order):null,remaining:!eligible||order?0:1,mode:simulatedOrders(request,env)?'simulation':'disabled',livePricing:printfulEnabled(env)};
+ const eligible=await allowed,live=await liveGiftAllowed(env,invite.id,invite.edition_year,'mug'),fulfillment=order?await liveGiftState(env,order.id):null;
+ return {eligible,claim:order?{...mugReceipt(order),...(fulfillment?{live:true,fulfillment:fulfillment.state,fulfillmentError:fulfillment.error}: {})}:null,remaining:!eligible||order?0:1,mode:live?'live':simulatedOrders(request,env)?'simulation':'disabled',livePricing:printfulEnabled(env)};
 }
 export async function mugQuote(request:Request,env:PrintEnv,invite:InvitationAudience,data:Record<string,unknown>){
  if(!await mugAllowed(env,invite))throw new PrintProblem(403,'Complimentary mugs are not enabled for this invitation.');
@@ -32,7 +33,8 @@ export async function mugQuote(request:Request,env:PrintEnv,invite:InvitationAud
 export async function createMugOrder(request:Request,env:PrintEnv,invite:InvitationAudience,data:Record<string,unknown>){
  const existing=await mugStatus(request,env,invite);
  if(!existing.eligible)throw new PrintProblem(403,'Complimentary mugs are not enabled for this scrapbook and invitation.');
- if(!simulatedOrders(request,env))throw new PrintProblem(503,'Mug ordering is not enabled.');
+ const live=existing.mode==='live';
+ if(!live&&!simulatedOrders(request,env))throw new PrintProblem(503,'Mug ordering is not enabled.');
  if(existing.claim)return {...existing,reused:true};
  const row=await env.DB.prepare('SELECT published_json,published_version,is_active FROM editions WHERE year=?1').bind(invite.edition_year).first<{published_json:string;published_version:number;is_active:number}>();
  const edition:Published|null=row?.published_json?JSON.parse(row.published_json):null;
@@ -48,9 +50,10 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
  // Domestic catalog reserves are not an international delivery quote. Freeze
  // the exact destination-aware estimate before reserving a simulated gift.
  let quote=null;
- if(printfulEnabled(env)&&address.country!=='US'){
+ if(printfulEnabled(env)&&(live||address.country!=='US')){
   await reserveMugEstimate(env,invite.id);
   quote=await estimateMug(env,configuration,address);
+  if(live&&!quote.withinBudget)throw new PrintProblem(409,'This mug exceeds the $25 limit. Choose another mug.');
  }
  const [mockup,prepared,file,print]=await Promise.all([
   typeof data.mockupId==='string'?env.DB.prepare("SELECT id FROM mug_mockups WHERE id=?1 AND invitation_id=?2 AND year=?3 AND design_id=?4 AND configuration_json=?5 AND caption=?6 AND cutout_version=?7 AND status IN ('pending','ready')").bind(data.mockupId,invite.id,invite.edition_year,design.id,JSON.stringify(configuration),design.caption,design.cutoutVersion).first<{id:string}>():null,
@@ -58,6 +61,7 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
   env.MEDIA.get(design.preview_key),
   printfulEnabled(env)?preparedMugPrint(env,invite.edition_year,design.id,configuration):null
  ]);
+ if(live&&!print)throw new PrintProblem(409,'This mug’s print file is still being prepared. Please try again shortly.');
  if(!file)throw new PrintProblem(409,'The mug artwork is unavailable.');
  if(print&&typeof data.preparedPreviewId==='string'&&(!prepared||!(await env.DB.prepare('SELECT id FROM mug_preview_images WHERE id=?1 AND source_id=?2').bind(prepared.id,print.sourceId).first())))throw new PrintProblem(409,'The mug preview changed. Reopen the gift picker.');
  const id='mug-'+token().slice(0,24),printKey=print?`${invite.edition_year}/mug-orders/${id}/print.png`:null,key=`${invite.edition_year}/mug-orders/${id}/artwork.png`;
@@ -65,13 +69,15 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
  await env.MEDIA.put(key,file.body,{httpMetadata:{contentType:'image/png'}});
  try{
   if(print&&printKey)await env.MEDIA.put(printKey,print.file.body,{httpMetadata:{contentType:'image/png'}});
-  const inserted=await env.DB.prepare(`INSERT INTO mug_orders(id,invitation_id,year,request_key,status,design_id,caption,alt,artwork_key,address_json,recipient_name,save_address,published_version,configuration_json,quote_json,mockup_id,prepared_preview_id,print_artwork_key,print_layout_version,budget_review_required)
+  const insert=env.DB.prepare(`INSERT INTO mug_orders(id,invitation_id,year,request_key,status,design_id,caption,alt,artwork_key,address_json,recipient_name,save_address,published_version,configuration_json,quote_json,mockup_id,prepared_preview_id,print_artwork_key,print_layout_version,budget_review_required)
    SELECT ?1,i.id,e.year,?2,'simulated',?3,?4,?5,?6,?7,?8,?9,e.published_version,?16,?17,?18,?19,?20,?21,?22 FROM invites i JOIN editions e ON e.year=i.edition_year
    WHERE i.id=?10 AND i.version=?11 AND i.revoked_at IS NULL AND i.expires_at>?12 AND e.is_active=1 AND e.allow_mug_orders=1 AND e.published_version=?13 AND i.mug_order_count=0 AND i.allow_mug=1
    AND unixepoch()<?23 AND ${giftReservationOpenSQL}
+   ${live?"AND EXISTS(SELECT 1 FROM live_gift_permissions g WHERE g.invitation_id=i.id AND g.year=e.year AND g.enabled=1 AND g.mug_enabled=1 AND g.expires_at>unixepoch() AND g.person_id=i.person_id AND g.member_ids=i.member_ids) AND NOT EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.invitation_id=i.id AND l.year=e.year AND l.kind='mug')":''}
    AND i.person_id=?14 AND EXISTS(SELECT 1 FROM people p WHERE p.id=?14 AND p.version=?15 AND p.address_verified=1 AND p.address_verification_key IS NOT NULL AND (p.address_verifier IN ('google','local_mock') OR (p.address_verifier='admin' AND json_extract(p.mailing_address,'$.country')='IN')) AND (p.address_verifier!='google' OR p.address_verified_until>?12))
    AND NOT EXISTS(SELECT 1 FROM mug_orders WHERE invitation_id=i.id AND year=e.year AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')) ON CONFLICT DO NOTHING RETURNING id`)
-   .bind(id,data.requestKey,design.id,design.caption,design.alt,key,JSON.stringify(address),recipientName,1,invite.id,(invite as InvitationAudience&{version:number}).version,now(),row.published_version,delivery.person.id,delivery.person.version,JSON.stringify(configuration),quote?JSON.stringify(quote):null,mockup?.id||null,prepared?.id||null,printKey,print?.layoutVersion||1,Number(!!quote&&!quote.withinBudget),window.closesAt??Number.MAX_SAFE_INTEGER).first();
+   .bind(id,data.requestKey,design.id,design.caption,design.alt,key,JSON.stringify(address),recipientName,1,invite.id,(invite as InvitationAudience&{version:number}).version,now(),row.published_version,delivery.person.id,delivery.person.version,JSON.stringify(configuration),quote?JSON.stringify(quote):null,mockup?.id||null,prepared?.id||null,printKey,print?.layoutVersion||1,Number(!!quote&&!quote.withinBudget),window.closesAt??Number.MAX_SAFE_INTEGER);
+  const inserted=live?(await env.DB.batch([insert,liveGiftIntentStatement(env,id,'mug',invite.id,invite.edition_year)]))[0].results[0]:await insert.first();
   if(!inserted){await env.MEDIA.delete(printKey?[key,printKey]:[key]);const fresh=await mugStatus(request,env,invite);if(fresh.claim)return {...fresh,reused:true};throw new PrintProblem(409,'This request was already used or the scrapbook changed. Reopen the gift picker.');}
  }catch(error){await env.MEDIA.delete(printKey?[key,printKey]:[key]);throw error;}
  return {...await mugStatus(request,env,invite),reused:false};

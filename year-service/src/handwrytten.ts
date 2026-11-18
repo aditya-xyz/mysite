@@ -1,8 +1,9 @@
+import {requireLiveGift} from './live-gifts.ts';
+import type {PrintEnv} from './printing.ts';
 import {imageDimensions} from './image-dimensions.ts';
 import {PrintProblem} from './printing.ts';
-export interface HandwryttenEnv {HANDWRYTTEN_API_KEY?:string;PRINT_ORDER_MODE?:string}
-// Submission and basket mutations are reachable only through the Test Mode gate below.
-// Test-mode toggles and live payment adapters are never enabled.
+export interface HandwryttenEnv {HANDWRYTTEN_API_KEY?:string;PRINT_ORDER_MODE?:string;LIVE_GIFT_ORDERING?:string}
+// Basket mutations require either the existing Test Mode guard or a scoped live checkout intent.
 // /outbound/process is the documented pricing preview, not /outbound/addToBasket.
 const allowed=new Set(['/checkauth/auth','/design/dimensions','/basket/count','/cards/uploadCustomLogo','/cards/createCustomCard','/cards/view','/fonts/list','/profile/listAddresses','/outbound/process','/countries/list','/basket/allNew','/orders/placeBasket','/basket/send','/basket/remove','/orders/details']);
 async function api(env:HandwryttenEnv,path:string,body?:Record<string,unknown>|FormData){
@@ -40,7 +41,7 @@ export const handwryttenPrintFont={font:'hwMadeline',font_size:13,auto_font_size
 // Only prepares an immutable design. No message, address, basket or payment is sent.
 export async function prepareHandwryttenFoldedCard(env:HandwryttenEnv,input:{front:File;inside?:File;back:File;backId?:number;cardId?:number;name:string;onBack:(id:number)=>Promise<void>;onCard:(id:number)=>Promise<void>}){
  const status=await handwryttenStatus(env);
- if(!status.testMode)throw new PrintProblem(409,'Enable Handwrytten Test Mode before preparing previews.');
+ if(!status.testMode&&!(env.PRINT_ORDER_MODE==='handwrytten_live'&&env.LIVE_GIFT_ORDERING==='true'))throw new PrintProblem(409,'Enable Handwrytten Test Mode before preparing previews.');
  if(!status.formats?.some((d:any)=>Number(d.id)===4&&d.orientation==='portrait'&&d.format==='folded'))throw new PrintProblem(503,'The folded card format is unavailable.');
  const fonts=await api(env,'/fonts/list');
  if(!fonts.fonts?.some((f:any)=>f.id===handwryttenPrintFont.font))throw new PrintProblem(503,'The print handwriting font is unavailable.');
@@ -75,16 +76,16 @@ export async function prepareHandwryttenFoldedCard(env:HandwryttenEnv,input:{fro
 
 // Official pricing preview: one domestic folded card, standard mail, no inserts.
 // No recipient address, credit card, basket or payment endpoint is involved.
-export async function handwryttenCheckoutQuote(env:HandwryttenEnv,input:{cardId:number;message:string}){
+export async function handwryttenCheckoutQuote(env:HandwryttenEnv,input:{cardId:number;message:string;orderId?:string;country?:string}){
  if(!Number.isSafeInteger(input.cardId)||input.cardId<=0||!input.message.trim())throw new PrintProblem(409,'Prepare the saved card proof and note first.');
  const auth=await api(env,'/checkauth/auth');
- if(Number(auth.test_mode)!==1)throw new PrintProblem(409,'Enable Handwrytten Test Mode before requesting a test quote.');
+ if(input.orderId){await requireHandwryttenLiveMode(env as PrintEnv,input.orderId);}else if(Number(auth.test_mode)!==1)throw new PrintProblem(409,'Enable Handwrytten Test Mode before requesting a test quote.');
  const senders=await api(env,'/profile/listAddresses'),addresses=Array.isArray(senders.addresses)?senders.addresses:[];
  const enforced=Number(senders.enforced_return_address_id);
  const sender=enforced>0?addresses.find((a:any)=>Number(a.id)===enforced):(addresses.find((a:any)=>a.default===true||a.default===1||a.default==='1')||(addresses.length===1?addresses[0]:null));
  if(!sender||!Number.isSafeInteger(Number(sender.id))||Number(sender.id)<=0)throw new PrintProblem(409,'Choose a default return address in Handwrytten, or save one sender address, before requesting a quote.');
  if(Number(sender.country_id)!==1)throw new PrintProblem(409,'Use a US return address for this domestic quote.');
- const response=await api(env,'/outbound/process',{card_id:input.cardId,country:'United States',message:input.message,records:1,return_address_id:Number(sender.id),shipping_method_id:1});
+ const response=await api(env,'/outbound/process',{card_id:input.cardId,country:input.country||'United States',message:input.message,records:1,return_address_id:Number(sender.id),shipping_method_id:1});
  const money=(key:string)=>{
   const value=response.prices?.[key];
   if(!['number','string'].includes(typeof value)||String(value).trim()===''||!Number.isFinite(Number(value))||Number(value)<0)throw new PrintProblem(502,'Handwrytten returned an incomplete pricing preview. No order was submitted.');
@@ -119,3 +120,12 @@ export async function handwryttenCountry(env:HandwryttenEnv,code:string){
 }
 
 export async function handwryttenTestOrder(env:HandwryttenEnv,id:number){return (await api(env,'/orders/details?id='+id)).order;}
+
+export async function requireHandwryttenLiveMode(env:PrintEnv,orderId:string){
+ await requireLiveGift(env,orderId,'postcard');
+ if(env.PRINT_ORDER_MODE!=='handwrytten_live'||Number((await api(env,'/checkauth/auth')).test_mode)!==0)throw new PrintProblem(409,'Live postcard ordering is not ready. Nothing was submitted.');
+}
+export async function handwryttenLiveMutation(env:PrintEnv,orderId:string,path:'/orders/placeBasket'|'/basket/send'|'/basket/remove',body:Record<string,unknown>){
+ await requireHandwryttenLiveMode(env,orderId);
+ return api(env,path,body);
+}

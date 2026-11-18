@@ -1,3 +1,4 @@
+import {liveMugSource,tickLiveMugFulfillment} from './live-mug-fulfillment.ts';
 import {translationPayload,localizeJournal} from './translations.ts';
 import {tickCardFallback} from './card-fallback.ts';
 import {giftWindow} from './gift-deadline.ts';
@@ -219,6 +220,8 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
   }
   if(path==='/api/gift/deadline'&&request.method==='GET')return json(await giftWindow(env.DB,await authenticated(request,env)));
   if(path==='/api/gift/status'&&request.method==='GET')return json(await mugStatus(request,env,await authenticated(request,env)));
+  const liveSource=/^\/api\/gift\/order-source\/([a-f0-9]{64})$/.exec(path);
+  if(liveSource&&['GET','HEAD'].includes(request.method))return liveMugSource(env,liveSource[1]);
   const preparedSource=/^\/api\/gift\/prepared-source\/([a-f0-9]{64})$/.exec(path);
   if(preparedSource&&['GET','HEAD'].includes(request.method))return preparedMugSource(env,preparedSource[1]);
   const preparedImage=/^\/api\/gift\/previews\/([a-f0-9]{64})$/.exec(path);
@@ -243,7 +246,10 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
     const invite=await authenticated(request,env);
     if(path.endsWith('/claim'))await limited(env,'mug-claim:'+invite.id,20,600);
     else if(printfulEnabled(env)){await limited(env,'mug-estimate:'+invite.id,20,600);await limited(env,'mug-estimate:global',12,60);}
-    return json(path.endsWith('/quote')?await mugQuote(request,env,invite,await body(request)):await createMugOrder(request,env,invite,await body(request)));
+    if(path.endsWith('/quote'))return json(await mugQuote(request,env,invite,await body(request)));
+    const result=await createMugOrder(request,env,invite,await body(request));
+    if(result.claim?.live&&!result.reused)ctx.waitUntil(tickLiveMugFulfillment(env,result.claim.id));
+    return json(result);
   }
   const mugProof=/^\/api\/gift\/orders\/(mug-[a-z0-9]+)\/(artwork|mockup)$/.exec(path);
   if(mugProof&&request.method==='GET')return mugOrderArtwork(env,await authenticated(request,env),mugProof[1],mugProof[2]==='mockup');
@@ -262,7 +268,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
   const digital=/^\/api\/print\/digital\/(image|default\/(starry-night|evergreen|winterlight))$/.exec(path);
   if(digital&&request.method==='GET')return digitalImage(env,await authenticated(request,env),digital[2]);
   if(path==='/api/print/status'&&request.method==='GET')return json(await printStatus(request,env,await authenticated(request,env)));
-  if(path==='/api/print/orders'&&request.method==='POST'){const invite=await authenticated(request,env);await limited(env,'print-claim:'+invite.id,20,600);const result=await createPrintOrder(request,env,invite);if(env.PRINT_ORDER_MODE==='handwrytten_test'&&!result.reused)ctx.waitUntil(tickPrintFulfillment(env,result.order.id));return json(result);}
+  if(path==='/api/print/orders'&&request.method==='POST'){const invite=await authenticated(request,env);await limited(env,'print-claim:'+invite.id,20,600);const result=await createPrintOrder(request,env,invite);if(['handwrytten_test','handwrytten_live'].includes(env.PRINT_ORDER_MODE||'')&&!result.reused)ctx.waitUntil(tickPrintFulfillment(env,result.order.id));return json(result);}
   const theme=/^\/api\/theme\/(welcome|gift|closing)$/.exec(path);
   if(theme&&request.method==='GET'){
     const invite=await authenticated(request,env);
@@ -286,7 +292,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
       Object.assign(data,{keepsake});
       if(!giftStatus.eligible){data.gift.enabled=false;data.gift.designs=[];}
       const claim=giftStatus.claim;
-      Object.assign(data.gift,{hasOrder:!!claim,claim:claim?{designId:claim.designId,status:claim.status,configuration:claim.configuration,design:claim.design}:null,orderingEnabled:giftStatus.eligible&&simulatedOrders(request,env),mode:giftStatus.mode,livePricing:printfulEnabled(env)});
+      Object.assign(data.gift,{hasOrder:!!claim,claim:claim?{designId:claim.designId,status:claim.status,configuration:claim.configuration,design:claim.design,...(claim.live?{live:true,fulfillment:claim.fulfillment,fulfillmentError:claim.fulfillmentError}: {})}:null,orderingEnabled:giftStatus.eligible&&(giftStatus.mode==='live'||simulatedOrders(request,env)),mode:giftStatus.mode,livePricing:printfulEnabled(env)});
       // Old publications remain unchanged; resolve missing preview dimensions read-only.
       for(let offset=0;offset<data.photos.length;offset+=8)await Promise.all(data.photos.slice(offset,offset+8).map(async photo=>{
         if(!photo.width||!photo.height)Object.assign(photo,await previewDimensions(env.MEDIA,edition.photos.find(p=>p.id===photo.id)!.preview_key));
@@ -374,6 +380,7 @@ export default {
     }
     try{await tickCardFallback(env);}catch(error){console.error('Card fallback scheduling failed',error);}
     await tickPrintFulfillment(env);
+    await tickLiveMugFulfillment(env);
     await tickPreparedMugs(env,_event.cron==='23 9 * * *');
   }
 };

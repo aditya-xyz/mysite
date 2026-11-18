@@ -57,7 +57,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   }
   function finish(order){
    status={...status,eligible:false,canOrder:false,order,remaining:0};onChange(status);closeDialog(sheet);
-   onOrdered(order.testMode?'Test postcard ordered. No physical mail will be sent.':order.status==='simulated'?'Test postcard order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your postcard gift is headed your way 💌':'Your print request is recorded.',!order.testMode&&order.status==='simulated',order);
+   onOrdered(order.live?(order.status==='submitted'?'Your postcard order is with Handwrytten.':'Your postcard request is saved. Pixel is checking the final total and preparing your card. Please don’t submit another order.'):order.testMode?'Test postcard ordered. No physical mail will be sent.':order.status==='simulated'?'Test postcard order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your postcard gift is headed your way 💌':'Your print request is recorded.',!order.live&&!order.testMode&&order.status==='simulated',order);
   }
   submit.onclick=async()=>{
    if(previewOnly||submitting||!delivery.ready)return;submitting=true;submit.disabled=true;if(data.personalized)sheet.querySelector('[data-swap-card]')?.setAttribute('disabled','');message('Saving your order…');
