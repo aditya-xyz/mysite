@@ -150,10 +150,12 @@
 @media(max-width:700px){
  .pb-order-review > .pb-mug-details{max-width:460px}
  .pb-order-review .pb-mug-details .pb-gift-price{margin:0 0 10px;padding:0 0 8px}
- .pb-order-review .pb-mug-specs{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 20px}
- .pb-order-review .pb-mug-specs > div{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
- .pb-mug-specs dt{font-size:12px}
- .pb-order-review .pb-mug-specs dd{font-size:14px;text-align:left}
+ /* Let the preview give up space before details or actions are clipped. */
+ .pb-gift-dialog.pb-mug-review[open] .pb-dialog-body{flex:1 1 auto;min-height:0}
+ .pb-gift-dialog.pb-mug-review[open] .pb-order-review{flex:1;min-height:0;grid-template-rows:minmax(0,1fr) auto}
+ .pb-gift-dialog.pb-mug-review[open] .pb-order-review > .pb-mug-preview{height:100%;min-height:0}
+ .pb-gift-dialog.pb-mug-review[open] .pb-order-review :is(.pb-printful-mockup,.pb-mockup-wait){flex:1;min-height:0;height:0}
+ .pb-gift-dialog.pb-mug-review[open] .pb-dialog-bottom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:12px 18px;gap:8px}
 }
 
 /* Match the existing mobile reminder placement on wider screens. */
@@ -179,5 +181,29 @@
   .pb-dialog-bottom:has(.pb-household-note) [data-gift-next] {
     grid-column: 2;
     grid-row: 2;
+  }
+}
+
+@media (max-width: 700px) {
+  :root :is(body,#keepsake,#photo) .pb-gift-dialog.pb-mug-review[open] .pb-dialog-bottom .button {
+    inline-size: 100%;
+    padding-inline: 6px;
+    white-space: nowrap;
+  }
+  /* Postcard actions share the same sizing and left/right placement at each step. */
+  :root #keepsake .ks-export-actions {
+    justify-content: space-between;
+    gap: 12px;
+  }
+  :root :is(body,#keepsake) :is(.ks-print-dialog,.ks-digital-confirm) .ks-bottom {
+    justify-content: space-between;
+  }
+  :root #keepsake .ks-export-actions > button,
+  :root :is(body,#keepsake) :is(.ks-print-dialog,.ks-digital-confirm) .ks-bottom > button {
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
   }
 }
