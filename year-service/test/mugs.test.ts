@@ -158,7 +158,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const results=await Promise.all(Array.from({length:6},async()=>{const response=await sim('gift/claim',{...payload,configuration});assert.equal(response.status,200,await response.clone().text());return (await response.json() as any).claim;}));
    assert.equal(new Set(results.map(o=>o.id)).size,1);const first=results[0];assert.equal(first.status,'simulated');assert.deepEqual(first.configuration,configuration);assert.deepEqual((await (await sim('gift/status')).json() as any).claim.configuration,configuration);assert.equal(first.address.name,'Verified Recipient & Partner Fullname');assert.equal(first.address.line1,'123 Verified Lane');assert.equal(first.design.caption,'caption 0');
    assert.equal((await sim(first.design.src.replace('/api/',''))).headers.get('Content-Type'),'image/png');
-   const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders.length,1);assert.deepEqual(JSON.parse(history.orders[0].configuration_json),configuration);assert.equal(history.counts[0].count,1);
+   const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders.length,1);assert.deepEqual(JSON.parse(history.orders[0].configuration_json),configuration);assert.equal(history.orders[0].live,0);assert.equal(history.orders[0].live_state,null);assert.equal(history.counts[0].count,1);assert.equal(history.counts[0].live,0);assert.equal(history.counts[0].live_state,null);assert.equal(history.counts[0].can_reset,1);
    assert.equal((await db.prepare("SELECT mug_order_count,print_order_count FROM invites WHERE id='mug-invite'").first<any>()).mug_order_count,1);
    assert.equal((await sim('journal')).status,200);assert.equal((await (await sim('journal')).json() as any).gift.mode,'simulation');assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,true);
    const savedGift=(await (await sim('journal')).json() as any).gift.claim;
@@ -169,7 +169,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.equal((await admin('mug-settings',{allowMugOrders:true})).status,200);
    const resetPath='invitations/mug-invite/reset-mug-allowance';assert.equal((await admin(resetPath,{orderId:first.id})).status,400);
    assert.equal((await admin(resetPath,{orderId:first.id,confirm:true})).status,200);
-   const cleared=await (await admin('mug-orders')).json() as any;assert.equal(cleared.orders.length,0);assert.equal(cleared.counts[0].count,0);assert.equal((await (await sim('gift/status')).json() as any).claim,null);
+   const cleared=await (await admin('mug-orders')).json() as any;assert.equal(cleared.orders.length,0);assert.equal(cleared.counts[0].count,0);assert.equal(cleared.counts[0].live,0);assert.equal(cleared.counts[0].live_state,null);assert.equal(cleared.counts[0].can_reset,0);assert.equal((await db.prepare("SELECT mug_order_count FROM invites WHERE id='mug-invite'").first<any>()).mug_order_count,0);assert.equal((await (await sim('gift/status')).json() as any).claim,null);
    assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,false);
    assert.equal((await (await sim('journal')).json() as any).gift.claim,null);
    assert.equal((await sim(first.design.src.replace('/api/',''))).status,404);assert.equal(await bucket.head(`2026/mug-orders/${first.id}/artwork.png`),null);
@@ -197,27 +197,56 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const response=await live('claim',payload);assert.equal(response.status,200,await response.clone().text());providerFailed=false;
    assert.equal(providerCalls.length,beforeClaim,'Claim does not send an address or request a Printful cost estimate');
    const result=await response.json() as any;assert.equal(result.claim.status,'simulated');
-   const row=await db.prepare('SELECT quote_json,status,print_artwork_key,print_layout_version FROM mug_orders').first<any>();assert.equal(row.status,'simulated');assert.equal(row.quote_json,null);assert.equal(row.print_layout_version,4);assert.equal(await (await bucket.get(row.print_artwork_key))?.text(),'frozen-paired-artwork');
-   const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders[0].quote_json,null);
+   const row=await db.prepare('SELECT artwork_key,quote_json,status,print_artwork_key,print_layout_version FROM mug_orders').first<any>();assert.equal(row.status,'simulated');assert.equal(row.quote_json,null);assert.equal(row.print_layout_version,4);assert.equal(await (await bucket.get(row.print_artwork_key))?.text(),'frozen-paired-artwork');
+   const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders[0].quote_json,null);assert.equal(history.orders[0].live,0);assert.equal(history.counts[0].can_reset,1);
    estimatedTotal=14.24;await db.prepare("DELETE FROM rate_limits WHERE key='mug-estimate:mug-invite'").run();
    const callsBefore=providerCalls.length;assert.equal((await live('claim',payload)).status,200);assert.equal(providerCalls.length,callsBefore,'Idempotent replay needs no new supplier call');
    assert.ok(providerCalls.every(path=>path==='/products'||/^\/(products|mockup-generator\/printfiles)\/\d+$/.test(path)||path==='/orders/estimate-costs'));
-   await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});assert.equal(await bucket.head(row.print_artwork_key),null);
+   const reset=await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});assert.equal(reset.status,200);assert.equal(await bucket.head(row.artwork_key),null);assert.equal(await bucket.head(row.print_artwork_key),null);assert.equal((await db.prepare("SELECT mug_order_count FROM invites WHERE id='mug-invite'").first<any>()).mug_order_count,0);
   });
   await t.test('fresh scoped live checkout freezes the larger print file and rejects an over-budget domestic quote',async()=>{
    await db.prepare("DELETE FROM rate_limits WHERE key LIKE 'mug-claim:%' OR key LIKE 'mug-estimate:%'").run();
    await db.prepare("INSERT INTO live_gift_permissions(year,invitation_id,person_id,member_ids,postcard_enabled,mug_enabled,enabled,expires_at) SELECT edition_year,id,person_id,member_ids,1,1,1,unixepoch()+3600 FROM invites WHERE id='mug-invite'").run();
    const live=(data:unknown)=>mf.dispatchFetch('https://live.test/api/gift/claim',{method:'POST',headers:{Origin:'https://live.test',Cookie:'__Host-year_session='+raw,'Content-Type':'application/json'},body:JSON.stringify(data)});
    const payload={addressVersion:1,designId:'mug-0',requestKey:crypto.randomUUID(),configuration:{style:'classic',size:'11oz',color:'white',font:'clean'}};
-   estimatedTotal=25.01;const over=await live(payload);assert.equal(over.status,409,await over.clone().text());assert.equal((await db.prepare('SELECT count(*) n FROM live_gift_orders').first<any>()).n,0);
-   estimatedTotal=14.24;const response=await live(payload);assert.equal(response.status,200,await response.clone().text());const result=await response.json() as any;
-   assert.equal(result.claim.live,true);assert.equal(result.mode,'live');
-   const intent=await db.prepare('SELECT * FROM live_gift_orders WHERE order_id=?1').bind(result.claim.id).first<any>();assert.equal(intent.max_cents,2500);assert.equal(intent.invitation_id,'mug-invite');
-   const frozen=await db.prepare('SELECT print_artwork_key,print_layout_version,quote_json FROM mug_orders WHERE id=?1').bind(result.claim.id).first<any>();assert.equal(frozen.print_layout_version,4);assert.equal(await (await bucket.get(frozen.print_artwork_key))?.text(),'frozen-paired-artwork');assert.equal(JSON.parse(frozen.quote_json).destination,'US');
-   const before=providerCalls.length;assert.equal((await live(payload)).status,200);assert.equal(providerCalls.length,before,'Repeated checkout reuses the existing order');
-   await admin('invitations/mug-invite/reset-mug-allowance',{orderId:result.claim.id,confirm:true});
-   await db.prepare('DELETE FROM live_gift_orders WHERE order_id=?1').bind(result.claim.id).run();await db.prepare("DELETE FROM live_gift_permissions WHERE invitation_id='mug-invite'").run();
-   await db.prepare("DELETE FROM rate_limits WHERE key LIKE 'mug-estimate:%'").run();providerCalls.length=0;
+   let orderId:string|undefined,artworkKeys:string[]=[];
+   try{
+    estimatedTotal=25.01;const over=await live(payload);assert.equal(over.status,409,await over.clone().text());assert.equal((await db.prepare('SELECT count(*) n FROM live_gift_orders').first<any>()).n,0);
+    estimatedTotal=14.24;const response=await live(payload);assert.equal(response.status,200,await response.clone().text());const result=await response.json() as any;
+    orderId=result.claim.id;assert.equal(result.claim.live,true);assert.equal(result.mode,'live');
+    const intent=await db.prepare('SELECT * FROM live_gift_orders WHERE order_id=?1').bind(orderId).first<any>();assert.equal(intent.max_cents,2500);assert.equal(intent.invitation_id,'mug-invite');assert.equal(intent.kind,'mug');assert.ok(['pending','review'].includes(intent.state));
+    const frozen=await db.prepare('SELECT artwork_key,status,allowance_reset_at,print_artwork_key,print_layout_version,quote_json FROM mug_orders WHERE id=?1').bind(orderId).first<any>();assert.equal(frozen.status,'simulated');assert.equal(frozen.allowance_reset_at,null);assert.equal(frozen.print_layout_version,4);assert.ok(await bucket.head(frozen.artwork_key));assert.equal(await (await bucket.get(frozen.print_artwork_key))?.text(),'frozen-paired-artwork');assert.equal(JSON.parse(frozen.quote_json).destination,'US');
+    artworkKeys=[frozen.artwork_key,frozen.print_artwork_key].filter(Boolean);
+    const before=providerCalls.length;assert.equal((await live(payload)).status,200);assert.equal(providerCalls.length,before,'Repeated checkout reuses the existing order');
+    const history=await (await admin('mug-orders')).json() as any;assert.equal(history.orders.length,1);assert.equal(history.orders[0].id,orderId);assert.equal(history.orders[0].status,'simulated');assert.equal(history.orders[0].live,1);assert.ok(['pending','review'].includes(history.orders[0].live_state));
+    assert.equal(history.counts[0].count,1);assert.equal(history.counts[0].active_order_id,orderId);assert.equal(history.counts[0].status,'simulated');assert.equal(history.counts[0].live,1);assert.equal(history.counts[0].live_state,history.orders[0].live_state);assert.equal(history.counts[0].can_reset,0);
+    const blockedReset=await admin('invitations/mug-invite/reset-mug-allowance',{orderId,confirm:true});
+    assert.equal(blockedReset.status,409,'Simulation reset must not clear a live mug order whose mug_orders row still says simulated');
+    const persisted=await db.prepare('SELECT status,allowance_reset_at FROM mug_orders WHERE id=?1').bind(orderId).first<any>();assert.equal(persisted?.status,'simulated');assert.equal(persisted?.allowance_reset_at,null);
+    assert.equal((await db.prepare('SELECT order_id FROM live_gift_orders WHERE order_id=?1').bind(orderId).first<any>())?.order_id,orderId);
+    assert.equal((await db.prepare("SELECT mug_order_count FROM invites WHERE id='mug-invite'").first<any>()).mug_order_count,1);
+    assert.ok(await bucket.head(frozen.artwork_key),'Blocked reset preserves guest artwork in R2');
+    assert.equal(await (await bucket.get(frozen.print_artwork_key))?.text(),'frozen-paired-artwork','Blocked reset preserves frozen print artwork in R2');
+    assert.equal((await mf.dispatchFetch('https://live.test/api/gift/orders/'+orderId+'/artwork',{headers:{Cookie:'__Host-year_session='+raw}})).status,200);
+    const statusAfter=await (await mf.dispatchFetch('https://live.test/api/gift/status',{headers:{Cookie:'__Host-year_session='+raw}})).json() as any;assert.equal(statusAfter.remaining,0);assert.equal(statusAfter.claim.id,orderId);assert.equal(statusAfter.claim.live,true);
+    for(const state of ['pending','draft']){
+     await db.prepare('UPDATE live_gift_orders SET state=?1 WHERE order_id=?2').bind(state,orderId).run();
+     const stateHistory=await (await admin('mug-orders')).json() as any;assert.equal(stateHistory.orders[0].live,1);assert.equal(stateHistory.orders[0].live_state,state);assert.equal(stateHistory.counts[0].can_reset,0);
+     assert.equal((await admin('invitations/mug-invite/reset-mug-allowance',{orderId,confirm:true})).status,409);
+     assert.ok(await db.prepare('SELECT id FROM mug_orders WHERE id=?1').bind(orderId).first());
+     assert.ok(await bucket.head(frozen.artwork_key));
+    }
+   }finally{
+    if(orderId){
+     await db.prepare('DELETE FROM live_gift_orders WHERE order_id=?1').bind(orderId).run();
+     await db.prepare('DELETE FROM mug_orders WHERE id=?1').bind(orderId).run();
+    }
+    if(artworkKeys.length)await bucket.delete(artworkKeys);
+    await db.prepare("DELETE FROM live_gift_permissions WHERE invitation_id='mug-invite'").run();
+    await db.prepare("DELETE FROM rate_limits WHERE key LIKE 'mug-estimate:%'").run();
+    providerCalls.length=0;
+   }
+   assert.equal((await db.prepare("SELECT mug_order_count FROM invites WHERE id='mug-invite'").first<any>()).mug_order_count,0);
   });
   await t.test('international simulated claims check the real destination total and freeze the estimate before using the allowance',async()=>{
    const live=(path:string,data?:unknown)=>mf.dispatchFetch('https://live.test/api/gift/'+path,{method:data===undefined?'GET':'POST',headers:{Origin:'https://live.test',Cookie:'__Host-year_session='+raw,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})});

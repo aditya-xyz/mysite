@@ -2,6 +2,21 @@ import {budgetApprovalMarkup,bindBudgetApproval} from './order-budget-approval.j
 import {mugOptionsLabel} from '../../web/mug-options.js';
 import {mugPreview} from '../../web/mug-preview.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export function canResetMugOrder(count){
+ if(!count?.count||count.live)return false;
+ if(count.can_reset!==undefined)return Boolean(count.can_reset);
+ return count.status==='simulated';
+}
+export function mugOrderStatusLabel(order){
+ if(order?.live)return order.live_state?`Live · ${order.live_state}`:'Live';
+ return order?.status||'';
+}
+export function mugAllowanceMarkup(count){
+ const ordered=count?.count||0,live=Boolean(count?.live);
+ const status=ordered?(live?`${mugOrderStatusLabel(count)} · Allowance used`:'Allowance used'):'Allowance available';
+ const reset=ordered&&!live?`<button class="secondary allowance-reset" data-reset-mug${canResetMugOrder(count)?'':' disabled'}>Reset mug allowance</button>`:'';
+ return `<span class="hint">Mugs ordered: ${ordered} · ${esc(status)}</span>${reset}`;
+}
 function estimateMarkup(raw){
  if(!raw)return '';
  const q=JSON.parse(raw),usd=value=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(value/100);
@@ -21,18 +36,18 @@ export function mountMugOrders({view,state,api,showModal,toast}){
  async function load(){
   try{latest=await api('mug-orders');if(!panel.isConnected)return;
    panel.querySelector('[data-mug-total]').textContent=String(latest.orders.length);
-   panel.querySelector('[data-mug-orders]').innerHTML=latest.orders.map(o=>`<article class="print-order"><div><strong>${esc(o.recipient_name)}</strong><p class="hint">${esc(o.status)} · ${new Date(o.created_at*1000).toLocaleDateString()}</p><p>${esc(o.caption)}</p><p class="hint">${esc(mugOptionsLabel(JSON.parse(o.configuration_json||'null')))}</p><div data-estimate-for="${esc(o.id)}">${estimateMarkup(o.quote_json)}</div><div data-budget-for="${esc(o.id)}">${budgetApprovalMarkup(o,'mug')}</div></div><div class="actions"><button class="quiet" data-mug-proof="${esc(o.id)}">View saved mug design</button>${o.status==='simulated'?`<button class="secondary" data-mug-quote="${esc(o.id)}">${o.quote_json?'Refresh':'Get'} shipping estimate</button>`:''}</div></article>`).join('')||'<p class="hint">No mug orders.</p>';
+   panel.querySelector('[data-mug-orders]').innerHTML=latest.orders.map(o=>`<article class="print-order"><div><strong>${esc(o.recipient_name)}</strong><p class="hint">${esc(mugOrderStatusLabel(o))} · ${new Date(o.created_at*1000).toLocaleDateString()}</p><p>${esc(o.caption)}</p><p class="hint">${esc(mugOptionsLabel(JSON.parse(o.configuration_json||'null')))}</p><div data-estimate-for="${esc(o.id)}">${estimateMarkup(o.quote_json)}</div><div data-budget-for="${esc(o.id)}">${budgetApprovalMarkup(o,'mug')}</div></div><div class="actions"><button class="quiet" data-mug-proof="${esc(o.id)}">View saved mug design</button>${o.status==='simulated'?`<button class="secondary" data-mug-quote="${esc(o.id)}">${o.quote_json?'Refresh':'Get'} shipping estimate</button>`:''}</div></article>`).join('')||'<p class="hint">No mug orders.</p>';
    for(const order of latest.orders)bindBudgetApproval(panel.querySelector(`[data-budget-for="${order.id}"]`),{order,kind:'mug',api,showModal,onApproved:async()=>{await load();toast('Mug budget approved. Order remains simulated.');}});
    panel.querySelectorAll('[data-mug-quote]').forEach(button=>button.onclick=async()=>{
     button.disabled=true;const region=panel.querySelector(`[data-estimate-for="${button.dataset.mugQuote}"]`);
     try{const result=await api(`mug-orders/${button.dataset.mugQuote}/quote`,{});if(!region.isConnected)return;region.innerHTML=estimateMarkup(JSON.stringify(result.quote));button.textContent='Refresh shipping estimate';await load();}
     catch(error){if(region.isConnected)region.textContent=error.message;}finally{if(button.isConnected)button.disabled=false;}
    });
-   panel.querySelectorAll('[data-mug-proof]').forEach(b=>b.onclick=()=>{const o=latest.orders.find(o=>o.id===b.dataset.mugProof);showModal(`<p class="kicker">Mug order · ${esc(o.status)}</p><h2>${esc(o.recipient_name)}</h2>${mugPreview({src:`/api/editions/${state.year}/mug-orders/${o.id}/artwork`,caption:o.caption,alt:o.alt,...(o.mockup_key?{mockupSrc:`/api/editions/${state.year}/mug-orders/${o.id}/mockup`}:{})},JSON.parse(o.configuration_json||'null'))}<p class="hint">Saved artwork and caption from this order. Resetting the allowance deletes this order and its proof.</p>`);});
+   panel.querySelectorAll('[data-mug-proof]').forEach(b=>b.onclick=()=>{const o=latest.orders.find(o=>o.id===b.dataset.mugProof);showModal(`<p class="kicker">Mug order · ${esc(mugOrderStatusLabel(o))}</p><h2>${esc(o.recipient_name)}</h2>${mugPreview({src:`/api/editions/${state.year}/mug-orders/${o.id}/artwork`,caption:o.caption,alt:o.alt,...(o.mockup_key?{mockupSrc:`/api/editions/${state.year}/mug-orders/${o.id}/mockup`}:{})},JSON.parse(o.configuration_json||'null'))}<p class="hint">${o.live?'Live mug order. Simulation reset is disabled; this order and its proof are preserved.':'Saved artwork and caption from this order. Resetting the allowance deletes this order and its proof.'}</p>`);});
    for(const row of app.querySelectorAll('[data-print-invitation]')){
     let box=row.querySelector('[data-mug-allowance]');if(!box){box=document.createElement('div');box.className='mug-allowance allowance-row';box.dataset.mugAllowance='';row.querySelector('.invitation-options').append(box);}
     const count=latest.counts.find(c=>c.invitation_id===row.dataset.printInvitation);
-    box.innerHTML=`<span class="hint">Mugs ordered: ${count?.count||0} · ${count?.count?'Allowance used':'Allowance available'}</span>${count?.count?`<button class="secondary allowance-reset" data-reset-mug ${count.status!=='simulated'?'disabled':''}>Reset mug allowance</button>`:''}`;
+    box.innerHTML=mugAllowanceMarkup(count);
     box.querySelector('[data-reset-mug]')?.addEventListener('click',()=>{
      showModal('<p class="kicker">Complimentary mug</p><h2>Reset mug allowance?</h2><p>This clears the simulated order, its saved mug design, and order history. The counter returns to 0. Review the order details first; this cannot be undone.</p><div class="actions"><button class="secondary" data-cancel-mug-reset>Cancel</button><button class="button" data-confirm-mug-reset>Reset allowance & clear history</button></div><p class="error" data-reset-error role="alert"></p>');
      const modal=document.querySelector('#modal');modal.querySelector('[data-cancel-mug-reset]').onclick=()=>modal.close();modal.querySelector('[data-confirm-mug-reset]').onclick=async event=>{event.target.disabled=true;try{await api(`invitations/${row.dataset.printInvitation}/reset-mug-allowance`,{orderId:count.active_order_id,confirm:true});modal.close();await load();toast('Mug counter reset to 0. Simulated order and history cleared.');}catch(error){modal.querySelector('[data-reset-error]').textContent=error.message;event.target.disabled=false;}};
