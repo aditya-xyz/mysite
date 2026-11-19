@@ -35,7 +35,7 @@ export function createDigitalFlow({journal,getData,loadImage,onChange,onSaved}){
    }
    catch(error){committing=false;d.querySelector('.ks-status').textContent=error instanceof TypeError?'Your choice could not be saved. Please try again.':error.message;button.disabled=false;d.querySelectorAll('[data-cancel]').forEach(b=>b.disabled=false);}
   };
-  document.body.append(d);openDialog(d);d.querySelector('h2').focus();
+  document.body.append(d);openDialog(d);d.querySelector('h2').focus({preventScroll:true});
  });}
  async function requestCopy(share=false){
   if(!canUse()||working)return;working=true;

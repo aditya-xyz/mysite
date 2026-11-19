@@ -152,6 +152,8 @@ header .signature .pb-header-volume{font-size:var(--pb-text-label);font-weight:6
 
 /* Touch/pointer clicks should not retain keyboard rings inside dialogs. */
 html[data-input-modality=pointer] dialog :is(button,a):focus-visible{outline:none!important}
+html[data-input-modality=pointer] :is(#keepsake,.ks-digital-confirm,.keepsake-section button,.ks-digital-confirm button,#keepsake button):focus{outline:none!important}
+#keepsake,.ks-digital-confirm,.keepsake-section button{-webkit-tap-highlight-color:transparent}
 dialog h2[tabindex="-1"]:focus{outline:none}
 /* Address entry keeps its normal border when focused. */
 .delivery-form input:focus{outline:none}

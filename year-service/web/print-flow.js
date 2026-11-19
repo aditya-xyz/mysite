@@ -100,7 +100,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
    }catch(error){await refresh();if(dialog!==sheet)return;if(status?.order){finish(status.order);}else{requestKey=crypto.randomUUID();submitting=false;cancel.disabled=false;if(data.personalized)sheet.querySelector('[data-swap-card]')?.removeAttribute('disabled');submit.disabled=!delivery.ready;message(error.message+' No additional order will be created if one is already recorded.');}}
 
   };
-  openDialog(dialog);onAvailabilityChange();dialog.querySelector('#print-title').focus({preventScroll:true});
+  openDialog(dialog,{offset:8,scale:1});onAvailabilityChange();dialog.querySelector('#print-title').focus({preventScroll:true});
  }
  return {buttonMarkup,prepare,isActive:()=>!!(opening||dialog?.open),bind:container=>{const b=container.querySelector('[data-print]');if(b)b.onclick=open;},refresh:()=>{closed=false;return refresh();},close:()=>{closed=true;opening=null;controller?.abort();deliveryChanged=()=>{};preparedDelivery?.destroy();preparedDelivery=null;deliveryCheck=null;if(dialog?.open)dialog.close();}};
 }

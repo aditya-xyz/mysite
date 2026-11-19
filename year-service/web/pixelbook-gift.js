@@ -27,6 +27,7 @@ export function mountPixelGift(journal,root){
   const local=journal.gift.mode==='preview',simulated=journal.gift.mode==='simulation',ordering=local||journal.gift.orderingEnabled===true;
   const closeIcon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
   const delivery=createDeliveryAddress(()=>{if(modal.open&&step==='address')render();});
+  let reviewAddress=null,previousStep;
   const canConfirm=()=>delivery.ready&&!journal.adminPreview;
   const steps=()=>`<ol class="pb-order-steps" aria-label="Gift progress">${['your mugshot','the details','your address'].map((s,i)=>`<li ${['pick','review','address'].indexOf(step)===i?'aria-current="step"':''}><span>${i+1}</span>${s}</li>`).join('')}</ol>`;
   function pickMarkup(){
@@ -84,7 +85,9 @@ export function mountPixelGift(journal,root){
     if(savedImage&&receiptPreview){receiptPreview.image.className=savedImage.className;receiptPreview.image.alt=savedImage.alt;savedImage.replaceWith(receiptPreview.image);}
     if(step==='review')mockups.update(modal.querySelector('.pb-mug-preview'),selected,configuration);
     if(step==='done'&&mockups.preparedId(receipt?.design||selected,receipt?.configuration||configuration))mockups.update(modal.querySelector('.pb-mug-preview'),receipt?.design||selected,receipt?.configuration||configuration);
-    slideStep(modal,step==='address'?(delivery.ready?'address-ready':'address-edit'):step,step==='address'?(delivery.ready?3:2):({pick:0,review:1,done:4}[step]),'.pb-dialog-body');
+    const movingBetweenReviewAndAddress=step==='address'&&previousStep==='review'||step==='review'&&previousStep==='address';
+    slideStep(modal,step==='address'?(delivery.ready?'address-ready':'address-edit'):step,step==='address'?(delivery.ready?3:2):({pick:0,review:1,done:4}[step]),'.pb-dialog-body',movingBetweenReviewAndAddress?{vertical:true,distance:10}:undefined);
+    previousStep=step;
     if(modal.open){modal.scrollTop=0;modal.querySelector('h2').focus({preventScroll:true});}
   }
   async function request(path,data){
@@ -95,8 +98,17 @@ export function mountPixelGift(journal,root){
   }
   async function next(){
     if(busy||opening||!contextReady||!ordering)return;
-    if(step==='pick'){if(!selected)return;step='review';render();return;}
-    if(step==='review'){busy=true;modal.querySelector('[data-gift-next]').disabled=true;await delivery.load();busy=false;if(!modal.open)return;step='address';render();return;}
+    if(step==='pick'){
+      if(!selected)return;
+      step='review';render();reviewAddress=delivery.load({timeoutMs:8000});return;
+    }
+    if(step==='review'){
+      busy=true;modal.querySelector('[data-gift-next]').disabled=true;
+      await (reviewAddress||delivery.load({timeoutMs:8000}));
+      reviewAddress=null;busy=false;
+      if(!modal.open||step!=='review')return;
+      step='address';render();return;
+    }
     if(step!=='address'||!canConfirm()||journal.adminPreview)return;
     busy=true;step='submitting';render();
     try{

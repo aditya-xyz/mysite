@@ -2,20 +2,22 @@ import {policyLinks} from './policy-links.js';
 import {bindAddressAutocomplete} from './address-autocomplete.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function createDeliveryAddress(changed=()=>{}){
- let state=null,fields={},preview=null,error='',busy=false,controller=null,disposed=false,editing=false;
+ let state=null,fields={},preview=null,error='',busy=false,controller=null,disposed=false,editing=false,loading=null;
  async function request(action,data,signal){
   const response=await fetch('/api/delivery-address'+(action?'/'+action:''),{method:data===undefined?'GET':'POST',...(data===undefined?{}:{headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),signal});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not check the address. Please try again.');return result;
  }
  function notify(){if(!disposed)changed();}
  async function run(action){if(busy)return;busy=true;error='';notify();controller?.abort();controller=new AbortController();try{await action(controller.signal);}catch(e){if(e.name!=='AbortError')error=e.message;}finally{busy=false;notify();}}
- async function load({timeoutMs}={}){
-  await run(async signal=>{
+ function load({timeoutMs}={}){
+  if(loading)return loading;
+  loading=run(async signal=>{
    const deadline=timeoutMs?AbortSignal.timeout(timeoutMs):null;
    try{state=await request('',undefined,deadline?AbortSignal.any([signal,deadline]):signal);}
    catch(error){if(deadline?.aborted&&!signal.aborted)throw new Error('Could not check the address. Please try again.');throw error;}
    preview=null;editing=false;fields={...(state.address||{}),country:state.country||'US'};
-  });
+  }).finally(()=>{loading=null;});
+  return loading;
  }
  function addressMarkup(address,name){return `<address>${esc(name)}<br>${esc(address.line1)}${address.line2?'<br>'+esc(address.line2):''}<br>${esc(address.country==='NL'?`${address.postalCode}  ${address.city}`:`${address.city}, ${address.state} ${address.postalCode}`)}<br>${esc(({US:'United States',IN:'India',NL:'Netherlands'})[address.country]||address.country)}</address>`;}
  function summaryMarkup({showNote=true}={}){return state?.verified?`<section class="delivery-panel delivery-summary" aria-label="Shipping address"><h3>Sending to</h3><div class="delivery-address-row">${addressMarkup(state.address,state.recipientName)}${showNote?(state.country==='US'?'<button type="button" class="button delivery-secondary" data-address-edit>Edit address</button>':'<p class="delivery-note">Contact mom or dad if this address needs to change.</p>'):''}</div></section>`:'';}

@@ -8,9 +8,9 @@ function stateFor(dialog){
  dialog.addEventListener('close',()=>{if(dialog.open)return;state.animation?.cancel();state.animation=null;dialog.removeAttribute('data-dialog-motion');});
  return state;
 }
-export function openDialog(dialog){
+export function openDialog(dialog,{offset=16,scale=.96}={}){
  if(dialog.open)return;if(reduced()||!dialog.animate){dialog.setAttribute('data-dialog-motion','still');dialog.showModal();return;}const state=stateFor(dialog);state.animation?.cancel();state.closing=null;dialog.setAttribute('data-dialog-motion','enter');dialog.showModal();
- const animation=dialog.animate([{opacity:0,transform:'translate3d(0,16px,0) scale(.96)'},{opacity:1,transform:'translate3d(0,0,0) scale(1)'}],{duration:280,easing:'cubic-bezier(.2,.75,.25,1)'});
+ const animation=dialog.animate([{opacity:0,transform:`translate3d(0,${offset}px,0) scale(${scale})`},{opacity:1,transform:'translate3d(0,0,0) scale(1)'}],{duration:280,easing:'cubic-bezier(.2,.75,.25,1)'});
  state.animation=animation;animation.finished.catch(()=>{}).then(()=>{if(state.animation===animation){state.animation=null;dialog.setAttribute('data-dialog-motion','still');}});
 }
 export function closeDialog(dialog){

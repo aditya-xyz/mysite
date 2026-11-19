@@ -131,6 +131,22 @@ test('browsing the gallery does not start background mug-preview downloads',asyn
  assert.equal(fetch.mock.callCount(),0);
 });
 
+test('mug review preloads the address and continuing joins the same lookup',async t=>{
+ const {launch,modal,next}=fixture(t,{hasOrder:false});
+ let resolveAddress!:(response:Response)=>void,lookups=0;
+ const fetch=mock.method(globalThis,'fetch',async(path:string)=>{
+  if(path==='/api/gift/status')return Response.json({claim:null});
+  assert.equal(path,'/api/delivery-address');lookups++;
+  return new Promise<Response>(resolve=>resolveAddress=resolve);
+ });t.after(()=>fetch.mock.restore());
+ await launch.onclick();assert.equal(lookups,0);
+ await next.listeners.click();assert.match(modal.innerHTML,/the details/);assert.equal(lookups,1);
+ const continuing=next.listeners.click();assert.equal(lookups,1);assert.equal(next.disabled,true);
+ resolveAddress(Response.json({verified:true,version:1,country:'US',recipientName:'Friend',address:{line1:'123 Sample Lane',city:'Example',state:'CA',postalCode:'90001',country:'US'}}));
+ await continuing;
+ assert.match(modal.innerHTML,/Sending to/);assert.match(modal.innerHTML,/confirm & order/);
+});
+
 // @ts-expect-error Shared browser mug catalog.
 import {mugStyles,pixelMugOptions} from '../web/mug-options.js';
 test('the chooser warms only the selected saved proof and catalog refresh does not download it again',async t=>{
