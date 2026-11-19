@@ -25,10 +25,92 @@ export function checkedBasket(basket:any,expected:{orderId:string;cardId:number;
  if(!Number.isSafeInteger(vendorId)||vendorId<=0||!Number.isSafeInteger(basketId)||basketId<=0)throw new PrintProblem(502,'Checkout did not identify the staged order.');
  return {amounts,priceStructure:Object.fromEntries(Object.entries(funding).map(([k,v])=>[k,v/100])),vendorId,basketId};
 }
+function verifyAcceptedOrder(accepted:any,expected:{orderId:string;vendorId:number;testMode:boolean;approvedLimit:number}){
+ if(!accepted||Number(accepted.id)!==expected.vendorId||accepted.client_metadata!==expected.orderId)return false;
+ if(expected.testMode?accepted.status!=='test':!['paid','suspended','pending','processing','sent','completed'].includes(String(accepted.status).toLowerCase()))return false;
+ if(Number(accepted.test_mode)!==(expected.testMode?1:0)||Number(accepted.quantity)!==1)return false;
+ try{if(cents(accepted.payed)>expected.approvedLimit)return false;}catch{return false;}
+ return true;
+}
+function ambiguousOrderMessage(vendorId:number|null|undefined,detail?:string){
+ const ref=Number.isSafeInteger(vendorId)&&Number(vendorId)>0?`Handwrytten order #${vendorId}`:'Handwrytten order';
+ return `${ref}${detail?`: ${detail}`:' outcome is ambiguous'}. Verify order status, payment, and Handwrytten basket before clearing; it will not be resubmitted automatically.`;
+}
+function cleanQuoteForSubmit(quote:any,testMode:boolean){
+ const base=quote&&typeof quote==='object'&&!Array.isArray(quote)?{...quote}:{};
+ delete base.submitAttempted;
+ return JSON.stringify({...base,testMode:typeof base.testMode==='boolean'?base.testMode:testMode,submitted:true});
+}
+async function recordSubmitted(env:PrintEnv,live:boolean,owner:string,orderId:string,vendorId:number,testMode:boolean,quote:any):Promise<boolean>{
+ const at=now(),providerId=(testMode?'handwrytten-test-':'handwrytten-live-')+vendorId,savedQuote=cleanQuoteForSubmit(quote,testMode);
+ const statements=[
+  env.DB.prepare("UPDATE print_orders SET status='submitted',provider_id=?1,handwrytten_quote_json=?2,updated_at=?3 WHERE id=?4 AND status IN ('simulated','unknown','submitted') AND EXISTS(SELECT 1 FROM print_fulfillment_lock WHERE id=1 AND owner=?5 AND blocked=1)").bind(providerId,savedQuote,at,orderId,owner),
+  env.DB.prepare("UPDATE print_fulfillment SET state='submitted',error=NULL,updated_at=?1 WHERE order_id=?2 AND EXISTS(SELECT 1 FROM print_fulfillment_lock WHERE id=1 AND owner=?3 AND blocked=1)").bind(at,orderId,owner),
+  ...(live?[env.DB.prepare("UPDATE live_gift_orders SET state='submitted',provider_id=?1,quote_json=?2,error=NULL,updated_at=?3 WHERE order_id=?4 AND kind='postcard' AND EXISTS(SELECT 1 FROM print_fulfillment_lock WHERE id=1 AND owner=?5 AND blocked=1)").bind(String(vendorId),savedQuote,at,orderId,owner)]:[]),
+  env.DB.prepare('DELETE FROM print_fulfillment_lock WHERE id=1 AND owner=?1 AND blocked=1 RETURNING owner').bind(owner)
+ ];
+ const results=await env.DB.batch(statements);
+ return Boolean(results[results.length-1]?.results?.length);
+}
+async function markUnknown(env:PrintEnv,live:boolean,owner:string,orderId:string,error:string,allowReconcile:boolean){
+ const at=now();
+ const statements=[
+  env.DB.prepare("UPDATE print_fulfillment SET state='unknown',error=?1,updated_at=?2 WHERE order_id=?3 AND state!='submitted' AND EXISTS(SELECT 1 FROM print_fulfillment_lock WHERE id=1 AND owner=?4 AND blocked=1)").bind(error,at,orderId,owner),
+  env.DB.prepare("UPDATE print_orders SET status='unknown',updated_at=?1 WHERE id=?2 AND status='simulated' AND EXISTS(SELECT 1 FROM print_fulfillment_lock WHERE id=1 AND owner=?3 AND blocked=1)").bind(at,orderId,owner),
+  ...(live?[env.DB.prepare("UPDATE live_gift_orders SET state='unknown',error=?1,updated_at=?2 WHERE order_id=?3 AND kind='postcard' AND state!='submitted' AND EXISTS(SELECT 1 FROM print_fulfillment_lock WHERE id=1 AND owner=?4 AND blocked=1)").bind(error,at,orderId,owner)]:[]),
+  ...(allowReconcile?[env.DB.prepare('UPDATE print_fulfillment_lock SET lease_until=0 WHERE id=1 AND owner=?1 AND blocked=1').bind(owner)]:[])
+ ];
+ await env.DB.batch(statements);
+}
+// Reconcile any blocked fulfillment lock before picking up another order. Post-send
+// uncertainty only performs a read-only vendor lookup; mutations are never replayed.
+async function reconcileBlockedLock(env:PrintEnv,live:boolean):Promise<'clear'|'blocked'>{
+ const lock=await env.DB.prepare('SELECT owner,lease_until,blocked FROM print_fulfillment_lock WHERE id=1').first<{owner:string;lease_until:number;blocked:number}>();
+ if(!lock||!lock.blocked)return 'clear';
+ const sep=lock.owner.lastIndexOf(':'),orderId=sep>0?lock.owner.slice(0,sep):lock.owner;
+ const blocked=await env.DB.prepare(`SELECT f.*,o.status AS order_status,o.provider_id AS order_provider_id,o.handwrytten_quote_json,o.budget_approved_cents${live?',l.state AS live_state':''} FROM print_fulfillment f JOIN print_orders o ON o.id=f.order_id${live?" LEFT JOIN live_gift_orders l ON l.order_id=o.id AND l.kind='postcard'":''} WHERE f.order_id=?1`).bind(orderId).first<any>();
+ if(!blocked)return 'blocked';
+ if(blocked.state==='submitted'&&blocked.order_status==='submitted'&&(!live||blocked.live_state==='submitted')){
+  await env.DB.prepare('DELETE FROM print_fulfillment_lock WHERE id=1 AND owner=?1 AND blocked=1').bind(lock.owner).run();
+  return 'clear';
+ }
+ if(Number(lock.lease_until)>now())return 'blocked';
+ let quote:any=null;try{quote=blocked.handwrytten_quote_json?JSON.parse(blocked.handwrytten_quote_json):null;}catch{}
+ const vendorId=Number(blocked.vendor_order_id),hasVendorId=Number.isSafeInteger(vendorId)&&vendorId>0;
+ const reconcilableState=blocked.state==='submitting'||blocked.state==='submitted'||blocked.order_status==='submitted'||(blocked.state==='unknown'&&blocked.order_status==='unknown')||Boolean(quote?.submitAttempted)||Boolean(quote?.submitted);
+ const inferredTestMode=!live?true:typeof quote?.testMode==='boolean'?quote.testMode:blocked.order_provider_id?.startsWith('handwrytten-test-')?true:blocked.order_provider_id?.startsWith('handwrytten-live-')?false:null;
+ if(!hasVendorId||blocked.quote_only||!reconcilableState||inferredTestMode===null){
+  if(blocked.state!=='unknown'||blocked.order_status==='simulated'||(live&&blocked.live_state&&blocked.live_state!=='unknown')){
+   const recoveryOwner=orderId+':'+crypto.randomUUID();
+   const takeover=await env.DB.prepare('UPDATE print_fulfillment_lock SET owner=?1,lease_until=?2 WHERE id=1 AND owner=?3 AND blocked=1 AND lease_until<=?4 RETURNING owner').bind(recoveryOwner,now()+300,lock.owner,now()).first();
+   if(!takeover)return 'blocked';
+   try{await markUnknown(env,live,recoveryOwner,orderId,ambiguousOrderMessage(hasVendorId?vendorId:null,blocked.error||'Submission stopped before confirmation'),false);}catch{}
+  }
+  return 'blocked';
+ }
+ const recoveryOwner=orderId+':'+crypto.randomUUID();
+ const takeover=await env.DB.prepare('UPDATE print_fulfillment_lock SET owner=?1,lease_until=?2 WHERE id=1 AND owner=?3 AND blocked=1 AND lease_until<=?4 RETURNING owner').bind(recoveryOwner,now()+300,lock.owner,now()).first();
+ if(!takeover)return 'blocked';
+ try{
+  const approvedLimit=live?printOrderLimitCents:Math.max(printOrderLimitCents,Number(blocked.budget_approved_cents)||0);
+  const accepted=await handwryttenTestOrder(env,vendorId);
+  if(!verifyAcceptedOrder(accepted,{orderId,vendorId,testMode:inferredTestMode,approvedLimit})){
+   const observed=accepted?.status?`observed status "${String(accepted.status)}"`:'order details could not be confirmed';
+   await markUnknown(env,live,recoveryOwner,orderId,ambiguousOrderMessage(vendorId,observed),true);
+   return 'blocked';
+  }
+  const recorded=await recordSubmitted(env,live,recoveryOwner,orderId,vendorId,inferredTestMode,quote);
+  return recorded?'clear':'blocked';
+ }catch(error){
+  const detail=error instanceof PrintProblem?error.message:'local persistence or vendor lookup failed';
+  try{await markUnknown(env,live,recoveryOwner,orderId,ambiguousOrderMessage(vendorId,detail),true);}catch{}
+  return 'blocked';
+ }
+}
 export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
  const live=env.PRINT_ORDER_MODE==='handwrytten_live'&&env.LIVE_GIFT_ORDERING==='true';
  if(!live&&env.PRINT_ORDER_MODE!=='handwrytten_test')return;
- await env.DB.prepare("DELETE FROM print_fulfillment_lock WHERE EXISTS (SELECT 1 FROM print_fulfillment f JOIN print_orders o ON o.id=f.order_id WHERE print_fulfillment_lock.owner LIKE f.order_id||':%' AND f.state='submitted' AND o.status='submitted')").run();
+ if(await reconcileBlockedLock(env,live)!=='clear')return;
  // Expired non-idempotent calls are never replayed. Their remote result needs reconciliation.
  await env.DB.prepare("UPDATE print_fulfillment SET state='unknown',error='Submission outcome needs review; it will not be retried automatically.',updated_at=?1 WHERE state IN ('staging','staged','submitting') AND updated_at<?2").bind(now(),now()-600).run();
  const job=await env.DB.prepare(`SELECT f.*,o.year,o.handwrytten_order_json,o.address_json FROM print_fulfillment f JOIN print_orders o ON o.id=f.order_id
@@ -39,7 +121,7 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
  const lock=await env.DB.prepare(`INSERT INTO print_fulfillment_lock(id,owner,lease_until,blocked) VALUES(1,?1,?2,0)
  ON CONFLICT(id) DO UPDATE SET owner=?1,lease_until=?2 WHERE lease_until<?3 AND blocked=0 RETURNING owner`).bind(owner,now()+300,now()).first();
  if(!lock)return;
- let mutated=false,canRelease=true;
+ let mutated=false,submitting=false,acceptedOrder=false,canRelease=true,stagedVendorId:number|null=null;
  const mutation=(path:'/orders/placeBasket'|'/basket/send'|'/basket/remove',body:Record<string,unknown>)=>live?handwryttenLiveMutation(env,job.order_id,path,body):handwryttenTestMutation(env,path,body);
  const update=async(state:string,error:string|null=null)=>{await env.DB.prepare('UPDATE print_fulfillment SET state=?1,error=?2,updated_at=?3 WHERE order_id=?4').bind(state,error,now(),job.order_id).run();if(live&&['review','unknown','submitted'].includes(state))await env.DB.prepare('UPDATE live_gift_orders SET state=?1,error=?2,updated_at=?3 WHERE order_id=?4').bind(state,error,now(),job.order_id).run();};
  try{
@@ -72,6 +154,7 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
   }
   const approvedLimit=live?printOrderLimitCents:Math.max(printOrderLimitCents,Number(saved.budget_approved_cents)||0);
   const basket=await handwryttenBasket(env),checked=checkedBasket(basket,{orderId:job.order_id,cardId:payload.card_id,vendorId:job.vendor_order_id||undefined,country:country.name,testMode,...(live?{address:payload.addresses[0]}:{})});
+  stagedVendorId=checked.vendorId;
   const quote={currency:'USD',quantity:1,amounts:checked.amounts,quotedAt:now(),sender,destination:country.name,source:testMode?'handwrytten-test-basket':'handwrytten-live-basket',submitted:false,testMode,quoteOnly:!!job.quote_only,maxCents:printOrderLimitCents,withinBudget:checked.amounts.total<=printOrderLimitCents,approvedMaxCents:saved.budget_approved_cents||null};
   await env.DB.batch([env.DB.prepare("UPDATE print_fulfillment SET state='staged',vendor_order_id=?1,basket_item_id=?2,updated_at=?3 WHERE order_id=?4").bind(checked.vendorId,checked.basketId,now(),job.order_id),env.DB.prepare('UPDATE print_orders SET handwrytten_quote_json=?1,budget_review_required=?3 WHERE id=?2').bind(JSON.stringify(quote),job.order_id,Number(!job.quote_only&&checked.amounts.total>approvedLimit))]);
   if(job.quote_only||checked.amounts.total>approvedLimit){
@@ -82,22 +165,41 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
   // Re-read exact basket identities, total and funding immediately before submission.
   const final=checkedBasket(await handwryttenBasket(env),{orderId:job.order_id,cardId:payload.card_id,vendorId:checked.vendorId,country:country.name,testMode,...(live?{address:payload.addresses[0]}:{})});
   if(JSON.stringify(final)!==JSON.stringify(checked))throw new PrintProblem(409,'Checkout changed before submission.');
-  const ready=await env.DB.prepare("UPDATE print_fulfillment SET state='submitting',updated_at=?1 WHERE order_id=?2 AND state='staged' AND EXISTS(SELECT 1 FROM print_fulfillment_lock WHERE id=1 AND owner=?3 AND blocked=1) RETURNING order_id").bind(now(),job.order_id,owner).first();
-  if(!ready)throw new PrintProblem(409,'The checkout lease changed.');
+  const atSubmit=now(),attemptQuote=JSON.stringify({...quote,submitAttempted:true});
+  const ready=await env.DB.batch([
+   env.DB.prepare("UPDATE print_fulfillment SET state='submitting',updated_at=?1 WHERE order_id=?2 AND state='staged' AND EXISTS(SELECT 1 FROM print_fulfillment_lock WHERE id=1 AND owner=?3 AND blocked=1) RETURNING order_id").bind(atSubmit,job.order_id,owner),
+   env.DB.prepare("UPDATE print_orders SET handwrytten_quote_json=?1,updated_at=?2 WHERE id=?3 AND status='simulated' AND EXISTS(SELECT 1 FROM print_fulfillment WHERE order_id=?3 AND state='submitting')").bind(attemptQuote,atSubmit,job.order_id),
+   ...(live?[env.DB.prepare("UPDATE live_gift_orders SET state='submitting',provider_id=?1,quote_json=?2,updated_at=?3 WHERE order_id=?4 AND kind='postcard' AND state='pending' AND EXISTS(SELECT 1 FROM print_fulfillment WHERE order_id=?4 AND state='submitting')").bind(String(checked.vendorId),attemptQuote,atSubmit,job.order_id)]:[])
+  ]);
+  if(!ready[0]?.results?.length)throw new PrintProblem(409,'The checkout lease changed.');
+  submitting=true;
   // The vendor may accept payment before a response is lost or has an unusual shape.
   // Reconcile the known parent order ID; never repeat the submit call.
   try{await mutation('/basket/send',{test_mode:testMode?1:0,check_quantity:true,price_structure:checked.priceStructure});}catch{/* Verify the known order record below. */}
   const accepted=await handwryttenTestOrder(env,checked.vendorId);
-  if(Number(accepted?.id)!==checked.vendorId||accepted.client_metadata!==job.order_id||(testMode?accepted.status!=='test':!['paid','suspended','pending','processing','sent','completed'].includes(String(accepted.status).toLowerCase()))||Number(accepted.test_mode)!==(testMode?1:0)||Number(accepted.quantity)!==1||cents(accepted.payed)>approvedLimit)throw new PrintProblem(502,'The supplier order acceptance could not be confirmed.');
-  await env.DB.batch([env.DB.prepare("UPDATE print_orders SET status='submitted',provider_id=?1,handwrytten_quote_json=?2,updated_at=?3 WHERE id=?4 AND status='simulated'").bind((testMode?'handwrytten-test-':'handwrytten-live-')+checked.vendorId,JSON.stringify({...quote,submitted:true}),now(),job.order_id),env.DB.prepare("UPDATE print_fulfillment SET state='submitted',error=NULL,updated_at=?1 WHERE order_id=?2").bind(now(),job.order_id)]);
-  if(live)await env.DB.prepare("UPDATE live_gift_orders SET state='submitted',provider_id=?1,quote_json=?2,error=NULL,updated_at=?3 WHERE order_id=?4").bind(String(checked.vendorId),JSON.stringify({...quote,submitted:true}),now(),job.order_id).run();
-  canRelease=true;
+  if(!verifyAcceptedOrder(accepted,{orderId:job.order_id,vendorId:checked.vendorId,testMode,approvedLimit})){
+   const observed=accepted?.status?`observed status "${String(accepted.status)}"`:'acceptance could not be confirmed';
+   throw new PrintProblem(502,observed);
+  }
+  acceptedOrder=true;
+  await recordSubmitted(env,live,owner,job.order_id,checked.vendorId,testMode,quote);
+  canRelease=false;
  }catch(error){
-  if(!await env.DB.prepare('SELECT owner FROM print_fulfillment_lock WHERE id=1 AND owner=?1').bind(owner).first())return;
-  if(mutated){await update('unknown','Handwrytten needs review. This order will not be submitted again automatically.');await env.DB.prepare("UPDATE print_orders SET status='unknown',updated_at=?1 WHERE id=?2 AND status='simulated'").bind(now(),job.order_id).run();}
-  else if(Number(job.attempts)<2&&error instanceof PrintProblem&&error.status>=500){await update('pending','Preparation will retry automatically.');await env.DB.prepare('UPDATE print_fulfillment SET next_at=?1 WHERE order_id=?2').bind(now()+60*(Number(job.attempts)+1),job.order_id).run();}
-  else await update('review',error instanceof PrintProblem?error.message:'The saved order needs review before submission.');
+  try{
+   if(!await env.DB.prepare('SELECT owner FROM print_fulfillment_lock WHERE id=1 AND owner=?1').bind(owner).first())return;
+   if(submitting){
+    const detail=acceptedOrder?'Handwrytten accepted the order, but recording it locally failed':(error instanceof PrintProblem?error.message:'order acceptance could not be confirmed');
+    await markUnknown(env,live,owner,job.order_id,ambiguousOrderMessage(stagedVendorId,detail),true);
+   }else if(mutated){
+    await markUnknown(env,live,owner,job.order_id,ambiguousOrderMessage(stagedVendorId,error instanceof PrintProblem?error.message:'Staging in Handwrytten basket did not complete'),false);
+   }else if(Number(job.attempts)<2&&error instanceof PrintProblem&&error.status>=500){
+    await update('pending','Preparation will retry automatically.');
+    await env.DB.prepare('UPDATE print_fulfillment SET next_at=?1 WHERE order_id=?2').bind(now()+60*(Number(job.attempts)+1),job.order_id).run();
+   }else{
+    await update('review',error instanceof PrintProblem?error.message:'The saved order needs review before submission.');
+   }
+  }catch{}
  }finally{
-  if(canRelease)await env.DB.prepare('DELETE FROM print_fulfillment_lock WHERE id=1 AND owner=?1').bind(owner).run();
+  if(canRelease)try{await env.DB.prepare('DELETE FROM print_fulfillment_lock WHERE id=1 AND owner=?1').bind(owner).run();}catch{}
  }
 }

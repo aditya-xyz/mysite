@@ -15,11 +15,28 @@ test('automatic test fulfillment serializes checkout, enforces destination total
  await db.exec(await readFile('migrations/0033_handwrytten_quote_only.sql','utf8'));
  await db.exec("ALTER TABLE print_orders ADD COLUMN budget_review_required INTEGER NOT NULL DEFAULT 0; ALTER TABLE print_orders ADD COLUMN budget_approved_cents INTEGER; ALTER TABLE print_orders ADD COLUMN budget_approved_by TEXT; ALTER TABLE print_orders ADD COLUMN budget_approved_at INTEGER; CREATE TABLE admin_events(id INTEGER PRIMARY KEY,actor TEXT,action TEXT,target TEXT);");
  const env={DB:db as any,MEDIA:media as any,HANDWRYTTEN_API_KEY:'synthetic-key',HANDWRYTTEN_PREVIEWS_ENABLED:'true',PRINT_ORDER_MODE:'handwrytten_test',ORDER_MODE:'simulation'};
- let approvedCap=10,mode=1,postage=.82,basket:any[]=[],sendFailure=false,stageFailure=false,missingTax=false,externalAddition=false,unverifiable=false,stealLease=false;
+ let approvedCap=10,mode=1,postage=.82,basket:any[]=[],sendFailure=false,stageFailure=false,missingTax=false,externalAddition=false,unverifiable=false,stealLease=false,nextVendorId=101,vendorOrders=new Map<number,any>(),onDetails:((id:number)=>Promise<void>|void)|null=null;
  const calls:{path:string;body:any}[]=[];
  const totals=()=>({grand_total:3.75+postage,tax:.29,total:Math.round((4.04+postage)*100)/100});
+ function wrapDb(realDb:any,onBatch:(sqls:string[])=>void){
+  const wrapStmt=(stmt:any,sql:string):any=>({
+   bind:(...a:any[])=>wrapStmt(stmt.bind(...a),sql),
+   first:(...a:any[])=>stmt.first(...a),
+   run:(...a:any[])=>stmt.run(...a),
+   all:(...a:any[])=>stmt.all(...a),
+   raw:(...a:any[])=>stmt.raw(...a),
+   __stmt:stmt,
+   __sql:sql
+  });
+  return {
+   prepare:(sql:string)=>wrapStmt(realDb.prepare(sql),sql),
+   batch:(stmts:any[])=>{onBatch(stmts.map(s=>s.__sql||''));return realDb.batch(stmts.map(s=>s.__stmt??s));},
+   exec:(sql:string)=>realDb.exec(sql),
+   dump:()=>realDb.dump()
+  };
+ }
  const fetch=mock.method(globalThis,'fetch',async(url:string,init:RequestInit)=>{
-  const path=new URL(url).pathname,body=init.body?JSON.parse(String(init.body)):null;calls.push({path,body});assert.equal(new Headers(init.headers).get('Authorization'),'synthetic-key');
+  const parsed=new URL(url),path=parsed.pathname,body=init.body?JSON.parse(String(init.body)):null;calls.push({path,body});assert.equal(new Headers(init.headers).get('Authorization'),'synthetic-key');
   if(path==='/v2/checkauth/auth')return Response.json({status:'ok',test_mode:mode});
   if(path==='/v2/profile/listAddresses')return Response.json({status:'ok',addresses:[{id:17,country_id:1,name:'Synthetic sender'}]});
   if(path==='/v2/countries/list'){if(stealLease)await db.prepare("UPDATE print_fulfillment_lock SET owner='another-worker',lease_until=unixepoch()+300 WHERE id=1").run();return Response.json({status:'ok',countries:[{id:1,name:'United States',ups_code:'US'},{id:96,name:'India',ups_code:'IN'},{id:142,name:'Netherlands',ups_code:'NL'}]});}
@@ -27,16 +44,18 @@ test('automatic test fulfillment serializes checkout, enforces destination total
   if(path==='/v2/orders/placeBasket'){
    assert.equal(mode,1);assert.equal(body.font,'hwMadeline');assert.equal(body.font_size,13);assert.equal(body.auto_font_size,true);assert.equal(body.return_address_id,17);assert.equal(body.addresses[0].return_address_id,17);assert.equal(body.addresses[0].wishes,undefined);
    if(stageFailure)throw new TypeError('Connection interrupted');
-   basket=[{id:100,client_metadata:body.client_metadata,card_id:body.card_id,quantity:1,address_to:{country:body.addresses[0].to_country},card_orders:[{id:200}],totals:{card:3.75,delivery_cost:postage,shipping:0,insert:0,gift_card:0,subtotal:3.75+postage},price_structure:{card:{total:3.75,money:3.75},postage:{total:postage,money:postage},card_tax:{total:.29,money:.29}}}];return Response.json({status:'ok',order_id:100});
+   const vid=body.client_metadata==='print-test'?100:nextVendorId++;vendorOrders.set(vid,{id:vid,client_metadata:body.client_metadata,status:'basket',test_mode:1,quantity:1,payed:totals().total});
+   basket=[{id:vid,client_metadata:body.client_metadata,card_id:body.card_id,quantity:1,address_to:{country:body.addresses[0].to_country},card_orders:[{id:vid+100}],totals:{card:3.75,delivery_cost:postage,shipping:0,insert:0,gift_card:0,subtotal:3.75+postage},price_structure:{card:{total:3.75,money:3.75},postage:{total:postage,money:postage},card_tax:{total:.29,money:.29}}}];return Response.json({status:'ok',order_id:vid});
   }
-  if(path.startsWith('/v2/orders/details')){if(unverifiable)throw new TypeError('Cannot confirm outcome');return Response.json({status:'ok',order:{id:100,client_metadata:'print-test',status:'test',test_mode:1,quantity:1,payed:totals().total}});}
+  if(path.startsWith('/v2/orders/details')){const id=Number(parsed.searchParams.get('id'));if(onDetails)await onDetails(id);if(unverifiable)throw new TypeError('Cannot confirm outcome');const order=vendorOrders.get(id);return Response.json({status:'ok',order:order?{...order,payed:totals().total}:{id:id||100,client_metadata:'print-test',status:'test',test_mode:1,quantity:1,payed:totals().total}});}
   if(path==='/v2/basket/remove'){assert.equal(body.id,200);basket=[];return Response.json({status:'ok'});}
   assert.equal(path,'/v2/basket/send','Unexpected provider endpoint');assert.equal(mode,1);assert.equal(basket.length,1);assert.equal(body.test_mode,1);assert.equal(body.price_structure.money,totals().total);assert.ok(body.price_structure.money<=approvedCap);
+  const active=vendorOrders.get(basket[0].id);if(active)active.status='test';
   basket=[];if(sendFailure)throw new TypeError('Response lost after acceptance');return Response.json({status:'ok'});
  });
  const state=async()=>await db.prepare("SELECT f.*,o.status AS order_status,o.handwrytten_quote_json,o.provider_id FROM print_fulfillment f JOIN print_orders o ON o.id=f.order_id WHERE o.id='print-test'").first<any>();
  async function reset(country='US'){
-  approvedCap=10;mode=1;postage=country==='US'?.82:1.85;basket=[];calls.length=0;sendFailure=false;stageFailure=false;missingTax=false;externalAddition=false;unverifiable=false;stealLease=false;
+  approvedCap=10;mode=1;postage=country==='US'?.82:1.85;basket=[];calls.length=0;sendFailure=false;stageFailure=false;missingTax=false;externalAddition=false;unverifiable=false;stealLease=false;nextVendorId=101;vendorOrders=new Map();onDetails=null;
   await db.prepare('DELETE FROM print_orders').run();await db.prepare('DELETE FROM print_fulfillment_lock').run();await db.prepare('DELETE FROM handwrytten_previews').run();
   await db.prepare("INSERT INTO handwrytten_previews VALUES('proof','invite',2026,'ready',42,'front','inside','back',unixepoch())").run();
   const name=({US:'United States',IN:'India',NL:'Netherlands'} as any)[country],payload={card_id:42,font:'hwMadeline',font_size:13,auto_font_size:true,client_metadata:'print-test',addresses:[{to_country:name,to_address1:'Synthetic address',to_city:'Synthetic city',message:'Dear Household,\n\nA note.\nCheers, Pixel'}]};
@@ -91,6 +110,43 @@ test('automatic test fulfillment serializes checkout, enforces destination total
   await t.test('a lost submit response is reconciled by order ID without another submit',async()=>{await reset();sendFailure=true;await tickPrintFulfillment(env);assert.equal((await state()).state,'submitted');assert.equal(calls.filter(c=>c.path.endsWith('/basket/send')).length,1);});
   await t.test('an uncertain draft creation is never repeated',async()=>{await reset();stageFailure=true;await tickPrintFulfillment(env);await tickPrintFulfillment(env);assert.equal((await state()).state,'unknown');assert.equal(calls.filter(c=>c.path.endsWith('/orders/placeBasket')).length,1);});
   await t.test('a changed basket after staging cannot submit unrelated items',async()=>{await reset();externalAddition=true;await tickPrintFulfillment(env);assert.equal((await state()).state,'unknown');assert.equal(calls.some(c=>c.path.endsWith('/basket/send')),false);});
+  await t.test('test-mode D1 persistence failure after vendor acceptance recovers without resending and unblocks next order',async()=>{
+   await reset();
+   await db.prepare("INSERT OR IGNORE INTO invites VALUES('invite-2')").run();
+   await db.prepare("INSERT INTO handwrytten_previews VALUES('proof-2','invite-2',2026,'ready',42,'front','inside','back',unixepoch())").run();
+   const payload2={card_id:42,font:'hwMadeline',font_size:13,auto_font_size:true,client_metadata:'print-test-2',addresses:[{to_country:'United States',to_address1:'Synthetic address 2',to_city:'Synthetic city',message:'Second note'}]};
+   await db.prepare("INSERT INTO print_orders(id,invitation_id,year,status,format,card_count,handwrytten_preview_id,handwrytten_order_json,address_json) VALUES('print-test-2','invite-2',2026,'simulated','folded',1,'proof-2',?1,?2)").bind(JSON.stringify(payload2),JSON.stringify({country:'US'})).run();
+   await db.prepare("INSERT INTO print_fulfillment(order_id,state) VALUES('print-test-2','pending')").run();
+   let failSubmitBatch=true;
+   const faultyEnv={...env,DB:wrapDb(db,sqls=>{if(failSubmitBatch&&sqls.some(s=>s.includes("UPDATE print_orders SET status='submitted'"))){failSubmitBatch=false;throw new Error('Injected D1 batch write failure');}}) as any};
+   await tickPrintFulfillment(faultyEnv,'print-test');
+   assert.equal(failSubmitBatch,false);
+   assert.equal(calls.filter(c=>c.path.endsWith('/basket/send')).length,1);
+   const held=await state();assert.equal(held.state,'unknown');assert.equal(held.order_status,'unknown');assert.equal(held.provider_id,null);assert.match(held.error,/#100/);
+   assert.equal((await db.prepare('SELECT blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).blocked,1);
+   assert.equal((await db.prepare("SELECT state FROM print_fulfillment WHERE order_id='print-test-2'").first<any>()).state,'pending');
+
+   await tickPrintFulfillment(env);
+   assert.equal(calls.filter(c=>c.path.endsWith('/orders/placeBasket')).length,2);
+   assert.equal(calls.filter(c=>c.path.endsWith('/basket/send')).length,2);
+   const first=await state();assert.equal(first.state,'submitted');assert.equal(first.order_status,'submitted');assert.equal(first.provider_id,'handwrytten-test-100');assert.equal(first.error,null);
+   const second=await db.prepare("SELECT f.state,o.status,o.provider_id FROM print_fulfillment f JOIN print_orders o ON o.id=f.order_id WHERE o.id='print-test-2'").first<any>();
+   assert.equal(second.state,'submitted');assert.equal(second.status,'submitted');assert.equal(second.provider_id,'handwrytten-test-101');
+   assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment_lock').first<any>()).n,0);
+  });
+  await t.test('test-mode stale worker whose lease was taken over cannot finalize order or release new owner lock',async()=>{
+   await reset();
+   onDetails=async()=>{
+    onDetails=null;
+    await db.prepare("UPDATE print_fulfillment_lock SET owner='print-test:new-owner',lease_until=unixepoch()+300,blocked=1 WHERE id=1").run();
+   };
+   await tickPrintFulfillment(env,'print-test');
+   const s=await state();
+   assert.equal(s.state,'submitting');
+   assert.equal(s.order_status,'simulated');
+   assert.equal(s.provider_id,null);
+   assert.equal((await db.prepare('SELECT owner,blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).owner,'print-test:new-owner');
+  });
   await t.test('disabled app mode cannot make provider calls',async()=>{await reset();await tickPrintFulfillment({...env,PRINT_ORDER_MODE:'simulation'});assert.equal(calls.length,0);});
  }finally{fetch.mock.restore();await mf.dispose();}
 });

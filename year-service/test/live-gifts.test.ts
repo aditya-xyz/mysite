@@ -20,8 +20,25 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
  await db.prepare("INSERT INTO live_gift_permissions(year,invitation_id,person_id,member_ids,postcard_enabled,mug_enabled,enabled,expires_at) VALUES(2026,'home','owner','[\"owner\",\"partner\"]',1,1,1,unixepoch()+86400)").run();
  const env={DB:db as any,MEDIA:media as any,LIVE_GIFT_ORDERING:'true',PRINT_ORDER_MODE:'handwrytten_live',PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'synthetic',PRINTFUL_STORE_ID:'123',SOCIAL_JOURNAL_ORIGIN:'https://live.test',HANDWRYTTEN_API_KEY:'synthetic',HANDWRYTTEN_PREVIEWS_ENABLED:'true'};
  const address={line1:'1 Synthetic Lane',line2:'',city:'Testville',state:'CA',postalCode:'90001',country:'US'};
- const calls:string[]=[];let mug:any=null,mugPayload:any=null,mugCost='19.99',loseConfirm=false,loseCreate=false,costsPending=false,readOnlyOrderToken=false,mode=0,previewTotal=4.86,basket:any[]=[],basketTotal=4.86,postcardAccepted=false;
+ const calls:string[]=[];let mug:any=null,mugPayload:any=null,mugCost='19.99',loseConfirm=false,loseCreate=false,costsPending=false,readOnlyOrderToken=false,mode=0,previewTotal=4.86,basket:any[]=[],basketTotal=4.86,postcardAccepted=false,nextVendorId=100,vendorOrders=new Map<number,any>(),placeMetadata:string[]=[],detailIds:number[]=[],postcardDetailsStatus:string|null=null,postcardDetailsError=false,onPostcardDetails:((id:number)=>Promise<void>|void)|null=null;
  const cents=(v:number)=>Math.round(v*100)/100;
+ function wrapDb(realDb:any,hooks:{onBatch?:(sqls:string[])=>void;onRun?:(sql:string)=>void}){
+  const wrapStmt=(stmt:any,sql:string):any=>({
+   bind:(...a:any[])=>wrapStmt(stmt.bind(...a),sql),
+   first:(...a:any[])=>stmt.first(...a),
+   run:(...a:any[])=>{hooks.onRun?.(sql);return stmt.run(...a);},
+   all:(...a:any[])=>stmt.all(...a),
+   raw:(...a:any[])=>stmt.raw(...a),
+   __stmt:stmt,
+   __sql:sql
+  });
+  return {
+   prepare:(sql:string)=>wrapStmt(realDb.prepare(sql),sql),
+   batch:(stmts:any[])=>{hooks.onBatch?.(stmts.map(s=>s.__sql||''));return realDb.batch(stmts.map(s=>s.__stmt??s));},
+   exec:(sql:string)=>realDb.exec(sql),
+   dump:()=>realDb.dump()
+  };
+ }
  const fetch=mock.method(globalThis,'fetch',async(url:string,init:RequestInit={})=>{
   const u=new URL(url),path=u.pathname,body=init.body?JSON.parse(String(init.body)):null;calls.push((init.method||'GET')+' '+path);
   if(u.hostname==='api.printful.com'){
@@ -41,27 +58,38 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
   if(path.endsWith('/outbound/process'))return Response.json({status:'ok',quantity:1,prices:{card_price:3.75,postage_price:cents(previewTotal-4.04),tax:.29,shipping_price:0,insert_price:0,bundle_price:0,without_tax:cents(previewTotal-.29),total:previewTotal}});
   if(path.endsWith('/basket/allNew'))return Response.json({status:'ok',test_mode:mode,items:basket,totals:{grand_total:cents(basketTotal-.29),tax:.29,total:basketTotal}});
   if(path.endsWith('/orders/placeBasket')){
-   assert.ok(mode===0||mode===1);assert.equal(body.client_metadata,'print-live');
-   basket=[{id:100,card_id:42,quantity:1,client_metadata:body.client_metadata,address_to:{country:'United States',address1:body.addresses[0].to_address1,address2:body.addresses[0].to_address2,city:body.addresses[0].to_city,state:body.addresses[0].to_state,zip:body.addresses[0].to_zip},card_orders:[{id:200}],totals:{card:3.75,delivery_cost:cents(basketTotal-4.04),shipping:0,insert:0,gift_card:0,subtotal:cents(basketTotal-.29)},price_structure:{card:{money:3.75},postage:{money:cents(basketTotal-4.04)},tax:{money:.29}}}];return Response.json({status:'ok'});
+   assert.ok(mode===0||mode===1);const vid=nextVendorId++;placeMetadata.push(body.client_metadata);
+   vendorOrders.set(vid,{id:vid,client_metadata:body.client_metadata,status:'basket',test_mode:mode,quantity:1,payed:basketTotal});
+   basket=[{id:vid,card_id:42,quantity:1,client_metadata:body.client_metadata,address_to:{country:'United States',address1:body.addresses[0].to_address1,address2:body.addresses[0].to_address2,city:body.addresses[0].to_city,state:body.addresses[0].to_state,zip:body.addresses[0].to_zip},card_orders:[{id:vid+100}],totals:{card:3.75,delivery_cost:cents(basketTotal-4.04),shipping:0,insert:0,gift_card:0,subtotal:cents(basketTotal-.29)},price_structure:{card:{money:3.75},postage:{money:cents(basketTotal-4.04)},tax:{money:.29}}}];return Response.json({status:'ok'});
   }
   if(path.endsWith('/basket/remove')){basket=[];return Response.json({status:'ok'});}
-  if(path.endsWith('/basket/send')){assert.equal(body.test_mode,mode);assert.ok(body.price_structure.money<=10);postcardAccepted=true;basket=[];return Response.json({status:'ok'});}
-  if(path.endsWith('/orders/details'))return Response.json({status:'ok',order:{id:100,client_metadata:'print-live',status:postcardAccepted?(mode===1?'test':'paid'):'basket',test_mode:mode,quantity:1,payed:basketTotal}});
+  if(path.endsWith('/basket/send')){
+   assert.equal(body.test_mode,mode);assert.ok(body.price_structure.money<=10);assert.equal(basket.length,1);
+   const active=vendorOrders.get(basket[0].id);if(active)active.status=postcardDetailsStatus??(mode===1?'test':'paid');
+   postcardAccepted=true;basket=[];return Response.json({status:'ok'});
+  }
+  if(path.endsWith('/orders/details')){
+   const id=Number(u.searchParams.get('id'));detailIds.push(id);
+   if(onPostcardDetails)await onPostcardDetails(id);
+   if(postcardDetailsError)throw new TypeError('Vendor lookup failed');
+   const order=vendorOrders.get(id);
+   return Response.json({status:'ok',order:order?{...order,status:postcardDetailsStatus??order.status,payed:order.payed??basketTotal}:{id:id||100,client_metadata:'print-live',status:postcardAccepted?(mode===1?'test':'paid'):'basket',test_mode:mode,quantity:1,payed:basketTotal}});
+  }
   assert.fail('Unexpected provider request '+path);
  });
  async function reset(){
-  calls.length=0;mug=null;mugPayload=null;mugCost='19.99';loseConfirm=false;loseCreate=false;costsPending=false;readOnlyOrderToken=false;mode=0;previewTotal=4.86;basket=[];basketTotal=4.86;postcardAccepted=false;
-  await db.exec('DELETE FROM live_gift_orders; DELETE FROM mug_orders; DELETE FROM print_orders; DELETE FROM print_fulfillment_lock; DELETE FROM handwrytten_previews;');
+  calls.length=0;mug=null;mugPayload=null;mugCost='19.99';loseConfirm=false;loseCreate=false;costsPending=false;readOnlyOrderToken=false;mode=0;previewTotal=4.86;basket=[];basketTotal=4.86;postcardAccepted=false;nextVendorId=100;vendorOrders=new Map();placeMetadata=[];detailIds=[];postcardDetailsStatus=null;postcardDetailsError=false;onPostcardDetails=null;
+  await db.exec("DELETE FROM live_gift_orders; DELETE FROM live_gift_permissions WHERE invitation_id!='home'; DELETE FROM mug_orders; DELETE FROM print_orders; DELETE FROM print_fulfillment_lock; DELETE FROM handwrytten_previews;");
  }
  async function seedMug(){
   await db.prepare("INSERT INTO mug_orders VALUES('mug-live','home',2026,'simulated',?1,'Synthetic Recipient',?2,'frozen.png',4,NULL,unixepoch())").bind(JSON.stringify(address),JSON.stringify({currency:'USD',variantId:22373,totalCents:1999,withinBudget:true,shippingMethod:'STANDARD'})).run();
   await media.put('frozen.png',new Uint8Array([1,2,3]));await liveGiftIntentStatement(env,'mug-live','mug','home',2026).run();
  }
- async function seedPrint(intent=true){
-  await db.prepare("INSERT INTO handwrytten_previews VALUES('proof','home',2026,'ready',42,'front','inside','back',unixepoch())").run();
-  const payload={card_id:42,font:'hwMadeline',font_size:13,auto_font_size:true,client_metadata:'print-live',addresses:[{to_country:'United States',to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,message:'Exact frozen note.'}]};
-  await db.prepare("INSERT INTO print_orders(id,invitation_id,year,status,format,card_count,handwrytten_preview_id,handwrytten_order_json,address_json,budget_approved_cents) VALUES('print-live','home',2026,'simulated','folded',1,'proof',?1,?2,5000)").bind(JSON.stringify(payload),JSON.stringify(address)).run();
-  await db.prepare("INSERT INTO print_fulfillment(order_id,state) VALUES('print-live','pending')").run();if(intent)await liveGiftIntentStatement(env,'print-live','postcard','home',2026).run();
+ async function seedPrint(intent=true,id='print-live',invite='home',previewId='proof'){
+  await db.prepare("INSERT OR IGNORE INTO handwrytten_previews VALUES(?1,?2,2026,'ready',42,'front','inside','back',unixepoch())").bind(previewId,invite).run();
+  const payload={card_id:42,font:'hwMadeline',font_size:13,auto_font_size:true,client_metadata:id,addresses:[{to_country:'United States',to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,message:'Exact frozen note.'}]};
+  await db.prepare("INSERT INTO print_orders(id,invitation_id,year,status,format,card_count,handwrytten_preview_id,handwrytten_order_json,address_json,budget_approved_cents) VALUES(?1,?2,2026,'simulated','folded',1,?3,?4,?5,5000)").bind(id,invite,previewId,JSON.stringify(payload),JSON.stringify(address)).run();
+  await db.prepare("INSERT INTO print_fulfillment(order_id,state) VALUES(?1,'pending')").bind(id).run();if(intent)await liveGiftIntentStatement(env,id,'postcard',invite,2026).run();
  }
  const liveState=async(id:string)=>(await db.prepare('SELECT state FROM live_gift_orders WHERE order_id=?1').bind(id).first<any>())?.state;
  try{
@@ -110,7 +138,233 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
    await db.prepare("UPDATE print_orders SET allowance_reset_at=unixepoch() WHERE id='print-live'").run();
    await releaseResetPostcardIntent(env,'print-live');assert.equal(await liveState('print-live'),undefined,'an explicit admin reset permits one more completed real postcard');
   });
-  await t.test('expired mutation leases never retry payment',async()=>{await reset();await seedMug();await db.prepare("UPDATE live_gift_orders SET state='submitting',lease_until=unixepoch()-1").run();await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'unknown');assert.equal(calls.length,0);});
+   await t.test('expired mutation leases never retry payment',async()=>{await reset();await seedMug();await db.prepare("UPDATE live_gift_orders SET state='submitting',lease_until=unixepoch()-1").run();await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'unknown');assert.equal(calls.length,0);});
   await t.test('same household cannot create a second live mug intent after allowance reset',async()=>{await reset();await seedMug();await db.prepare("INSERT INTO mug_orders VALUES('mug-second','home',2026,'simulated',?1,'Synthetic',NULL,NULL,4,NULL,unixepoch())").bind(JSON.stringify(address)).run();await liveGiftIntentStatement(env,'mug-second','mug','home',2026).run();assert.equal(await liveState('mug-second'),undefined);});
+  const seedSecondLivePrint=async()=>{
+   await db.prepare("INSERT INTO live_gift_permissions(year,invitation_id,person_id,member_ids,postcard_enabled,mug_enabled,enabled,expires_at) VALUES(2026,'other','friend','[\"friend\"]',1,1,1,unixepoch()+86400)").run();
+   await seedPrint(true,'print-live-2','other','proof-2');
+  };
+  await t.test('D1 batch failure after Handwrytten acceptance recovers via read-only lookup and unblocks the next postcard',async()=>{
+   await reset();await seedPrint();await seedSecondLivePrint();
+   let failSubmitBatch=true;
+   const faultyEnv={...env,DB:wrapDb(db,{onBatch:sqls=>{if(failSubmitBatch&&sqls.some(s=>s.includes("UPDATE print_orders SET status='submitted'"))){failSubmitBatch=false;throw new Error('Injected D1 batch write failure');}}}) as any};
+   await tickPrintFulfillment(faultyEnv,'print-live');
+   assert.equal(failSubmitBatch,false);
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1);
+   const firstOrder=await db.prepare("SELECT status,provider_id FROM print_orders WHERE id='print-live'").first<any>();
+   const firstFulfillment=await db.prepare("SELECT state,vendor_order_id,error FROM print_fulfillment WHERE order_id='print-live'").first<any>();
+   const firstIntent=await db.prepare("SELECT state,provider_id,error FROM live_gift_orders WHERE order_id='print-live'").first<any>();
+   const heldLock=await db.prepare('SELECT owner,blocked,lease_until FROM print_fulfillment_lock WHERE id=1').first<any>();
+   assert.equal(firstOrder.status,'unknown','Failed D1 batch leaves no partial submitted state');
+   assert.equal(firstOrder.provider_id,null);
+   assert.equal(firstFulfillment.state,'unknown');
+   assert.equal(firstFulfillment.vendor_order_id,100);
+   assert.match(firstFulfillment.error,/#100/);
+   assert.equal(firstIntent.state,'unknown');
+   assert.match(firstIntent.error,/Verify order status/);
+   assert.equal(heldLock.blocked,1);
+   assert.ok(heldLock.owner.startsWith('print-live:'));
+   assert.equal(await liveState('print-live-2'),'pending');
+
+   await tickPrintFulfillment(env);
+   assert.deepEqual(placeMetadata,['print-live','print-live-2'],'Never replays placeBasket for the recovered order');
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,2,'Sends basket once per postcard without creating a replacement');
+   assert.deepEqual(detailIds,[100,100,101]);
+   const recoveredOrder=await db.prepare("SELECT status,provider_id,handwrytten_quote_json FROM print_orders WHERE id='print-live'").first<any>();
+   const recoveredFulfillment=await db.prepare("SELECT state,error FROM print_fulfillment WHERE order_id='print-live'").first<any>();
+   const recoveredIntent=await db.prepare("SELECT state,provider_id,error,quote_json FROM live_gift_orders WHERE order_id='print-live'").first<any>();
+   assert.equal(recoveredOrder.status,'submitted');
+   assert.equal(recoveredOrder.provider_id,'handwrytten-live-100');
+   assert.equal(JSON.parse(recoveredOrder.handwrytten_quote_json).submitted,true);
+   assert.equal(JSON.parse(recoveredOrder.handwrytten_quote_json).submitAttempted,undefined);
+   assert.equal(recoveredFulfillment.state,'submitted');
+   assert.equal(recoveredFulfillment.error,null);
+   assert.equal(recoveredIntent.state,'submitted');
+   assert.equal(recoveredIntent.provider_id,'100');
+   assert.equal(recoveredIntent.error,null);
+   assert.equal(JSON.parse(recoveredIntent.quote_json).submitted,true);
+   assert.equal((await db.prepare("SELECT provider_id,status FROM print_orders WHERE id='print-live-2'").first<any>()).provider_id,'handwrytten-live-101');
+   assert.equal(await liveState('print-live-2'),'submitted');
+   assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment_lock').first<any>()).n,0);
+  });
+  await t.test('worker exit after Handwrytten acceptance reconciles after lease expiry without double-ordering',async()=>{
+   await reset();await seedPrint();await seedSecondLivePrint();
+   const outageEnv={...env,DB:wrapDb(db,{
+    onBatch:()=>{if(calls.includes('POST /v2/basket/send'))throw new Error('Simulated worker exit / D1 outage');},
+    onRun:()=>{if(calls.includes('POST /v2/basket/send'))throw new Error('Simulated worker exit / D1 outage');}
+   }) as any};
+   await tickPrintFulfillment(outageEnv,'print-live');
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1);
+   assert.equal((await db.prepare("SELECT state FROM print_fulfillment WHERE order_id='print-live'").first<any>()).state,'submitting');
+   assert.equal((await db.prepare("SELECT status FROM print_orders WHERE id='print-live'").first<any>()).status,'simulated');
+   assert.equal(await liveState('print-live'),'submitting');
+   assert.equal((await db.prepare('SELECT blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).blocked,1);
+
+   const beforeActiveTick=calls.length;
+   await tickPrintFulfillment(env);
+   assert.equal(calls.length,beforeActiveTick,'Active lease holds until expiry');
+   assert.equal(await liveState('print-live-2'),'pending');
+
+   await db.prepare('UPDATE print_fulfillment_lock SET lease_until=unixepoch()-1 WHERE id=1').run();
+   await tickPrintFulfillment(env);
+   assert.deepEqual(placeMetadata,['print-live','print-live-2']);
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,2);
+   assert.equal((await db.prepare("SELECT status,provider_id FROM print_orders WHERE id='print-live'").first<any>()).provider_id,'handwrytten-live-100');
+   assert.equal(await liveState('print-live'),'submitted');
+   assert.equal((await db.prepare("SELECT status,provider_id FROM print_orders WHERE id='print-live-2'").first<any>()).provider_id,'handwrytten-live-101');
+   assert.equal(await liveState('print-live-2'),'submitted');
+   assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment_lock').first<any>()).n,0);
+  });
+  await t.test('ambiguous vendor outcome keeps the order locked and protected from resubmission',async()=>{
+   await reset();await seedPrint();await seedSecondLivePrint();
+   postcardDetailsStatus='basket';
+   await tickPrintFulfillment(env,'print-live');
+   await tickPrintFulfillment(env);
+   assert.deepEqual(placeMetadata,['print-live']);
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1);
+   assert.equal(calls.some(c=>c==='POST /v2/basket/remove'),false);
+   const o=await db.prepare("SELECT status,provider_id FROM print_orders WHERE id='print-live'").first<any>();
+   const f=await db.prepare("SELECT state,error FROM print_fulfillment WHERE order_id='print-live'").first<any>();
+   const l=await db.prepare("SELECT state,error FROM live_gift_orders WHERE order_id='print-live'").first<any>();
+   assert.equal(o.status,'unknown');assert.equal(o.provider_id,null);
+   assert.equal(f.state,'unknown');assert.equal(l.state,'unknown');
+   assert.match(f.error,/#100/);assert.match(f.error,/basket/);assert.match(f.error,/Verify order status, payment, and Handwrytten basket/);
+   assert.equal(l.error,f.error);
+   assert.equal((await db.prepare('SELECT blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).blocked,1);
+   assert.equal(await liveState('print-live-2'),'pending');
+
+   postcardDetailsError=true;
+   await tickPrintFulfillment(env);
+   assert.deepEqual(placeMetadata,['print-live']);
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1);
+   assert.equal((await db.prepare("SELECT state FROM print_fulfillment WHERE order_id='print-live'").first<any>()).state,'unknown');
+   assert.match((await db.prepare("SELECT error FROM print_fulfillment WHERE order_id='print-live'").first<any>()).error,/#100/);
+   assert.equal((await db.prepare('SELECT blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).blocked,1);
+   assert.equal(await liveState('print-live-2'),'pending');
+  });
+  await t.test('order stuck submitted/unknown under old worker reconciles safely without submitAttempted marker',async()=>{
+   await reset();await seedPrint();await seedSecondLivePrint();
+   const stuckQuote={currency:'USD',quantity:1,amounts:{card:375,postage:82,shipping:0,inserts:0,bundles:0,tax:29,subtotal:457,total:486},testMode:false,maxCents:1000,withinBudget:true};
+   await db.prepare("UPDATE print_orders SET status='submitted',provider_id='handwrytten-live-100',handwrytten_quote_json=?1 WHERE id='print-live'").bind(JSON.stringify(stuckQuote)).run();
+   await db.prepare("UPDATE print_fulfillment SET state='unknown',vendor_order_id=100,basket_item_id=200,error='Handwrytten needs review.' WHERE order_id='print-live'").run();
+   await db.prepare("UPDATE live_gift_orders SET state='unknown',error='Handwrytten needs review.' WHERE order_id='print-live'").run();
+   await db.prepare("INSERT INTO print_fulfillment_lock(id,owner,lease_until,blocked) VALUES(1,'print-live:old-worker',unixepoch()-1,1)").run();
+   vendorOrders.set(100,{id:100,client_metadata:'print-live',status:'basket',test_mode:0,quantity:1,payed:0});
+   nextVendorId=101;
+
+   await tickPrintFulfillment(env);
+   assert.equal(calls.filter(c=>c==='GET /v2/orders/details').length,1);
+   assert.equal(calls.some(c=>c==='POST /v2/orders/placeBasket'||c==='POST /v2/basket/send'||c==='POST /v2/basket/remove'),false);
+   const held=await db.prepare("SELECT state,error FROM print_fulfillment WHERE order_id='print-live'").first<any>();
+   assert.equal(held.state,'unknown');
+   assert.match(held.error,/#100/);
+   assert.match(held.error,/basket/);
+   assert.equal(await liveState('print-live'),'unknown');
+   assert.equal((await db.prepare('SELECT blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).blocked,1);
+   assert.equal(await liveState('print-live-2'),'pending');
+
+   vendorOrders.set(100,{id:100,client_metadata:'print-live',status:'paid',test_mode:0,quantity:1,payed:4.86});
+   await tickPrintFulfillment(env);
+   assert.deepEqual(placeMetadata,['print-live-2'],'Never replays placeBasket for the pre-patch stuck order');
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1,'Sends basket only for print-live-2');
+   assert.deepEqual(detailIds,[100,100,101]);
+   const syncOrder=await db.prepare("SELECT status,provider_id,handwrytten_quote_json FROM print_orders WHERE id='print-live'").first<any>();
+   const syncFulfillment=await db.prepare("SELECT state,error FROM print_fulfillment WHERE order_id='print-live'").first<any>();
+   const syncLive=await db.prepare("SELECT state,provider_id,error,quote_json FROM live_gift_orders WHERE order_id='print-live'").first<any>();
+   assert.equal(syncOrder.status,'submitted');
+   assert.equal(syncOrder.provider_id,'handwrytten-live-100');
+   assert.equal(JSON.parse(syncOrder.handwrytten_quote_json).submitted,true);
+   assert.equal(syncFulfillment.state,'submitted');
+   assert.equal(syncFulfillment.error,null);
+   assert.equal(syncLive.state,'submitted');
+   assert.equal(syncLive.provider_id,'100');
+   assert.equal(syncLive.error,null);
+   assert.equal(JSON.parse(syncLive.quote_json).submitted,true);
+   assert.equal((await db.prepare("SELECT status,provider_id FROM print_orders WHERE id='print-live-2'").first<any>()).provider_id,'handwrytten-live-101');
+   assert.equal(await liveState('print-live-2'),'submitted');
+   assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment_lock').first<any>()).n,0);
+  });
+  await t.test('worker whose lease was taken over cannot finalize the order or release the new owner lock',async()=>{
+   await reset();await seedPrint();
+   onPostcardDetails=async()=>{
+    onPostcardDetails=null;
+    await db.prepare("UPDATE print_fulfillment_lock SET owner='print-live:taken-over',lease_until=unixepoch()+300,blocked=1 WHERE id=1").run();
+   };
+   await tickPrintFulfillment(env,'print-live');
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1);
+   assert.equal((await db.prepare("SELECT status,provider_id FROM print_orders WHERE id='print-live'").first<any>()).status,'simulated');
+   assert.equal((await db.prepare("SELECT status,provider_id FROM print_orders WHERE id='print-live'").first<any>()).provider_id,null);
+   assert.equal((await db.prepare("SELECT state FROM print_fulfillment WHERE order_id='print-live'").first<any>()).state,'submitting');
+   assert.equal(await liveState('print-live'),'submitting');
+   assert.equal((await db.prepare('SELECT owner,blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).owner,'print-live:taken-over');
+
+   await seedSecondLivePrint();
+   await db.prepare('UPDATE print_fulfillment_lock SET lease_until=unixepoch()-1 WHERE id=1').run();
+   onPostcardDetails=async()=>{
+    onPostcardDetails=null;
+    await db.prepare("UPDATE print_fulfillment_lock SET owner='print-live:winner',lease_until=unixepoch()+300,blocked=1 WHERE id=1").run();
+   };
+   await tickPrintFulfillment(env);
+   assert.equal((await db.prepare("SELECT status FROM print_orders WHERE id='print-live'").first<any>()).status,'simulated');
+   assert.equal((await db.prepare("SELECT state FROM print_fulfillment WHERE order_id='print-live'").first<any>()).state,'submitting');
+   assert.equal(await liveState('print-live'),'submitting');
+   assert.equal((await db.prepare('SELECT owner,blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).owner,'print-live:winner');
+   assert.equal(await liveState('print-live-2'),'pending');
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1);
+
+   await db.prepare('UPDATE print_fulfillment_lock SET lease_until=unixepoch()-1 WHERE id=1').run();
+   await tickPrintFulfillment(env);
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,2);
+   assert.equal(await liveState('print-live'),'submitted');
+   assert.equal(await liveState('print-live-2'),'submitted');
+   assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment_lock').first<any>()).n,0);
+  });
+  await t.test('legacy unknown/unknown blocked order with saved vendor ID and checkout mode reconciles without resending',async()=>{
+   await reset();await seedPrint();await seedSecondLivePrint();
+   const legacyQuote={currency:'USD',quantity:1,amounts:{card:375,postage:82,shipping:0,inserts:0,bundles:0,tax:29,subtotal:457,total:486},testMode:false,submitted:false,maxCents:1000,withinBudget:true};
+   await db.prepare("UPDATE print_orders SET status='unknown',provider_id=NULL,handwrytten_quote_json=?1 WHERE id='print-live'").bind(JSON.stringify(legacyQuote)).run();
+   await db.prepare("UPDATE print_fulfillment SET state='unknown',vendor_order_id=100,basket_item_id=200,error='Handwrytten needs review.' WHERE order_id='print-live'").run();
+   await db.prepare("UPDATE live_gift_orders SET state='unknown',provider_id=NULL,error='Handwrytten needs review.' WHERE order_id='print-live'").run();
+   await db.prepare("INSERT INTO print_fulfillment_lock(id,owner,lease_until,blocked) VALUES(1,'print-live:legacy-worker',unixepoch()-1,1)").run();
+   vendorOrders.set(100,{id:100,client_metadata:'print-live',status:'basket',test_mode:0,quantity:1,payed:0});
+   nextVendorId=101;
+
+   await tickPrintFulfillment(env);
+   assert.deepEqual(detailIds,[100]);
+   assert.equal(calls.some(c=>c==='POST /v2/orders/placeBasket'||c==='POST /v2/basket/send'||c==='POST /v2/basket/remove'),false);
+   const heldOrder=await db.prepare("SELECT status,provider_id FROM print_orders WHERE id='print-live'").first<any>();
+   const heldFulfillment=await db.prepare("SELECT state,error FROM print_fulfillment WHERE order_id='print-live'").first<any>();
+   const heldLive=await db.prepare("SELECT state,error FROM live_gift_orders WHERE order_id='print-live'").first<any>();
+   assert.equal(heldOrder.status,'unknown');
+   assert.equal(heldOrder.provider_id,null);
+   assert.equal(heldFulfillment.state,'unknown');
+   assert.match(heldFulfillment.error,/#100/);
+   assert.match(heldFulfillment.error,/basket/);
+   assert.equal(heldLive.state,'unknown');
+   assert.equal(heldLive.error,heldFulfillment.error);
+   assert.equal((await db.prepare('SELECT blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).blocked,1);
+   assert.equal(await liveState('print-live-2'),'pending');
+
+   vendorOrders.set(100,{id:100,client_metadata:'print-live',status:'paid',test_mode:0,quantity:1,payed:4.86});
+   await tickPrintFulfillment(env);
+   assert.deepEqual(placeMetadata,['print-live-2'],'Never replays placeBasket for the legacy unknown/unknown order');
+   assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1,'Sends basket only for print-live-2');
+   assert.deepEqual(detailIds,[100,100,101]);
+   const recOrder=await db.prepare("SELECT status,provider_id,handwrytten_quote_json FROM print_orders WHERE id='print-live'").first<any>();
+   const recFulfillment=await db.prepare("SELECT state,error FROM print_fulfillment WHERE order_id='print-live'").first<any>();
+   const recLive=await db.prepare("SELECT state,provider_id,error,quote_json FROM live_gift_orders WHERE order_id='print-live'").first<any>();
+   assert.equal(recOrder.status,'submitted');
+   assert.equal(recOrder.provider_id,'handwrytten-live-100');
+   assert.equal(JSON.parse(recOrder.handwrytten_quote_json).submitted,true);
+   assert.equal(recFulfillment.state,'submitted');
+   assert.equal(recFulfillment.error,null);
+   assert.equal(recLive.state,'submitted');
+   assert.equal(recLive.provider_id,'100');
+   assert.equal(recLive.error,null);
+   assert.equal(JSON.parse(recLive.quote_json).submitted,true);
+   assert.equal((await db.prepare("SELECT status,provider_id FROM print_orders WHERE id='print-live-2'").first<any>()).provider_id,'handwrytten-live-101');
+   assert.equal(await liveState('print-live-2'),'submitted');
+   assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment_lock').first<any>()).n,0);
+  });
  }finally{fetch.mock.restore();await mf.dispose();}
 });
