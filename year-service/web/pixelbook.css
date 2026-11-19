@@ -292,6 +292,9 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-presents-heading{margin-bottom:28px}
 .pb-gift-jumps{display:none}
 .pb-presents .pb-present-card[id]{scroll-margin-top:16px}
+/* Mobile Safari can restore focus to the whole gift card when a sheet closes. */
+html[data-input-modality=pointer] .pb-present-card:focus{outline:none}
+.pb-presents .pb-present-card{-webkit-tap-highlight-color:transparent}
 @media(max-width:760px){
   .pb-gift-jumps{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:12px}
   .pb-gift-jumps a{display:inline-flex;align-items:center;min-height:44px;color:var(--ink);text-underline-offset:.25em}

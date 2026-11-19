@@ -61,7 +61,7 @@ export function mountKeepsake(journal,section){
     borderTransition?.cancel();borderTransition=null;
     pickerCleanup?.();pickerCleanup=null;editorCleanup?.();editorCleanup=null;cancelAnimationFrame(previewFrame);previewFrame=0;cardImages=[];
     clearOrderToast();printFlow.close();digitalFlow.close();revision++;abort?.abort();abort=null;images.forEach(p=>p.then(image=>image.close?.()).catch(()=>{}));images.clear();defaultArt.clear();file=null;
-    urls.forEach(url=>URL.revokeObjectURL(url));urls.clear();modal.querySelectorAll('canvas').forEach(canvas=>{canvas.width=0;canvas.height=0;});busy=false;returnFocus?.focus({preventScroll:true});
+    urls.forEach(url=>URL.revokeObjectURL(url));urls.clear();digitalPreviewUrl=null;modal.querySelectorAll('canvas').forEach(canvas=>{canvas.width=0;canvas.height=0;});busy=false;returnFocus?.focus({preventScroll:true});
   }
   function close(){closeDialog(modal);}
   modal.addEventListener('close',cleanup);
@@ -123,9 +123,9 @@ export function mountKeepsake(journal,section){
   }
   function editorMarkup(){
     if(ordered)return receiptMarkup();
-    if(!fixed&&step==='preview')return `<div class="ks-complete-stage"><img class="ks-complete-preview" alt="Your complete digital postcard"></div>`;
-    if(fixed&&digitalOnly)return `<div class="ks-default-editor"><p class="ks-description">paperless fan club · unlimited downloads</p><img class="ks-default-image" src="/api/print/digital/image" alt="Your complete digital postcard"></div>`;
-    if(fixed)return `<div class="ks-default-editor"><p class="ks-description">Pixel picked these for you. Choose your border.</p><div class="ks-preview-wrap"><img class="ks-default-image" data-default-image src="${esc(defaultSrc())}" alt="Pixel’s fixed postcard: family photo above, dogs on the lower left and family on the lower right"></div></div>`;
+    if(!fixed&&step==='preview')return `<div class="ks-complete-stage"><img class="ks-complete-preview" width="1080" height="1920" alt="Your complete digital postcard"></div>`;
+    if(fixed&&digitalOnly)return `<div class="ks-default-editor"><p class="ks-description">paperless fan club · unlimited downloads</p><div class="ks-complete-stage ks-complete-stage--saved"><img class="ks-complete-preview" width="1080" height="1440" src="/api/print/digital/image" alt="Your complete digital postcard"></div></div>`;
+    if(fixed)return `<div class="ks-default-editor"><p class="ks-description">Pixel picked these for you. Choose your border.</p><div class="ks-preview-wrap"><img class="ks-default-image" width="1200" height="1500" data-default-image src="${esc(defaultSrc())}" alt="Pixel’s fixed postcard: family photo above, dogs on the lower left and family on the lower right"></div></div>`;
     return `<div class="ks-editor-stage"><div class="ks-editor-art"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five postcard: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Edit photo ${i+1}" aria-expanded="false" aria-controls="ks-edit-tools" aria-describedby="ks-direct-help"></button>`).join('')}</div></div></div>${digitalOnly?'':frameMarkup()}<div class="ks-editor-controls"><p id="ks-direct-help" class="ks-crop-hint">Tap a photo to edit. You can also drag to reframe or swap.</p><div class="ks-edit-tools" id="ks-edit-tools" hidden>
       <div data-edit-mode="choose"><button type="button" data-edit-action="reframe">Reframe</button><button type="button" data-edit-action="swap">Swap</button><button type="button" data-edit-action="done">Done</button></div>
       <div data-edit-mode="reframe" hidden><button type="button" data-edit-action="up">Move up</button><button type="button" data-edit-action="down">Move down</button><button type="button" data-edit-action="done">Done</button></div>
@@ -251,11 +251,19 @@ export function mountKeepsake(journal,section){
       const complete=await digitalFlow.prepare();
       if(stamp!==revision||!modal.open||step!=='preview')return;
       if(!complete)throw new Error('Your digital postcard could not be prepared. Please try again.');
+      const preview=modal.querySelector('.ks-complete-preview');
+      const next=preview.cloneNode(false),url=URL.createObjectURL(complete);
+      next.src=url;
+      try{
+        await next.decode();
+        if(stamp!==revision||!modal.open||step!=='preview')return;
+        preview.replaceWith(next);
+        if(digitalPreviewUrl){URL.revokeObjectURL(digitalPreviewUrl);urls.delete(digitalPreviewUrl);}
+        digitalPreviewUrl=url;urls.add(url);
+      }finally{
+        if(digitalPreviewUrl!==url)URL.revokeObjectURL(url);
+      }
       file=complete;
-      if(digitalPreviewUrl){URL.revokeObjectURL(digitalPreviewUrl);urls.delete(digitalPreviewUrl);}
-      digitalPreviewUrl=URL.createObjectURL(complete);urls.add(digitalPreviewUrl);
-      const preview=modal.querySelector('.ks-complete-preview');preview.src=digitalPreviewUrl;await preview.decode();
-      if(stamp!==revision||!modal.open||step!=='preview')return;
       borderTransition?.finish();
       busy=false;updateExport();
     }catch(error){if(stamp!==revision||error.name==='AbortError')return;borderTransition?.cancel();busy=false;setStatus(error.message);updateExport();const retry=document.createElement('button');retry.className='ks-text';retry.textContent='Try again';retry.onclick=paintCard;modal.querySelector('.ks-status')?.append(' ',retry);}

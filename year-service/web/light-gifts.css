@@ -97,7 +97,7 @@
   border-radius: 16px;
   transition: translate 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
 }
-:root[data-palette=moss] .pb-presents .pb-present-card:focus-within {
+:root[data-palette=moss][data-input-modality=keyboard] .pb-presents .pb-present-card:focus-within {
   border-color: var(--pb-gift-edge-hover);
 }
 @media (hover: hover) and (pointer: fine) {
