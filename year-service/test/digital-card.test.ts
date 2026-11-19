@@ -12,5 +12,5 @@ for(const personalized of [false,true])test(`complete ${personalized?'personaliz
 });
 test('all new digital-only copy has Marathi and Traditional Chinese counterparts',()=>{
  assert.ok(digitalUi.length>=30);for(const [source,mr,zh] of digitalUi){assert.ok(source&&mr?.trim()&&zh?.trim());assert.notEqual(source,mr);assert.notEqual(source,zh);}
- assert.match(digitalDictionary('mr')['paperless fans, that’s us'],/पेपरलेस/);assert.match(digitalDictionary('zh-TW')['all the Pixel, none of the postage. save your postcard and we’ll skip mailing one to your household.'],/不另外寄紙本/);
+ assert.match(digitalDictionary('mr')['Save digital postcard'],/जतन करा/);assert.match(digitalDictionary('zh-TW')['Choosing digital means we’ll skip mailing a postcard to your household.'],/不會寄紙本/);
 });

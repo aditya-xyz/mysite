@@ -12,15 +12,15 @@ function fixture(){
   const bottom={
     set innerHTML(markup:string){
       writes++;buttons.clear();
-      for(const match of markup.matchAll(/data-(print|save|share)\b/g))buttons.set(match[1],{disabled:false,listeners:0,addEventListener(){this.listeners++;}});
+      for(const match of markup.matchAll(/data-(print|save|share)\b/g))buttons.set(match[1],{disabled:false,listeners:0,matches(selector:string){return selector===`[data-${match[1]}]`;},addEventListener(){this.listeners++;}});
     },
     querySelector:(selector:string)=>buttons.get(selector.slice(6,-1)),
     querySelectorAll:()=>[...buttons.values()],
     setAttribute:(name:string,value:string)=>attributes.set(name,value),
   };
-  const state:any={file:{},busy:false,step:'edit',exportSignature:null,mode:'save',print:true,
+  const state:any={file:{},busy:false,step:'edit',exportSignature:null,mode:'save',print:true,printActive:false,
     modal:{querySelector:(selector:string)=>selector==='.ks-export-actions'?bottom:null},
-    printFlow:{prepare(){},bind:(container:any)=>container.querySelector('[data-print]')?.addEventListener('click',()=>{})},
+    printFlow:{prepare(){},isActive:()=>state.printActive,bind:(container:any)=>container.querySelector('[data-print]')?.addEventListener('click',()=>{})},
     download(){},shareCard(){},
   };
   state.exportActions=()=>`${state.print?`<button data-print ${state.file?'':'disabled'}>A Christmas gift</button>`:''}<button data-${state.mode} ${state.file?'':'disabled'}>Keep it digital</button>`;
@@ -40,6 +40,9 @@ test('border repaints keep both export buttons mounted and block stale exports u
     assert.equal(print.disabled,false);assert.equal(digital.disabled,false);
     assert.equal(f.attributes.get('aria-busy'),'false');
   }
+  f.state.printActive=true;f.run();
+  assert.equal(print.disabled,true);assert.equal(digital.disabled,false);
+  f.state.printActive=false;f.run();assert.equal(print.disabled,false);
   assert.equal(f.writes(),1);assert.equal(print.listeners,1);assert.equal(digital.listeners,1);
 });
 
