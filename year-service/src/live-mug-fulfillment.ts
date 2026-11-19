@@ -1,5 +1,5 @@
 import {PrintProblem,type PrintEnv} from './printing.ts';
-import {printfulApi} from './printful.ts';
+import {printfulApi,printfulRecipient,validPrintfulShippingMethod} from './printful.ts';
 import {requireLiveGift} from './live-gifts.ts';
 import {digest,now,token} from './security.ts';
 // @ts-expect-error Shared verified artwork versions, including per-area calibrations.
@@ -36,7 +36,7 @@ export function checkedMugDraft(order:any,payload:any,maxCents=2500){
 }
 export async function liveMugSource(env:PrintEnv,capability:string){
  if(env.LIVE_GIFT_ORDERING!=='true')throw new PrintProblem(404,'Print file not found.');
- const row=await env.DB.prepare("SELECT o.print_artwork_key FROM live_gift_orders l JOIN mug_orders o ON o.id=l.order_id WHERE l.kind='mug' AND l.asset_token_hash=?1 AND l.asset_expires_at>?2").bind(await digest(capability),now()).first<{print_artwork_key:string}>();
+ const row=await env.DB.prepare("SELECT o.print_artwork_key FROM live_gift_orders l JOIN mug_orders o ON o.id=l.order_id JOIN editions e ON e.year=l.year WHERE e.is_active=1 AND e.taken_offline_at IS NULL AND l.state IN ('working','draft','submitting','unknown','submitted') AND l.kind='mug' AND l.asset_token_hash=?1 AND l.asset_expires_at>?2").bind(await digest(capability),now()).first<{print_artwork_key:string}>();
  const file=row?.print_artwork_key&&await env.MEDIA.get(row.print_artwork_key);
  if(!file)throw new PrintProblem(404,'Print file not found.');
  return new Response(file.body,{headers:{'Content-Type':'image/png','Cache-Control':'private, no-store','X-Robots-Tag':'noindex, nofollow','Referrer-Policy':'no-referrer'}});
@@ -44,7 +44,11 @@ export async function liveMugSource(env:PrintEnv,capability:string){
 export async function tickLiveMugFulfillment(env:PrintEnv,preferredId?:string){
  if(env.LIVE_GIFT_ORDERING!=='true')return;
  // An expired mutation lease is ambiguous, never permission to charge again.
- await env.DB.prepare("UPDATE live_gift_orders SET state='unknown',error='Submission needs review; it will not be retried automatically.',updated_at=?1 WHERE kind='mug' AND state IN ('working','submitting') AND lease_until<?1").bind(now()).run();
+ const at=now();
+ await env.DB.batch([
+  env.DB.prepare("UPDATE live_gift_orders SET state='unknown',error='Submission needs review; it will not be retried automatically.',updated_at=?1 WHERE kind='mug' AND state IN ('working','submitting') AND lease_until<?1").bind(at),
+  env.DB.prepare("UPDATE mug_orders SET status='unknown',updated_at=?1 WHERE status='simulated' AND id IN (SELECT order_id FROM live_gift_orders WHERE kind='mug' AND state='unknown')").bind(at)
+ ]);
  const job=await env.DB.prepare("SELECT l.*,o.address_json,o.recipient_name,o.quote_json AS estimate_json,o.print_artwork_key,o.print_layout_version FROM live_gift_orders l JOIN mug_orders o ON o.id=l.order_id WHERE l.kind='mug' AND l.state IN ('pending','draft') AND l.lease_until<?1 AND o.status='simulated' AND o.allowance_reset_at IS NULL ORDER BY CASE WHEN l.order_id=?2 THEN 0 ELSE 1 END,l.created_at LIMIT 1").bind(now(),preferredId||'').first<any>();
  if(!job)return;
  const locked=await env.DB.prepare("UPDATE live_gift_orders SET lease_until=?1,state=CASE WHEN state='pending' THEN 'working' ELSE state END,updated_at=?2 WHERE order_id=?3 AND state=?4 AND lease_until<?2 RETURNING order_id").bind(now()+180,now(),job.order_id,job.state).first();
@@ -59,10 +63,11 @@ export async function tickLiveMugFulfillment(env:PrintEnv,preferredId?:string){
   let payload=job.payload_json?JSON.parse(job.payload_json):null,remote:any;
   if(job.state==='pending'){
    const quote=JSON.parse(job.estimate_json||'null');
-   if(!quote?.withinBudget||quote.currency!=='USD'||quote.totalCents>2500||!Number.isSafeInteger(quote.variantId)||quote.shippingMethod!=='STANDARD')throw new PrintProblem(409,'A current destination-aware mug quote is required.');
+   if(!quote?.withinBudget||quote.currency!=='USD'||quote.totalCents>2500||!Number.isSafeInteger(quote.variantId)||!validPrintfulShippingMethod(quote.shippingMethod))throw new PrintProblem(409,'A current destination-aware mug quote is required.');
    const address=JSON.parse(job.address_json),capability=token(),origin=new URL(env.SOCIAL_JOURNAL_ORIGIN||env.JOURNAL_ORIGIN||'');
+   if(quote.destination!==address.country)throw new PrintProblem(409,'A current destination-aware mug quote is required.');
    if(origin.protocol!=='https:')throw new PrintProblem(503,'The private print-file origin is unavailable.');
-   payload={external_id:job.order_id,shipping:'STANDARD',recipient:{name:job.recipient_name,address1:address.line1,address2:address.line2||'',city:address.city,state_code:address.state,country_code:address.country,zip:address.postalCode},items:[{variant_id:quote.variantId,quantity:1,files:[{type:'default',url:origin.origin+'/api/gift/order-source/'+capability}]}]};
+   payload={external_id:job.order_id,shipping:quote.shippingMethod,recipient:{name:job.recipient_name,...printfulRecipient(address)},items:[{variant_id:quote.variantId,quantity:1,files:[{type:'default',url:origin.origin+'/api/gift/order-source/'+capability}]}]};
    await env.DB.prepare('UPDATE live_gift_orders SET payload_json=?1,asset_token_hash=?2,asset_expires_at=?3 WHERE order_id=?4').bind(JSON.stringify(payload),await digest(capability),now()+7*86400,job.order_id).run();
    mutated=true;
    remote=await provider(env,job.order_id,'/orders?confirm=0&update_existing=0',payload);
@@ -88,10 +93,17 @@ export async function tickLiveMugFulfillment(env:PrintEnv,preferredId?:string){
   try{await provider(env,job.order_id,'/orders/'+Number(job.provider_id)+'/confirm',{});}catch{/* Reconcile this exact draft ID once; never repeat confirmation. */}
   remote=await provider(env,job.order_id,'/orders/'+Number(job.provider_id));
   if(remote.external_id!==job.order_id||!['pending','inreview','inprocess','fulfilled','partial'].includes(remote.status)||remote.costs?.currency!=='USD'||cents(remote.costs.total)>2500)throw new PrintProblem(502,'The mug submission outcome needs review. Do not place another order.');
-  await env.DB.batch([env.DB.prepare("UPDATE live_gift_orders SET state='submitted',error=NULL,updated_at=?1 WHERE order_id=?2").bind(now(),job.order_id),env.DB.prepare("UPDATE mug_orders SET status='submitted',updated_at=?1 WHERE id=?2 AND status='simulated'").bind(now(),job.order_id)]);
+  await env.DB.batch([
+   env.DB.prepare("UPDATE live_gift_orders SET state='submitted',error=NULL,updated_at=?1 WHERE order_id=?2 AND state='submitting'").bind(now(),job.order_id),
+   env.DB.prepare("UPDATE mug_orders SET status='submitted',updated_at=?1 WHERE id=?2 AND status='simulated' AND EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.order_id=mug_orders.id AND l.state='submitted')").bind(now(),job.order_id)
+  ]);
  }catch(error){
   const current=await env.DB.prepare('SELECT state FROM live_gift_orders WHERE order_id=?1').bind(job.order_id).first<{state:string}>();
-  const state=current?.state==='submitting'||mutated&&current?.state==='working'?'unknown':'review';
-  await env.DB.prepare('UPDATE live_gift_orders SET state=?1,error=?2,updated_at=?3 WHERE order_id=?4').bind(state,error instanceof PrintProblem?error.message:'The supplier request needs review. It will not be repeated automatically.',now(),job.order_id).run();
+  if(!current||!['working','draft','submitting'].includes(current.state))return;
+  const state=current.state==='submitting'||mutated&&current.state==='working'?'unknown':'review';
+  await env.DB.batch([
+   env.DB.prepare('UPDATE live_gift_orders SET state=?1,error=?2,updated_at=?3 WHERE order_id=?4 AND state=?5').bind(state,error instanceof PrintProblem?error.message:'The supplier request needs review. It will not be repeated automatically.',now(),job.order_id,current.state),
+   env.DB.prepare("UPDATE mug_orders SET status='unknown',updated_at=?1 WHERE id=?2 AND status='simulated' AND EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.order_id=mug_orders.id AND l.state='unknown')").bind(now(),job.order_id)
+  ]);
  }
 }

@@ -158,7 +158,7 @@ test('an angle download failure stops loading and the same control can retry',as
  const controls=f.figure.children[1];controls.children[1].onclick();await settle();
  assert.equal(f.figure.attrs.get('aria-busy'),'false');assert.match(f.figure.children[2].textContent,/Tap.*retry/);
  controls.children[1].onclick();assert.equal(f.figure.attrs.get('aria-busy'),'true');await settle();
- assert.equal(f.figure.attrs.get('aria-busy'),'false');assert.equal(f.figure.children[2].textContent,'Printful mockup · final placement may vary');
+ assert.equal(f.figure.attrs.get('aria-busy'),'false');assert.equal(f.figure.children[2].textContent,'Mug preview · final placement may vary');
  assert.equal(fetch.mock.callCount(),3);
 });
 

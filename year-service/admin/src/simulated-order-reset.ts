@@ -1,5 +1,5 @@
 import {PrintProblem,type PrintEnv} from '../../src/printing.ts';
-import {releaseResetPostcardIntent} from '../../src/live-gifts.ts';
+import {postcardAllowanceResettableSQL,postcardLiveJoinSQL,resetPostcardIntentStatement} from '../../src/live-gifts.ts';
 export async function resetSimulatedOrder(env:PrintEnv,kind:'print'|'mug',year:number,invite:string,data:Record<string,unknown>){
  if(kind==='print')return resetPrintAllowance(env,year,invite,data);
  if(data.confirm!==true||typeof data.orderId!=='string'||!new RegExp(`^${kind}-[a-z0-9]+$`).test(data.orderId))throw new PrintProblem(400,'Confirm clearing this simulated order and its saved design.');
@@ -13,14 +13,16 @@ export async function resetSimulatedOrder(env:PrintEnv,kind:'print'|'mug',year:n
 }
 
 export async function resetPrintAllowance(env:PrintEnv,year:number,invite:string,data:Record<string,unknown>){
- if(data.confirm!==true||typeof data.orderId!=='string'||!/^print-[a-z0-9]+$/.test(data.orderId))throw new PrintProblem(400,'Confirm allowing one more print for this invitation.');
+ if(data.confirm!==true||typeof data.orderId!=='string'||!/^print-(?:fallback-)?[a-z0-9]+$/.test(data.orderId))throw new PrintProblem(400,'Confirm allowing one more print for this invitation.');
  // Release only this completed reservation. The timestamp records which order
  // consumed the previous allowance, and existing triggers release the 0/1 marker.
- const order=await env.DB.prepare(`UPDATE print_orders SET allowance_reset_at=unixepoch(),updated_at=unixepoch()
- WHERE id=?1 AND invitation_id=?2 AND year=?3 AND allowance_reset_at IS NULL AND status IN ('simulated','submitted')
- AND NOT EXISTS(SELECT 1 FROM print_fulfillment f WHERE f.order_id=print_orders.id AND NOT (f.state='submitted' OR (f.state='review' AND f.basket_item_id IS NULL)))
- RETURNING id,allowance_reset_at`).bind(data.orderId,invite,year).first<{id:string;allowance_reset_at:number}>();
+ const reset=env.DB.prepare(`UPDATE print_orders SET allowance_reset_at=unixepoch(),updated_at=unixepoch()
+ WHERE id=?1 AND invitation_id=?2 AND year=?3 AND allowance_reset_at IS NULL
+ AND EXISTS(SELECT 1 FROM print_orders o LEFT JOIN print_fulfillment f ON f.order_id=o.id
+ ${postcardLiveJoinSQL} WHERE o.id=print_orders.id AND ${postcardAllowanceResettableSQL})
+ RETURNING id,allowance_reset_at`).bind(data.orderId,invite,year);
+ const [result]=await env.DB.batch<{id:string;allowance_reset_at:number}>([reset,resetPostcardIntentStatement(env,data.orderId,invite,year)]);
+ const order=result.results[0];
  if(!order)throw new PrintProblem(409,'The print allowance changed, or the order is still processing or uncertain. Refresh before resetting.');
- if(env.LIVE_GIFT_ORDERING==='true')await releaseResetPostcardIntent(env,order.id);
  return {reset:true,remaining:1,historyCleared:false,orderId:order.id,resetAt:order.allowance_reset_at};
 }

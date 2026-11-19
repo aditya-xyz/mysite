@@ -145,7 +145,10 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
     const dutchCookie = (await guest('open', {token: linkCode(dutchInvite)})).headers.get('Set-Cookie')!.split(';')[0];
     assert.equal((await guest('send', {}, dutchCookie)).status, 200);
     await db.prepare('UPDATE sms_test_invites SET last_send_at=0 WHERE id=?').bind(dutchInvite.id).run();
+    const counters=()=>db.prepare('SELECT sends,last_send_at FROM sms_test_invites WHERE phone=?').bind(netherlands).first();
+    const beforeBudgetRejection=await counters();
     assert.equal((await guest('send', {}, dutchCookie)).status, 429, 'All three countries share the production SMS budget');
+    assert.deepEqual(await counters(),beforeBudgetRejection,'A blocked global budget does not consume the link’s allowance or cooldown');
     assert.deepEqual(sent, [india, us, netherlands]);
     assert.equal((await admin('/' + dutchInvite.id + '/revoke', {})).status, 200);
     assert.equal((await guest('status', undefined, dutchCookie)).status, 401);

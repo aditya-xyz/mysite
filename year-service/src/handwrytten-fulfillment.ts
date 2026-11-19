@@ -138,7 +138,9 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
   if(!saved)throw new PrintProblem(409,'The saved order was reset.');
   const payload=JSON.parse(saved.handwrytten_order_json),address=JSON.parse(saved.address_json),country=await handwryttenCountry(env,address.country),sender=await handwryttenSender(env);
   if(payload.addresses?.length!==1||payload.addresses[0].to_country!==country.name)throw new PrintProblem(409,'The saved destination does not match.');
-  if(live){
+  // The campaign pricing preview accepts only US and Canadian destinations.
+  // For other destinations the validated, unsent basket supplies the capped quote.
+  if(live&&['US','CA'].includes(address.country)){
    const preview=await handwryttenCheckoutQuote(env,{cardId:payload.card_id,message:payload.addresses[0].message,orderId:job.order_id,country:country.name});
    await env.DB.prepare('UPDATE print_orders SET handwrytten_quote_json=?1,budget_review_required=?2 WHERE id=?3').bind(JSON.stringify({...preview,testMode,maxCents:1000}),Number(preview.amounts.total>1000),job.order_id).run();
    if(preview.amounts.total>1000){await update('review','The postcard preview exceeds $10. No order was submitted.');return;}

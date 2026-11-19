@@ -13,7 +13,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
  }
  function previewData(){const data=getData();return {...data,recipe:{...data.recipe,frontDesign:data.personalized?frontDesign:'default'}};}
  function prepare(){} // Local artwork is already prepared by the editor.
- function buttonMarkup(){return (status?.eligible||status?.canOrder)?`<button class="ks-print ks-gift" aria-label="Order complimentary print" data-print ${getData().file?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18v4H3zm2 4v9h14v-9M12 8v13M12 8C5 8 4 2 8 3c3 0 4 5 4 5Zm0 0c7 0 8-6 4-5-3 0-4 5-4 5Z"/></svg><span>A Christmas gift</span></button>`:'';}
+ function buttonMarkup(){return (status?.eligible||status?.canOrder)?`<button class="ks-print ks-gift" aria-label="Order complimentary print" data-print ${getData().file?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18v4H3zm2 4v9h14v-9M12 8v13M12 8C5 8 4 2 8 3c3 0 4 5 4 5Zm0 0c7 0 8-6 4-5-3 0-4 5-4 5Z"/></svg><span>mail it, on us</span></button>`:'';}
  async function open(){
   if(dialog||closed||!(status?.eligible||status?.canOrder))return;
   let data=previewData();if(!data.file)return;
@@ -57,7 +57,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   }
   function finish(order){
    status={...status,eligible:false,canOrder:false,order,remaining:0};onChange(status);closeDialog(sheet);
-   onOrdered(order.live?(order.status==='submitted'?'Your postcard order is with Handwrytten.':'Order received 💌'):order.testMode?'Test postcard ordered. No physical mail will be sent.':order.status==='simulated'?'Test postcard order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your postcard gift is headed your way 💌':'Your print request is recorded.',!order.live&&!order.testMode&&order.status==='simulated',order);
+   onOrdered(order.live?(order.status==='submitted'?'your card is off to the printers.':'Order received 💌'):order.testMode?'Test postcard ordered. No physical mail will be sent.':order.status==='simulated'?'Test postcard order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your postcard gift is headed your way 💌':'Your print request is recorded.',!order.live&&!order.testMode&&order.status==='simulated',order);
   }
   submit.onclick=async()=>{
    if(previewOnly||submitting||!delivery.ready)return;submitting=true;submit.disabled=true;if(data.personalized)sheet.querySelector('[data-swap-card]')?.setAttribute('disabled','');message('Saving your order…');

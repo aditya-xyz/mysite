@@ -10,9 +10,9 @@ export const digitalMailingAllowedSQL=`NOT EXISTS(SELECT 1 FROM digital_postcard
 export const householdMembers=(i:InvitationAudience)=>[...new Set([i.person_id,...invitationMembers(i)].filter(Boolean))];
 export async function digitalPostcard(db:D1Database,i:InvitationAudience){return db.prepare(`SELECT * FROM digital_postcards d WHERE year=?1 AND (invitation_id=?2 OR EXISTS(SELECT 1 FROM json_each(d.member_ids) a JOIN json_each(?3) b ON a.value=b.value)) LIMIT 1`).bind(i.edition_year,i.id,JSON.stringify(householdMembers(i))).first<DigitalPostcard>();}
 export async function digitalContext(env:PrintEnv,i:InvitationAudience){
- if((await giftWindow(env.DB,i)).closed)throw new PrintProblem(403,'The gift deadline has passed.');
  if(!await keepsakeAccess(env,i))throw new PrintProblem(403,'Postcards are not enabled for this invitation and scrapbook.');
  const [edition,claim,defaults]=await Promise.all([env.DB.prepare('SELECT published_json,published_version FROM editions WHERE year=?1 AND is_active=1').bind(i.edition_year).first<{published_json:string;published_version:number}>(),digitalPostcard(env.DB,i),keepsakeDefault(env,i.edition_year)]);
+ if(!claim&&(await giftWindow(env.DB,i)).closed)throw new PrintProblem(403,'The gift deadline has passed.');
  if(!edition?.published_json||!defaults)throw new PrintProblem(409,'Your postcard is not available yet.');
  const p=JSON.parse(edition.published_json) as Published,photos=visiblePhotos(p,i.id,await invitationAudience(env.DB,i)).filter(p=>p.recipients.length),personalized=claim?!!claim.personalized&&photos.length>=3:photos.length>=3;
  const members=JSON.stringify(householdMembers(i));
@@ -25,10 +25,18 @@ export async function digitalContext(env:PrintEnv,i:InvitationAudience){
 }
 export async function digitalStatus(env:PrintEnv,i:InvitationAudience){
  const c=await digitalContext(env,i);
- return {eligible:!c.order&&(c.allowPaperless||!!c.claim),allowPaperless:c.allowPaperless,claimed:!!c.claim,personalized:c.personalized,note:c.note,authors:c.claim?.authors||c.p.authors,frame:c.claim?.frame,contentVersion:c.edition.published_version,defaultRevision:c.claim?.default_revision||c.defaults.revision,defaultSrc:'/api/print/digital/default/',artworkSrc:c.claim?'/api/print/digital/image':null};
+ return {eligible:!c.order&&(c.allowPaperless||!!c.claim),allowPaperless:c.allowPaperless,claimed:!!c.claim,personalized:c.personalized,...(c.claim?{note:c.note}:{}),authors:c.claim?.authors||c.p.authors,frame:c.claim?.frame,contentVersion:c.edition.published_version,defaultRevision:c.claim?.default_revision||c.defaults.revision,defaultSrc:'/api/print/digital/default/',artworkSrc:c.claim?'/api/print/digital/image':null};
+}
+export async function prepareDigitalPostcard(env:PrintEnv,i:InvitationAudience,confirmed:unknown){
+ if(confirmed!==true)throw new PrintProblem(400,'Confirm that your household permanently gives up its mailed postcard.');
+ const c=await digitalContext(env,i);
+ if(!c.allowPaperless&&!c.claim)throw new PrintProblem(403,'Paperless is not enabled for this invitation.');
+ if(c.order)throw new PrintProblem(409,'Your mailed postcard is already reserved.');
+ return {note:c.note,contentVersion:c.edition.published_version,defaultRevision:c.claim?.default_revision||c.defaults.revision};
 }
 export async function digitalImage(env:PrintEnv,i:InvitationAudience,frame?:string){
- const c=await digitalContext(env,i),key=frame?(c.claim?JSON.parse(c.claim.frames_json):c.defaults.frames)[frame]:c.claim?.artwork_key;
+ const c=await digitalContext(env,i);if(!c.claim&&(!c.allowPaperless||c.order))throw new PrintProblem(404,'Digital postcard not found.');
+ const key=frame?(c.claim?JSON.parse(c.claim.frames_json):c.defaults.frames)[frame]:c.claim?.artwork_key;
  if(!key)throw new PrintProblem(404,'Digital postcard not found.');const file=await env.MEDIA.get(key);if(!file)throw new PrintProblem(404,'Digital postcard not found.');
  return new Response(file.body,{headers:{'Content-Type':'image/jpeg','Cache-Control':'no-store, private'}});
 }

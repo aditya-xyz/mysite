@@ -14,16 +14,17 @@ export async function keepsakeAccess(env:PrintEnv,invite:InvitationAudience){
 }
 export async function keepsakeManifest(env:PrintEnv,invite:InvitationAudience,personalCount:number,knownWindow?:Awaited<ReturnType<typeof giftWindow>>){
  const [window,access]=await Promise.all([knownWindow||giftWindow(env.DB,invite),keepsakeAccess(env,invite)]);
- if(window.closed||!access)return {enabled:false};
- const [digital,ordered,defaults]=await Promise.all([
-  digitalPostcard(env.DB,invite),
-  env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json FROM print_orders WHERE invitation_id=?1 AND year=?2 AND card_count=1 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(invite.id,invite.edition_year).first<PrintOrderProof>(),
+ if(!access)return {enabled:false};
+ const digital=await digitalPostcard(env.DB,invite);
+ if(digital)return {enabled:true,mode:digital.personalized&&personalCount>=3?'personal':'default',digitalOnly:true,digitalFrame:digital.frame,digitalArtworkSrc:'/api/print/digital/image',cardCount:1,format:'folded',defaultRevision:digital.default_revision,defaultSrc:'/api/print/digital/default/'};
+ const [ordered,defaults]=await Promise.all([
+  env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json,provider_id,(SELECT state FROM print_fulfillment f WHERE f.order_id=print_orders.id) AS fulfillment_state FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(invite.id,invite.edition_year).first<PrintOrderProof>(),
   keepsakeDefault(env,invite.edition_year)
  ]);
- if(digital)return {enabled:true,mode:digital.personalized&&personalCount>=3?'personal':'default',digitalOnly:true,digitalFrame:digital.frame,digitalArtworkSrc:'/api/print/digital/image',cardCount:1,format:'folded',defaultRevision:digital.default_revision,defaultSrc:'/api/print/digital/default/'};
- if(ordered)ordered.live=!!await liveGiftState(env,ordered.id);
+
+ if(ordered)ordered.live=ordered.provider_id?.startsWith('handwrytten-live-')||(!ordered.provider_id?.startsWith('handwrytten-test-')&&!!await liveGiftState(env,ordered.id));
  if(ordered)return {enabled:true,mode:'default',cardCount:1,order:printOrderView(ordered)};
- if(!defaults)return {enabled:false};
+ if(window.closed||!defaults)return {enabled:false};
  return {enabled:true,allowPaperless:invite.allow_paperless!==0,mode:personalCount>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults.revision,defaultSrc:`/api/keepsake/default/${defaults.revision}/`};
 }
 

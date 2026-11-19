@@ -85,19 +85,23 @@ export async function reserveMugEstimate(env:PrintEnv,invitationId:string){
  }
 }
 
+export const validPrintfulShippingMethod=(id:unknown):id is string=>typeof id==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(id);
+export function printfulRecipient(address:MailingAddress){
+ return {address1:address.line1,address2:address.line2||'',city:address.city,country_code:address.country,zip:address.postalCode,...(address.country==='US'?{state_code:address.state}:address.country==='IN'?{state_name:address.state}:{})};
+}
 export async function estimateMug(env:PrintEnv,configuration:unknown,address:MailingAddress):Promise<MugQuote>{
  const catalog=await printfulCatalog(env,false,address.country),options=validMugOptions(configuration,catalog.styles);if(!options)throw new PrintProblem(400,'Choose an available mug style, size, color and font.');
  const item=catalog.styles.find(i=>i.id===options.style)!;
  // Recheck availability for the exact combination, bypassing the catalog cache.
  const current=await style(env,item,address.country),variant=current.variants.find(v=>v.size===options.size&&v.color===options.color);
  if(!variant)throw new PrintProblem(409,'This mug combination is unavailable. Customize your mug and choose another option.');
- const recipient={address1:address.line1,address2:address.line2,city:address.city,country_code:address.country,zip:address.postalCode,...(address.country==='US'?{state_code:address.state}:address.country==='IN'?{state_name:address.state}:{})};
+ const recipient=printfulRecipient(address);
  const items=[{variant_id:variant.id,quantity:1}];
  let shipping='STANDARD';
  if(address.country!=='US'){
   const rates=await printfulApi(env,'/shipping/rates',{recipient,items,currency:'USD'}) as {id:string;rate:string;currency:string}[];
   if(!Array.isArray(rates))throw new PrintProblem(503,'Printful returned incomplete shipping options. Please try again later.');
-  const options=rates.filter(rate=>typeof rate.id==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(rate.id)&&rate.currency==='USD').map(rate=>({...rate,cents:cents(rate.rate)})).sort((a,b)=>a.cents-b.cents);
+  const options=rates.filter(rate=>validPrintfulShippingMethod(rate.id)&&rate.currency==='USD').map(rate=>({...rate,cents:cents(rate.rate)})).sort((a,b)=>a.cents-b.cents);
   if(!options.length)throw new PrintProblem(409,'This mug cannot currently ship to your address. Customize your mug and choose another option.');
   shipping=options.find(rate=>rate.id==='STANDARD')?.id||options[0].id;
  }

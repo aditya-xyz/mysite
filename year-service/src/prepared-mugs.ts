@@ -189,11 +189,5 @@ export async function tickPreparedMugs(env:PrintEnv,nightly=false){
  for(const {year} of years.results){const sync=await env.DB.prepare('SELECT * FROM mug_preview_sync WHERE year=?1').bind(year).first<Sync>();if(nightly||sync?.requested||!sync||sync.synced_at<now()-86400){await syncPreparedMugs(env,year);return;}}
  await env.DB.prepare("UPDATE mug_preview_jobs SET status=CASE WHEN attempts>=5 THEN 'failed' ELSE 'queued' END,source_expires_at=0,source_token=NULL WHERE status='starting' AND updated_at<?1").bind(now()-180).run();
  await finishPreparedJobs(env);
- let first=await startPreparedJob(env);
- if(!first){
-  const queued=await env.DB.prepare("SELECT id FROM mug_preview_jobs WHERE product_id NOT IN (407,837) AND status='queued' AND next_check_at<=?1 LIMIT 1").bind(now()).first();
-  const lease=await env.DB.prepare("SELECT expires_at FROM rate_limits WHERE key='printful-mockup-lease'").first<{expires_at:number}>();
-  if(queued&&lease&&lease.expires_at>now()){await new Promise(resolve=>setTimeout(resolve,Math.min(31,lease.expires_at-now())*1000+100));first=await startPreparedJob(env);}
- }
- if(first){await new Promise(resolve=>setTimeout(resolve,31050));await startPreparedJob(env);}
+ await startPreparedJob(env);
 }

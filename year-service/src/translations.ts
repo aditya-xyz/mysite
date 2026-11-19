@@ -11,7 +11,7 @@ export function translationSources(d:Draft):TranslationSource[]{
  for(const [source] of uiDrafts as string[][])add('ui:'+source,source,'Site controls & Pixel’s voice');
  for(const key of ['intro','note','sharedTitle'] as const)add(key,d[key],'Opening & story');
  for(const s of d.stories||[]){add(`story:${s.id}:title`,s.title,'Opening & story');add(`story:${s.id}:body`,s.body,'Opening & story');}
- for(const p of d.photos||[]){if(p.hidden)continue;add(`photo:${p.id}:caption`,p.caption,'Photo zingers');}
+ for(const p of d.photos||[]){if(p.hidden)continue;add(`photo:${p.id}:caption`,p.caption,'Photo zingers');if(p.shortLabel)add(`photo:${p.id}:shortLabel`,p.shortLabel,'Photo zingers');}
  return entries;
 }
 export function starterTranslations(locale:Language):TranslationEntries{
@@ -28,11 +28,16 @@ export async function translationPayload(db:D1Database,year:number,requested:unk
 }
 export function translated(entries:TranslationEntries,key:string,source:string){const e=entries[key];return e?.source===source&&e.value?.trim()?e.value:source;}
 // Only recipient presentation is localized. Printing uses the original edition and its English note.
-export function localizeJournal<T extends {intro?:string;note?:string;sharedTitle?:string;stories?:{id:string;title:string;body:string}[];photos:{id:string;caption:string;alt:string}[]}>(journal:T,payload:{language:Language;translations:TranslationEntries}){
+export function localizeJournal<T extends {intro?:string;note?:string;sharedTitle?:string;stories?:{id:string;title:string;body:string}[];photos:{id:string;caption:string;shortLabel?:string;alt:string}[]}>(journal:T,payload:{language:Language;translations:TranslationEntries}){
  const entries=payload.translations;
  for(const key of ['intro','note','sharedTitle'] as const)if(journal[key])journal[key]=translated(entries,key,journal[key]!);
  journal.stories=journal.stories?.map(s=>({...s,title:translated(entries,`story:${s.id}:title`,s.title),body:translated(entries,`story:${s.id}:body`,s.body)}));
- journal.photos=journal.photos.map(p=>({...p,caption:translated(entries,`photo:${p.id}:caption`,p.caption)}));
+ journal.photos=journal.photos.map(photo=>{
+  const caption=translated(entries,`photo:${photo.id}:caption`,photo.caption);
+  const label=entries[`photo:${photo.id}:shortLabel`];
+  const shortLabel=payload.language==='en'?photo.shortLabel:label?.source===photo.shortLabel&&label?.value.trim()?label.value:undefined;
+  return {...photo,caption,shortLabel};
+ });
  // Never send the full translation draft (including other recipients’ captions) to a guest.
  const ui:Record<string,string>=Object.create(null);
  for(const [source] of uiDrafts as string[][]){const e=entries['ui:'+source];if(e?.source===source&&e.value?.trim())ui[source]=e.value;}

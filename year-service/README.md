@@ -116,8 +116,8 @@ The 2026 editor has a custom-domain binding at https://admin.adityapatil.xyz,
 with https://aditya-private-admin.aditya-year-service.workers.dev as its protected
 fallback. DNS, HTTPS, the Access redirect, and the signed-in custom-domain
 dashboard were verified on November 9, 2026.
-Only aditya.patil.gverse@gmail.com and sevnangels@gmail.com are allowed through Google + Cloudflare Access;
-the Worker also verifies the signed Access JWT on every request. The owner
+Only the owner and approved admins are allowed through Google + Cloudflare Access.
+The Worker also verifies the signed Access JWT on every request. The owner
 confirmed the live sign-in on November 8, 2026. See admin/README.md for setup,
 operations, and validation details.
 

@@ -6,9 +6,11 @@ send endpoint. The public Netlify portfolio is unchanged.
 
 ## Access configuration
 
-The owner is `aditya.patil.gverse@gmail.com`; Angela (`sevnangels@gmail.com`) also
-has full admin access. `ADMIN_EMAIL` retains the owner and `ADMIN_EMAILS` is a
-comma-separated list of additional exact admin emails. Google is connected to Cloudflare
+Set the owner’s exact email in the Cloudflare Worker secret `ADMIN_EMAIL` and
+any additional exact addresses in the comma-separated secret `ADMIN_EMAILS`.
+Use the dashboard or `wrangler secret put <NAME> --config admin/wrangler.jsonc`
+from `year-service`. Configure both before deploying. For local development,
+put the same names in `admin/.dev.vars` with test addresses. Google is connected to Cloudflare
 Access through the team `https://billowing-truth-eac1.cloudflareaccess.com`.
 The Google OAuth secret belongs only in Cloudflare's identity-provider setup;
 it is never needed by this repository or frontend.

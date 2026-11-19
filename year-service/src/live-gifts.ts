@@ -27,14 +27,19 @@ export async function liveGiftState(env:PrintEnv,orderId:string){
  if(env.LIVE_GIFT_ORDERING!=='true')return null;
  return env.DB.prepare('SELECT state,error,provider_id,max_cents FROM live_gift_orders WHERE order_id=?1').bind(orderId).first<{state:string;error:string|null;provider_id:string|null;max_cents:number}>();
 }
-// An explicit admin allowance reset permits one more completed postcard checkout.
-// Keep the original order and fulfillment audit; uncertain orders stay reserved.
-export function releaseResetPostcardIntent(env:PrintEnv,orderId:string){
- return env.DB.prepare(`DELETE FROM live_gift_orders WHERE order_id=?1 AND kind='postcard' AND state='submitted'
- AND EXISTS(SELECT 1 FROM print_orders o WHERE o.id=live_gift_orders.order_id
- AND o.invitation_id=live_gift_orders.invitation_id AND o.year=live_gift_orders.year
- AND o.status='submitted' AND o.allowance_reset_at IS NOT NULL
- AND o.provider_id=(CASE json_extract(o.handwrytten_quote_json,'$.testMode') WHEN 1 THEN 'handwrytten-test-' WHEN 0 THEN 'handwrytten-live-' END)||live_gift_orders.provider_id
- AND json_extract(o.handwrytten_quote_json,'$.submitted')=1
- AND EXISTS(SELECT 1 FROM print_fulfillment f WHERE f.order_id=o.id AND f.state='submitted'))`).bind(orderId).run();
+// This predicate is shared by the reset, the admin action, and the release of the live slot.
+export const postcardIntentResettableSQL=`((o.status='submitted' AND f.state='submitted' AND l.state='submitted'
+ AND o.provider_id=(CASE json_extract(o.handwrytten_quote_json,'$.testMode') WHEN 1 THEN 'handwrytten-test-' WHEN 0 THEN 'handwrytten-live-' END)||l.provider_id
+ AND json_extract(o.handwrytten_quote_json,'$.submitted')=1)
+ OR (o.status='simulated' AND f.state='review' AND f.basket_item_id IS NULL AND l.state='review'
+ AND l.provider_id IS NULL AND o.provider_id IS NULL
+ AND coalesce(json_extract(o.handwrytten_quote_json,'$.submitAttempted'),0)=0))`;
+export const postcardLiveJoinSQL="LEFT JOIN live_gift_orders l ON l.order_id=o.id AND l.invitation_id=o.invitation_id AND l.year=o.year AND l.kind='postcard'";
+export const postcardAllowanceResettableSQL=`o.status IN ('simulated','submitted') AND
+ ((l.order_id IS NULL AND (f.order_id IS NULL OR f.state='submitted' OR (f.state='review' AND f.basket_item_id IS NULL))) OR ${postcardIntentResettableSQL})`;
+export function resetPostcardIntentStatement(env:PrintEnv,orderId:string,invite:string,year:number){
+ return env.DB.prepare(`DELETE FROM live_gift_orders AS l WHERE order_id=?1 AND invitation_id=?2 AND year=?3 AND kind='postcard'
+ AND EXISTS(SELECT 1 FROM print_orders o JOIN print_fulfillment f ON f.order_id=o.id
+ WHERE o.id=l.order_id AND o.invitation_id=l.invitation_id AND o.year=l.year AND o.allowance_reset_at IS NOT NULL
+ AND ${postcardIntentResettableSQL})`).bind(orderId,invite,year);
 }

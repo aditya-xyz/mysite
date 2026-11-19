@@ -72,7 +72,8 @@ async function validDraft(value: unknown, env: Env, year: number): Promise<Draft
     if(p.hidden!==undefined && typeof p.hidden!=="boolean")return fail("Check the photo visibility.");
     if(p.audience!==undefined && p.audience!=="shared" && p.audience!=="personal")return fail("Check the photo audience.");
     if(!p.hidden && p.audience==="personal" && !p.recipients.length)return fail("Select people for this photo or hide it until you’re ready.");
-    return {id:p.id, caption:text(p.caption,"photo caption",500,false), alt:text(p.alt,"photo description",500,!p.hidden), recipients:[...new Set(p.recipients)],
+    const shortLabel=p.shortLabel===undefined?'':text(p.shortLabel,'short photo label',60,false);
+    return {id:p.id, ...(shortLabel?{shortLabel}:{}), caption:text(p.caption,"photo caption",500,false), alt:text(p.alt,"photo description",500,!p.hidden), recipients:[...new Set(p.recipients)],
       ...(p.hidden?{hidden:true}:{}),...(p.audience?{audience:p.audience}:{})};
   });
   const stories = d.stories.map(s => {
@@ -507,7 +508,7 @@ export default {
     }
     const headers = new Headers(response.headers);
     headers.set("Cache-Control","private, no-store"); headers.set("Referrer-Policy","no-referrer");
-    headers.set("X-Content-Type-Options","nosniff"); headers.set("X-Frame-Options","DENY");
+    headers.set("Cross-Origin-Resource-Policy","same-origin"); headers.set("X-Content-Type-Options","nosniff"); headers.set("X-Frame-Options","DENY");
     headers.set("X-Robots-Tag","noindex, nofollow, noarchive");
     headers.set("Content-Security-Policy","default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     headers.set("Permissions-Policy","camera=(), microphone=(), geolocation=()");

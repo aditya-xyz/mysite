@@ -106,7 +106,7 @@ type VerifyApi = (resource: 'Verifications' | 'VerificationCheck', params: Recor
   Promise<{status?: string; sid?: string}>;
 
 export async function smsTestRoute(request: Request, path: string, env: SmsTestEnv,
-  readBody: () => Promise<Record<string, unknown>>, verifyApi: VerifyApi) {
+  readBody: () => Promise<Record<string, unknown>>, verifyApi: VerifyApi,verifyConfigured:boolean) {
   const action = path.slice('/api/sms-test/'.length), db = env.DB;
   if (action === 'status' && request.method === 'GET') return Response.json(state(await testSession(request, db)));
   if (!['preview', 'open', 'send', 'verify'].includes(action) || request.method !== 'POST') {
@@ -143,7 +143,7 @@ export async function smsTestRoute(request: Request, path: string, env: SmsTestE
   const invite = await testSession(request, db);
   if (invite.verified_at !== null || !invite.phone) throw new SmsTestProblem(409, 'This test is already complete.');
   if (action === 'send') {
-    if (env.SMS_ENABLED !== 'true') throw new SmsTestProblem(503, 'Text verification is temporarily unavailable.');
+    if (env.SMS_ENABLED !== 'true'||!verifyConfigured) throw new SmsTestProblem(503, 'Text verification is temporarily unavailable.');
     if (invite.sends >= MAX_SENDS || invite.attempts >= MAX_CHECKS) {
       throw new SmsTestProblem(429, 'This test has reached its attempt limit. Ask for a fresh test invite.');
     }
@@ -159,7 +159,13 @@ export async function smsTestRoute(request: Request, path: string, env: SmsTestE
         AND last_send_at<=?3 AND sends<?4 AND attempts<?5 RETURNING id`)
       .bind(invite.id, stamp, stamp - SEND_COOLDOWN, MAX_SENDS, MAX_CHECKS).first();
     if (!reserved) throw new SmsTestProblem(409, 'A request is already in progress or this test closed. Refresh and try again.');
-    await reserveSmsSend(env);
+    try{await reserveSmsSend(env);}
+    catch(error){
+      // No provider request was made and the old challenge is still valid.
+      await db.prepare('UPDATE sms_test_invites SET sends=sends-1,last_send_at=?1 WHERE id=?2 AND last_send_at=?3 AND sends=?4')
+       .bind(invite.last_send_at,invite.id,stamp,invite.sends+1).run();
+      throw error;
+    }
     const result = await verifyApi('Verifications', {To: invite.phone, Channel: 'sms'});
     if (result.status !== 'pending' || !result.sid || !/^VE[a-f0-9]{32}$/i.test(result.sid)) {
       throw new SmsTestProblem(503, 'The text request could not be confirmed. Please try again shortly.');

@@ -51,7 +51,7 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json,provider_id,(SELECT state FROM print_fulfillment f WHERE f.order_id=print_orders.id) AS fulfillment_state FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
  const window=await giftWindow(env.DB,i);
  const digital=await digitalPostcard(env.DB,i);
- if(existing)existing.live=!!await liveGiftState(env,existing.id)&&!existing.provider_id?.startsWith('handwrytten-test-');
+ if(existing)existing.live=existing.provider_id?.startsWith('handwrytten-live-')||(!existing.provider_id?.startsWith('handwrytten-test-')&&!!await liveGiftState(env,existing.id));
  const live=await liveGiftAllowed(env,i.id,i.edition_year,'postcard');
  const mode=live&&env.PRINT_ORDER_MODE==='handwrytten_live'?'handwrytten_live':env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':simulatedOrders(request,env)?'local_mock':'disabled';
  let reason='';

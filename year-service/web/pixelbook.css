@@ -42,10 +42,14 @@ main{max-width:1320px;margin:0 auto;padding:0 var(--pb-content-gutter)}
     gap: 10px;
   }
 }
-@media (max-width: 640px) {
-  #app :is(.personal-photos, .shared-photos) > .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.grid .card .pb-photo-short-label{display:none}
+@media(max-width:640px){
+  #app :is(.personal-photos,.shared-photos)>.grid{grid-auto-rows:auto;align-items:stretch;gap:9px}
+  #app .grid .card{padding:4px 4px 8px;min-width:0}
+  #app .grid .card img{aspect-ratio:1;object-fit:cover;height:auto}
+  #app .grid .card :is(.pb-photo-caption,.pb-photo-short-label){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;font-size:11px;margin-top:6px}
+  #app .grid .card:has(.pb-photo-short-label) .pb-photo-caption{display:none}
+  .pb-mug-review .pb-dialog-bottom .button,#keepsake .ks-paper-tabs .ks-frame{white-space:normal;overflow-wrap:anywhere}
 }
 .pb-gift{background:var(--surface);border:1px solid var(--line);display:grid;grid-template-columns:1.2fr .8fr;gap:60px;padding:58px 60px;margin:48px 0 56px;border-radius:3px}
 .pb-gift h2{font-size:clamp(43px,5vw,64px);line-height:1.04;letter-spacing:-.055em;margin:14px 0 24px}.pb-gift h2 em{font-style:normal;font-weight:inherit;letter-spacing:inherit;color:var(--ink)}.pb-gift-copy>p:not(.pb-eyebrow){font-size:14px}.pb-gift .pb-budget{max-width:320px;font-size:12px;font-weight:600;color:var(--accent);margin:22px 0 4px;line-height:1.8}.pb-gift .button{gap:24px}.pb-gift .pb-gift-allowance{font-size:10px;color:var(--muted);margin:0}
@@ -446,7 +450,7 @@ header .theme-toggle{min-width:44px;min-height:44px}
 }
 
 /* Pixel’s buttons keep the same relaxed case in both gift flows and all locales. */
-:is(.pb-gift-dialog,#keepsake,.ks-print-dialog,.ks-digital-confirm) button{text-transform:lowercase}
+
 @media(max-width:700px){
  .pb-gift-dialog{max-height:calc(100dvh - 24px)}
  .pb-gift-dialog[open]:has(.pb-designs){height:min(740px,calc(100dvh - 24px))}
@@ -489,3 +493,6 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-mug-confirmation .pb-mug-preview figcaption{display:none}
 .pb-mug-submitting .pb-dialog-bottom{display:none}
 @media(max-width:700px){.pb-mug-confirmation .pb-printful-mockup{height:clamp(100px,calc(100dvh - 480px),260px)}.pb-mug-confirmation .pb-gift-done .pb-mug-preview{margin:8px auto 12px}}
+
+.pb-gift-postscript a{color:inherit;text-underline-offset:.2em}
+.grid .card.pb-photo-unavailable img{min-height:72px;background:var(--surface)}

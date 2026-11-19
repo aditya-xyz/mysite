@@ -1,3 +1,4 @@
+import {postcardAllowanceResettableSQL,postcardLiveJoinSQL} from '../../src/live-gifts.ts';
 import {quoteSavedPrintOrder} from '../../src/handwrytten-quote.ts';
 import {prepareSavedOrderProof} from '../../src/handwrytten-previews.ts';
 import {handwryttenStatus} from '../../src/handwrytten.ts';
@@ -21,9 +22,9 @@ export async function printAdminRoute(request:Request,env:PrintEnv,path:string,y
   const counts=await env.DB.prepare(`SELECT i.id AS invitation_id,
  (SELECT count(*) FROM print_orders h WHERE h.invitation_id=i.id AND h.year=i.edition_year AND h.status IN ('preparing','simulated','submitted','unknown')) AS count,
  i.print_order_count AS used,o.id AS active_order_id,o.status,
- CASE WHEN o.status IN ('simulated','submitted') AND (f.order_id IS NULL OR f.state='submitted' OR (f.state='review' AND f.basket_item_id IS NULL)) THEN 1 ELSE 0 END AS can_reset
+ CASE WHEN ${postcardAllowanceResettableSQL} THEN 1 ELSE 0 END AS can_reset
  FROM invites i LEFT JOIN print_orders o ON o.invitation_id=i.id AND o.year=i.edition_year AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated','submitted','unknown')
- LEFT JOIN print_fulfillment f ON f.order_id=o.id WHERE i.edition_year=?1`).bind(year).all();
+ LEFT JOIN print_fulfillment f ON f.order_id=o.id ${postcardLiveJoinSQL} WHERE i.edition_year=?1`).bind(year).all();
   return Response.json({orders:rows.results,counts:counts.results});
  }
  const quote=/^\/api\/print-orders\/([a-z0-9-]+)\/quote$/.exec(path);

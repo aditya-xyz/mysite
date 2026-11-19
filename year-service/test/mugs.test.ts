@@ -162,7 +162,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.equal((await db.prepare("SELECT mug_order_count,print_order_count FROM invites WHERE id='mug-invite'").first<any>()).mug_order_count,1);
    assert.equal((await sim('journal')).status,200);assert.equal((await (await sim('journal')).json() as any).gift.mode,'simulation');assert.equal((await (await sim('journal')).json() as any).gift.hasOrder,true);
    const savedGift=(await (await sim('journal')).json() as any).gift.claim;
-   assert.deepEqual(savedGift,{designId:first.designId,status:first.status,configuration:first.configuration,design:first.design});
+   assert.deepEqual(savedGift,{designId:first.designId,status:first.status,approvalRequired:first.approvalRequired,configuration:first.configuration,design:first.design});
    assert.equal('address' in savedGift,false,'Journal preloads only the gift display, without shipping details');
    assert.equal((await admin('mug-settings',{allowMugOrders:false})).status,200);
    assert.equal((await (await sim('gift/status')).json() as any).claim.id,first.id);assert.equal((await sim(first.design.src.replace('/api/',''))).status,200);
@@ -291,7 +291,7 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    assert.equal((await request('gift/quote')).status,429,'Signed-in network activity remains bounded');
    assert.equal(providerCalls.length,before);
   });
-  await t.test('mockups expose only expiring print capabilities and cache authenticated provider images without ordering',async()=>{
+  await t.test('legacy mockup uploads are closed and authenticated cached images remain usable',async()=>{
    const live=async(path:string,init:any={})=>{
     const encoded=init.body instanceof FormData?new Request('https://live.test',{method:'POST',body:init.body}):null;
     const body=encoded?await encoded.arrayBuffer():init.body;
@@ -300,20 +300,22 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    const configuration={style:'classic',size:'11oz',color:'white',font:'clean'};
    const png=new Uint8Array(33);png.set([137,80,78,71,13,10,26,10]);const view=new DataView(png.buffer);view.setUint32(16,1800);view.setUint32(20,700);png[24]=8;png[25]=6;
    const form=()=>{const f=new FormData();f.append('designId','mug-0');f.append('configuration',JSON.stringify(configuration));f.append('artwork',new File([png],'print.png',{type:'image/png'}));return f;};
-   const jobResponse=await live('mockup',{method:'POST',body:form()});assert.equal(jobResponse.status,200,await jobResponse.clone().text());const job=await jobResponse.json() as any;assert.equal(job.status,'pending');
+   const beforeUpload=providerCalls.length;
+   assert.equal((await live('mockup',{method:'POST',body:form()})).status,410);
+   assert.equal(providerCalls.length,beforeUpload);
+   assert.equal((await db.prepare('SELECT count(*) n FROM mug_mockups').first<any>()).n,0);
+   const job={id:'b'.repeat(64)};
+   const {published_json}=await db.prepare('SELECT published_json FROM editions WHERE year=2026').first<any>();
+   const design=JSON.parse(published_json).mugDesigns.find((m:any)=>m.id==='mug-0');
+   await bucket.put('cached-preview.png',png,{httpMetadata:{contentType:'image/png'}});
+   await db.prepare("INSERT INTO mug_mockups(id,invitation_id,year,recipe_key,design_id,configuration_json,caption,cutout_version,source_key,image_key,status,source_expires_at,next_poll_at,layout_version) VALUES(?1,'mug-invite',2026,'recipe','mug-0',?2,?3,?4,'expired','cached-preview.png','ready',0,0,3)").bind(job.id,JSON.stringify(configuration),design.caption,design.cutoutVersion).run();
    assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup/'+job.id)).status,401);
-   assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup-source/'+job.id)).status,200);
-   assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup-source/'+'f'.repeat(64))).status,404);
-   const initialCalls=providerCalls.length;assert.equal((await live('mockup/'+job.id)).status,200);assert.equal(providerCalls.length,initialCalls,'Polls before ten seconds do not call Printful');
-   await db.prepare('UPDATE mug_mockups SET next_poll_at=0 WHERE id=?1').bind(job.id).run();
-   const result=await (await live('mockup/'+job.id)).json() as any;assert.equal(result.status,'ready');assert.match(result.src,/^\/api\/gift\/mockup\//);
    assert.equal((await live('mockup/'+job.id+'/image')).headers.get('Content-Type'),'image/png');
-   assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup-source/'+job.id)).status,404,'The temporary source is removed on completion');
+   assert.equal((await mf.dispatchFetch('https://live.test/api/gift/mockup-source/'+job.id)).status,404);
    const lookupPayload={designId:'mug-0',configuration};
    const beforeLookup=providerCalls.length;
    const cachedLookup=await live('mockup/lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(lookupPayload)});assert.equal(cachedLookup.status,200);assert.equal((await cachedLookup.json() as any).status,'ready');assert.equal(providerCalls.length,beforeLookup,'Cache lookup skips rendering, upload and provider calls');
    const missingLookup=await live('mockup/lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...lookupPayload,configuration:{...configuration,font:'serif'}})});assert.equal((await missingLookup.json() as any).status,'missing');
-   const beforeCache=providerCalls.length;const reused=await (await live('mockup',{method:'POST',body:form()})).json() as any;assert.equal(reused.status,'ready');assert.equal(providerCalls.length,beforeCache);
    assert.equal((await db.prepare('SELECT count(*) n FROM mug_orders').first<any>()).n,0);
    assert.ok(!providerCalls.includes('/orders'));
    const saved=await (await mf.dispatchFetch('https://live.test/api/gift/claim',{method:'POST',headers:{Origin:'https://live.test',Cookie:'__Host-year_session='+raw,'Content-Type':'application/json'},body:JSON.stringify({designId:'mug-0',configuration,addressVersion:1,requestKey:crypto.randomUUID(),mockupId:job.id})})).json() as any;

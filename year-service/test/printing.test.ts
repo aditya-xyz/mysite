@@ -55,6 +55,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await db.batch((await readFile('migrations/0038_paperless_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0039_allow_paperless.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
+  await db.batch((await readFile('migrations/0041_scoped_live_gifts.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   const expires=Math.floor(Date.now()/1000)+86400,session='c'.repeat(64);
   await db.prepare("INSERT INTO people(id,name,phone) VALUES('contact','Test Recipient','+15555550100'),('partner','Test Partner',NULL)").run();
   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('invite','contact',?1,'Test Recipient','+15555550100',?2,?3)").bind(await digest('a'.repeat(64)),expires,JSON.stringify(['contact','partner'])).run();
@@ -248,6 +249,8 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    assert.equal(placed.format,'folded');assert.equal(placed.cardCount,1);assert.equal(placed.personalized,true);
    assert.equal(placed.preview.backText,'pixelbook ’26');assert.equal(placed.preview.note,foldedPreviewNote);assert.equal(placed.preview.authors,'Pixel');assert.ok(!JSON.stringify(placed).includes(published.printNote),'Guest receipts never expose the real note');assert.equal((await status()).preview.note,foldedPreviewNote);
    const row=await db.prepare('SELECT * FROM print_orders').first<any>();assert.equal(row.format,'folded');assert.equal(row.note,greeted(published.printNote),'Actual note is frozen for fulfillment');assert.equal(row.back_text,'pixelbook ’26');assert.equal(row.status,'simulated');const payload=JSON.parse(row.handwrytten_order_json);assert.equal(payload.addresses[0].message,greeted(published.printNote)+'\n\n<doodle:6 scale=1 rotate=0>');assert.equal(payload.font,'hwMadeline');assert.equal(payload.font_size,13);assert.equal(payload.auto_font_size,true);assert.ok(!JSON.stringify(payload).includes(foldedPreviewNote));assert.equal(JSON.parse(row.recipe_json).layout,'a2-portrait-v1');
+   const receipt=(await(await guest('journal')).json() as any).keepsake.order;
+   assert.equal(receipt.id,placed.id);assert.equal(receipt.personalized,true);assert.equal(receipt.defaultSrc,placed.defaultSrc);
    const inside=await guest(placed.defaultSrc.slice(5));assert.equal(inside.status,200);const frozen=await inside.arrayBuffer();
    assert.equal((await guest(placed.defaultSrc.slice(5),undefined,{cookie:false})).status,401);
    await db.prepare("UPDATE editions SET published_json=json_set(published_json,'$.printNote','New note','$.authors','New authors') WHERE year=2026").run();

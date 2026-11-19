@@ -19,9 +19,9 @@ test('digital confirmation can cancel, then locks default once and preserves dir
  const notices:string[]=[];
  const mobile=createDigitalFlow({journal:{year:2026,name:'Household',householdSize:1},getData:()=>({frame:'winterlight',background:'/winterlight.png',images:[],crops:[],photoIds:[],cropMap:{}}),loadImage:async()=>image,onChange(){},onSaved(_state:any,message:string){if(message)notices.push(message);}});
  try{
-  await mobile.refresh();const firstTap=mobile.requestCopy(true);await settle();const confirm=dialog.querySelector('[data-confirm]').onclick();assert.equal(shares,2,'Confirmation opens native Share immediately, before the preference save resolves');await settle();releasePost!();await confirm;await firstTap;
-  assert.equal(downloads,beforeMobileDownloads,'Mobile confirmation must never start a file download');assert.equal(shares,2);
-  const nextTap=mobile.requestCopy(true);assert.equal(shares,3,'The next tap opens native sharing synchronously with the complete JPG');await nextTap;
+  await mobile.refresh();const firstTap=mobile.requestCopy(true);await settle();const confirm=dialog.querySelector('[data-confirm]').onclick();assert.equal(shares,1,'Confirmation keeps native Share closed before the claim succeeds');await settle();releasePost!();await confirm;await firstTap;
+  assert.equal(downloads,beforeMobileDownloads,'Mobile confirmation must never start a file download');assert.equal(shares,1);
+  const nextTap=mobile.requestCopy(true);assert.equal(shares,2,'The next tap opens native sharing synchronously with the complete JPG');await nextTap;
   const shareFailure=mock.method(navigator as any,'share',async()=>{throw new Error('Native share failed');});await mobile.requestCopy(true);assert.match(notices.at(-1)!,/Tap Share to try again/);assert.equal(downloads,beforeMobileDownloads);shareFailure.mock.restore();
   const unsupported=mock.method(navigator as any,'canShare',()=>false);await mobile.requestCopy(true);assert.match(notices.at(-1)!,/isn’t available/);assert.equal(downloads,beforeMobileDownloads,'Unsupported mobile sharing must not silently download');unsupported.mock.restore();
  }finally{mobile.close();}

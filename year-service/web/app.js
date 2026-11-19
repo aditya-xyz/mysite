@@ -20,13 +20,12 @@ import {photoOrder,adjacentIndex,swipeStep,wheelNavigation,paginationDots,dismis
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#photo');
 const save = document.querySelector('#save');
-const fullResolution=document.querySelector('#full-resolution');
 const previousPhoto=document.querySelector('#previous-photo'),nextPhoto=document.querySelector('#next-photo'),photoStage=dialog.querySelector('.photo-stage');
 const photoSlide=createPhotoSlide(dialog.querySelector('.photo-image'),dialog.querySelector('img'),sessionImages.isUsableURL);
 const viewerLoading={resolveSource:source=>sessionImages.url(source),isUsableURL:sessionImages.isUsableURL};
 let photoOpening=null;
 let viewerPhotos=[],viewerIndex=-1,viewerReturnFocus,keepsake,pixelGift,scrapbookMotion,stopGiftDeadline;
-let preparedFile, selected, journal, saveMode = 'share', generation = 0, fullImageUrl, originalRequest, downloadPending=false, imageObserver, layoutObserver, closeTimer;
+let preparedFile, selected, journal, generation = 0, originalRequest, downloadPending=false, imageObserver, layoutObserver, closeTimer;
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path, data) {
   if(data===undefined){try{return await readResource('/api/'+path);}catch(error){if([401,403].includes(error.status))sessionImages.clear();throw error;}}
@@ -72,7 +71,7 @@ function showOffline(){
   app.innerHTML='<section class="entry"><p class="kicker">A private edition</p><h1>This scrapbook has<br><em>been taken offline.</em></h1><p>It’s unavailable to guests right now. Please check back later.</p><button class="text-button" id="retry">Check again</button></section>';
   document.querySelector('#retry').onclick=start;
 }
-function message(error) { if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;} app.innerHTML = `<section class="entry"><p class="kicker">A private edition</p><h1>A little<br><em>patience.</em></h1><p>${escape(error.message)}</p><button class="text-button" id="retry">Try again</button></section>`; document.querySelector('#retry').onclick = start; }
+function message(error) { if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;} app.innerHTML = `<section class="entry"><p class="kicker">A private edition</p><h1>Pixelbook is taking a nap.</h1><p>${escape(error.message)}</p><button class="text-button" id="retry">Try again</button></section>`; document.querySelector('#retry').onclick = start; }
 async function start() {
   clearBrand();
   const footer=document.querySelector('footer');footer.hidden=true;footer.replaceChildren();
@@ -94,13 +93,15 @@ function showCode(invite) {
   const resend = document.querySelector('#resend');
   const timer = setInterval(() => { if (!resend.isConnected) {clearInterval(timer); return;} remaining--; resend.textContent = remaining > 0 ? `Resend available in ${remaining} seconds` : 'Text me a new code'; if (remaining <= 0) {resend.disabled=false; clearInterval(timer);} },1000);
   resend.onclick = async () => {resend.disabled=true; try {await api('send',{}); showCode(invite);} catch(error) {if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}document.querySelector('#error').textContent=error.message;resend.disabled=false;} };
-  const input = document.querySelector('#code'); input.focus(); input.oninput = () => {input.value=input.value.replace(/\D/g,'');};
-  app.querySelector('form').onsubmit = async e => {e.preventDefault(); const button=app.querySelector('[type=submit]');button.disabled=true;try {await api('verify',{code:input.value});journal=await api('journal');showJournal();} catch(error){if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}document.querySelector('#error').textContent=error.message;button.disabled=false;}};
+  const form=app.querySelector('form'),input=form.querySelector('#code'),button=form.querySelector('[type=submit]');
+  input.focus();
+  input.oninput=()=>{input.value=input.value.replace(/\D/g,'').slice(0,6);if(input.value.length===6&&!button.disabled)form.requestSubmit();};
+  form.onsubmit = async e => {e.preventDefault();if(button.disabled||!/^\d{6}$/.test(input.value))return;button.disabled=true;try {await api('verify',{code:input.value});journal=await api('journal');showJournal();} catch(error){if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}document.querySelector('#error').textContent=error.message;button.disabled=false;}};
 }
 function layoutPhotoGrid(grid){
   if(!grid)return;
   const style=getComputedStyle(grid),unit=parseFloat(style.gridAutoRows),gap=parseFloat(style.rowGap);
-  if(!Number.isFinite(unit))return;
+  if(!Number.isFinite(unit)){grid.querySelectorAll('.card').forEach(card=>card.style.removeProperty('grid-row-end'));return;}
   // Read all heights before writing spans to avoid a layout flush per card.
   const spans=[...grid.querySelectorAll('.card')].map(card=>[card,'span '+Math.ceil((card.getBoundingClientRect().height+gap)/(unit+gap))]);
   spans.forEach(([card,span])=>{if(card.style.gridRowEnd!==span)card.style.gridRowEnd=span;});
@@ -113,7 +114,7 @@ function showJournal() {
   renderFooter(journal.shareSocials===true);
   imageObserver?.disconnect();layoutObserver?.disconnect();
   applyBrand(journal.authors,journal.year);
-  const cards = personal => journal.photos.filter(p=>p.personal===personal).map(p=>`<button class="card" data-photo="${escape(p.id)}" aria-label="Open photo: ${escape(p.caption)}"><img data-src="${escape(p.src)}" alt="${escape(p.alt)}" loading="eager" decoding="async" ${p.width&&p.height?`width="${p.width}" height="${p.height}"`:'class="pending-dimensions"'}/><span>${escape(p.caption)}</span></button>`).join('');
+  const cards = personal => journal.photos.filter(p=>p.personal===personal).map(p=>`<button class="card" data-photo="${escape(p.id)}" aria-label="Open photo: ${escape(p.caption)}"><img data-src="${escape(p.src)}" alt="${escape(p.alt)}" loading="eager" decoding="async" ${p.width&&p.height?`width="${p.width}" height="${p.height}"`:'class="pending-dimensions"'}/><span class="pb-photo-caption">${escape(p.caption)}</span>${p.shortLabel?`<span class="pb-photo-short-label" aria-hidden="true">${escape(p.shortLabel)}</span>`:''}</button>`).join('');
   const hasPersonal=journal.photos.some(p=>p.personal), sharedTitle=sharedHeading(journal.sharedTitle);
   const stories=(journal.stories || []).map(s=>`<section class="letter"><h2>${escape(s.title)}</h2><p class="prose">${escape(s.body)}</p></section>`).join('');
   app.innerHTML = `${openingMarkup(journal)}${hasPersonal?`<section class="personal-photos" aria-label="Photos selected for ${escape(journal.name)}">${sectionHeading('01','my humans’ friends','a few photos picked especially for you.','','my friends')}<div class="grid">${cards(true)}</div></section>`:''}<section class="shared-photos" aria-labelledby="shared-title">${sectionHeading(hasPersonal?'02':'',sharedTitle,'the adventures. the people. the photographic evidence.','shared-title')}<div class="grid">${cards(false)}</div></section>${stories}${giftMarkup(journal)}`;
@@ -131,12 +132,14 @@ function showJournal() {
       const image=next.shift();pending.delete(image);imageObserver?.unobserve(image);active++;
       const src=image.dataset.src;delete image.dataset.src;let done=false,timer;
       const finish=()=>{if(done)return;done=true;clearTimeout(timer);active--;image.onload=null;image.onerror=null;scheduleLayout(image.closest('.grid'));pumpImages();};
+      const unavailable=()=>{if(done)return;finish();image.removeAttribute('src');image.classList.add('is-ready');image.closest('.card')?.classList.add('pb-photo-unavailable');scrapbookMotion?.photoReady(image.closest('.card'));};
       image.fetchPriority=distance(image)===0?'high':'low';
+      timer=setTimeout(unavailable,10000);
       sessionImages.url(src).then(url=>{
-        if(!image.isConnected){finish();return;}
+        if(done||!image.isConnected){finish();return;}
         const ready=()=>{image.dataset.loadedSrc=src;image.classList.remove('pending-dimensions');image.classList.add('is-ready');scrapbookMotion?.photoReady(image.closest('.card'));finish();};
-        image.onload=ready;image.onerror=()=>{image.classList.add('is-ready');finish();};timer=setTimeout(()=>{image.removeAttribute('src');finish();},10000);image.src=url;
-      }).catch(()=>{image.classList.add('is-ready');scrapbookMotion?.photoReady(image.closest('.card'));finish();});
+        image.onload=ready;image.onerror=unavailable;image.src=url;
+      }).catch(unavailable);
     }
   };
   const images=app.querySelectorAll('img[data-src]');
@@ -162,7 +165,10 @@ function showJournal() {
   app.querySelectorAll('[data-photo]').forEach(button => button.onclick=()=>openPhoto(journal.photos.find(p=>p.id===button.dataset.photo)));
   pixelGift=mountPixelGift(journal,app);
   sessionImages.bind(app);
-  stopGiftDeadline=app.querySelector('.pb-presents')?watchGiftDeadline(journal.giftWindow,()=>{keepsake?.destroy();pixelGift?.destroy();app.querySelector('.pb-presents')?.remove();},{refresh:()=>api('gift/deadline')}):null;
+  stopGiftDeadline=!journal.giftWindow?.closed&&app.querySelector('.pb-presents')?watchGiftDeadline(journal.giftWindow,()=>{
+    pixelGift?.destroy();app.querySelector('#pb-gift')?.remove();app.querySelector('.pb-gift-postscript')?.remove();
+    if(!keepsake?.hasSavedPostcard?.()){keepsake?.destroy();app.querySelector('.pb-presents')?.remove();}
+  },{refresh:()=>api('gift/deadline')}):null;
   window.scrollTo(0,0);
 }
 function galleryImage(photo){
@@ -179,8 +185,7 @@ function openPhoto(photo) {
 }
 function showPhoto(photo,direction=0,thumbnail=null){
   originalRequest?.abort();originalRequest=null;
-  if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}
-  selected=photo;preparedFile=null;saveMode='share';const current=++generation;
+  selected=photo;preparedFile=null;const current=++generation;
   const image=dialog.querySelector('img'),frame=dialog.querySelector('.photo-image');
   photoSlide.cancel(!!direction);image.draggable=false;image.alt=photo.alt;
   if(!direction||!image.getAttribute('src')){image.style.visibility='hidden';image.removeAttribute('src');frame.style.setProperty('--photo-ratio',String(photo.width&&photo.height?photo.width/photo.height:1));}
@@ -204,7 +209,7 @@ function showPhoto(photo,direction=0,thumbnail=null){
     fail(){photoSlide.cancel();image.style.visibility='hidden';frame.removeAttribute('aria-busy');loader.textContent='Couldn’t load this photo. ';const retry=document.createElement('button');retry.type='button';retry.textContent='Try again';retry.onclick=()=>showPhoto(photo);loader.append(retry);}
   };
   if(ready){const rendered=viewerOptions.reveal(ready.src,ready.width,ready.height);if(ready.preview)rendered.then(()=>{if(current!==generation)return;loadViewerPhoto(photo,{...viewerLoading,isCurrent:()=>current===generation&&dialog.open&&!preparedFile,reveal:src=>photoSlide.upgrade(src),fail(){}});});}else loadViewerPhoto(photo,viewerOptions);
-  document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full res';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');
+  document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;save.removeAttribute('aria-busy');downloadPending=false;
   previousPhoto.disabled=viewerIndex===0;nextPhoto.disabled=viewerIndex===viewerPhotos.length-1;
   document.querySelector('#photo-count').textContent=`Photo ${viewerIndex+1} of ${viewerPhotos.length}`;
   previousPhoto.hidden=nextPhoto.hidden=viewerPhotos.length<2;
@@ -231,9 +236,9 @@ function resetPhotoDrag(animate=false){
 function syncPhotoZoom(){const zoomed=(window.visualViewport?.scale||1)>1;dialog.classList.toggle('is-zoomed',zoomed);if(zoomed){photoSlide.cancel();swipeStart=null;resetPhotoDrag();}}
 window.visualViewport?.addEventListener('resize',syncPhotoZoom);syncPhotoZoom();
 photoStage.addEventListener('pointerdown',event=>{
+  if(event.button!==0||event.target.closest('button')||(window.visualViewport?.scale||1)>1)return;
   pointers.add(event.pointerId);
   if(pointers.size>1){photoSlide.cancel();swipeStart=null;resetPhotoDrag();return;}
-  if(event.button!==0||event.target.closest('button')||(window.visualViewport?.scale||1)>1)return;
   photoOpening?.cancel();photoSlide.begin();photoStage.getAnimations().forEach(animation=>animation.cancel());resetPhotoDrag();
   swipeStart={id:event.pointerId,x:event.clientX,y:event.clientY,dismiss:event.pointerType==='touch'&&!!event.target.closest('.photo-image'),dragging:false,horizontal:false};photoStage.setPointerCapture(event.pointerId);
 });
@@ -258,47 +263,42 @@ photoStage.addEventListener('pointercancel',event=>{photoSlide.settle();pointers
 const wheelStep=wheelNavigation(movePhoto);
 dialog.addEventListener('wheel',event=>{if((window.visualViewport?.scale||1)===1&&wheelStep(event))event.preventDefault();},{passive:false});
 
-async function deliverOriginal(){
-  if(!preparedFile)return;
-  const file=preparedFile;
-  try{
-    if(saveMode==='share'&&navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return;}
-    const url=URL.createObjectURL(file),anchor=document.createElement('a');anchor.href=url;anchor.download=file.name;document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-    document.querySelector('#save-status').textContent='Original downloaded. Your browser chooses where it saves.';
-  }catch(error){if(error.name!=='AbortError'){saveMode='download';document.querySelector('#save-status').textContent='Tap the download icon again to save the original.';}}
+function downloadPhoto(url,name){
+  const anchor=document.createElement('a');anchor.href=url;anchor.download=name;
+  document.body.append(anchor);anchor.click();anchor.remove();
+}
+async function deliverOriginal(file,status){
+  if(navigator.userActivation?.isActive&&navigator.canShare?.({files:[file]})){
+    try{await navigator.share({files:[file]});return;}catch(error){if(error.name==='AbortError')return;}
+  }
+  const url=URL.createObjectURL(file);downloadPhoto(url,file.name);setTimeout(()=>URL.revokeObjectURL(url),60000);
+  status.textContent='Photo downloaded.';
 }
 save.onclick=async()=>{
-  if(!selected?.canSave)return;
-  if(preparedFile){await deliverOriginal();return;}
-  // A same-origin download starts directly from the tap, without fetching an original.
-  const anchor=document.createElement('a');anchor.href=selected.viewerSrc||selected.src;
-  anchor.download='photo-preview.jpg';document.body.append(anchor);anchor.click();anchor.remove();
-  document.querySelector('#save-status').textContent='Preview downloaded. Load Full res if you’d like the original.';
-};
-fullResolution.onclick=async()=>{
-  if(!selected?.canSave||downloadPending||preparedFile)return;
+  if(!selected?.canSave||downloadPending)return;
   const photo=selected,current=generation,status=document.querySelector('#save-status');
-  downloadPending=true;fullResolution.disabled=true;fullResolution.setAttribute('aria-busy','true');fullResolution.textContent='Loading…';status.textContent='Loading the full-resolution photo…';
-  originalRequest=new AbortController();let limited=false;
+  downloadPending=true;save.disabled=true;save.setAttribute('aria-busy','true');
   try{
-    const response=await fetch(photo.src+'/original',{signal:originalRequest.signal});
-    if(!response.ok){
-      const error=await response.json();limited=response.status===429;
-      const reset=error.retryAfter?new Date(Date.now()+error.retryAfter*1000).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
-      throw new Error(limited&&reset?`You’ve reached this photo’s full-resolution limit. Try again after ${reset}, or ask us to reset it.`:error.error||'Could not load full resolution. Please try again.');
+    if(!preparedFile){
+      status.textContent='Getting your photo…';originalRequest=new AbortController();
+      const response=await fetch(photo.src+'/original',{signal:originalRequest.signal});
+      if(current!==generation)return;
+      if(response.status===429){
+        downloadPhoto(photo.viewerSrc||photo.src,'photo-preview.jpg');
+        status.textContent='Full-resolution limit reached. The preview was downloaded.';
+        return;
+      }
+      if(!response.ok)throw new Error('Could not save your photo. Please try again.');
+      const blob=await response.blob();if(current!==generation)return;
+      const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]||'photo.jpg';
+      preparedFile=new File([blob],filename,{type:blob.type});
     }
-    const blob=await response.blob();if(current!==generation)return;
-    const filename=response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]||'photo.jpg';
-    preparedFile=new File([blob],filename,{type:blob.type});
-    photoSlide.cancel();fullImageUrl=URL.createObjectURL(preparedFile);dialog.querySelector('img').src=fullImageUrl;
-    dialog.querySelector('img').style.visibility='visible';
-    dialog.querySelector('.photo-image').removeAttribute('aria-busy');
-    const loader=dialog.querySelector('.photo-loading');if(loader)loader.hidden=true;
-    fullResolution.textContent='Full res ✓';fullResolution.classList.add('is-ready');
-    save.disabled=false;save.setAttribute('aria-label','Save original photo');save.title='Save original photo';
-    status.textContent='Full resolution loaded. Tap the download icon to save or share.';
-  }catch(error){if(current===generation&&error.name!=='AbortError'){status.textContent=error.message;fullResolution.disabled=limited;fullResolution.textContent=limited?'Limit reached':'Retry full res';}}
-  finally{if(current===generation){downloadPending=false;fullResolution.removeAttribute('aria-busy');}}
+    status.textContent='';await deliverOriginal(preparedFile,status);
+  }catch(error){
+    if(current===generation&&error.name!=='AbortError')status.textContent='Could not save your photo. Please try again.';
+  }finally{
+    if(current===generation){downloadPending=false;save.disabled=false;save.removeAttribute('aria-busy');}
+  }
 };
 function closePhoto(){
   photoOpening?.cancel();photoSlide.cancel();
@@ -320,7 +320,7 @@ dialog.querySelector('.close').onclick=closePhoto;
 dialog.addEventListener('cancel',event=>{event.preventDefault();closePhoto();});
 dialog.addEventListener('animationend',event=>{if(event.target===dialog&&event.animationName==='photo-exit'&&dialog.classList.contains('is-closing'))dialog.close();});
 dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closePhoto();}});
-dialog.addEventListener('close',()=>{photoOpening?.cancel();photoOpening=null;photoSlide.cancel();photoSlide.clearNeighbors();clearTimeout(closeTimer);dialog.classList.remove('is-closing','is-returning');resetPhotoDrag();generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;selected=null;swipeStart=null;pointers.clear();viewerPhotos=[];viewerIndex=-1;dialog.querySelector('img').removeAttribute('src');if(fullImageUrl){URL.revokeObjectURL(fullImageUrl);fullImageUrl=null;}const restore=viewerReturnFocus;viewerReturnFocus=null;restore?.focus({preventScroll:true});});
+dialog.addEventListener('close',()=>{photoOpening?.cancel();photoOpening=null;photoSlide.cancel();photoSlide.clearNeighbors();clearTimeout(closeTimer);dialog.classList.remove('is-closing','is-returning');resetPhotoDrag();generation++;originalRequest?.abort();downloadPending=false;preparedFile=null;selected=null;swipeStart=null;pointers.clear();viewerPhotos=[];viewerIndex=-1;dialog.querySelector('img').removeAttribute('src');const restore=viewerReturnFocus;viewerReturnFocus=null;restore?.focus({preventScroll:true});});
 window.addEventListener('pagehide',()=>{photoSlide.cancel();sessionImages.clear();});
 window.addEventListener('pageshow',event=>{if(event.persisted)start();});
 start();

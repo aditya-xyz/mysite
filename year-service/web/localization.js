@@ -24,7 +24,7 @@ export function installLocalization(context){
  const locale=context?.language||'en',dictionary={...digitalDictionary(locale),...context?.uiTranslations};
  document.documentElement.lang=locale;
  if(locale==='en')return;
- const excluded='script,style,textarea,input,canvas,address,[translate="no"],.admin-preview-banner,.fc-note,.fc-back,.pb-design-caption,.pb-design-name,.pb-mug-preview,.card>span,.card>img,#photo-caption,.prose,.letter,.pb-letter-copy>p:not(.pb-eyebrow):not(.pb-letter-greeting):not(.signoff)';
+ const excluded='script,style,textarea,input,canvas,address,[translate="no"],.admin-preview-banner,.fc-note,.fc-back,.pb-design-caption,.pb-design-name,.pb-mug-print p,.card>span,.card>img,#photo-caption,.prose,.letter,.pb-letter-copy>p:not(.pb-eyebrow):not(.pb-letter-greeting):not(.signoff):not(.pb-gift-postscript)';
  const visit=root=>{
   if(root.nodeType===3){if(root.parentElement&&!root.parentElement.closest(excluded)){const result=root.parentElement.matches('[data-card-view="back"]')&&dictionary['Back of card']?dictionary['Back of card']:translateText(root.nodeValue,dictionary);if(result!==root.nodeValue)root.nodeValue=result;}return;}
   if(root.nodeType!==1||root.closest(excluded))return;

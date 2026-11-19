@@ -3,7 +3,7 @@ import {translationPayload,localizeJournal} from './translations.ts';
 import {tickCardFallback} from './card-fallback.ts';
 import {giftWindow} from './gift-deadline.ts';
 import {mugImageResponse} from './mug-images.ts';
-import {digitalStatus,digitalImage,claimDigitalPostcard} from './digital-postcards.ts';
+import {digitalStatus,digitalImage,prepareDigitalPostcard,claimDigitalPostcard} from './digital-postcards.ts';
 import {tickPrintFulfillment} from './handwrytten-fulfillment.ts';
 import {reserveSmsSend,SmsBudgetError,type SmsBudgetEnv} from './sms-budget.ts';
 import {cleanSmsTests, smsTestRoute, SmsTestProblem} from './sms-tests.ts';
@@ -15,7 +15,7 @@ import type {AddressEnv} from '../admin/src/address-verification.ts';
 import {themeAssetManifest,themeAssetResponse} from './theme-assets.ts';
 import {mugStatus,createMugOrder,mugOrderArtwork,mugAllowed,mugQuote} from './mug-orders.ts';
 import {printfulCatalog,printfulEnabled} from './printful.ts';
-import {startMugMockup,mugMockupSource,mugMockupResult,cleanMugMockups,lookupMugMockup} from './mug-mockups.ts';
+import {mugMockupSource,mugMockupResult,cleanMugMockups,lookupMugMockup} from './mug-mockups.ts';
 import {clearExpiredAddressVerifications} from './address-state.ts';
 import {printStatus,createPrintOrder,printOrderArtwork,PrintProblem,simulatedOrders} from './printing.ts';
 import { now, token, digest, cookie, validToken, validCode, sameOrigin, sessionCookie } from "./security.ts";
@@ -103,9 +103,12 @@ async function body(request: Request) {
   try { return JSON.parse(text) as Record<string, unknown>; }
   catch { throw new Failure(400, "Invalid request."); }
 }
+function twilioConfigured(env:Env){
+  return /^SK[a-f0-9]{32}$/i.test(env.TWILIO_API_KEY_SID || "") && !!env.TWILIO_API_KEY_SECRET &&
+    /^VA[a-f0-9]{32}$/i.test(env.TWILIO_VERIFY_SERVICE_SID || "");
+}
 async function twilio(env: Env, resource: string, params: Record<string, string>) {
-  if (!/^SK[a-f0-9]{32}$/i.test(env.TWILIO_API_KEY_SID || "") || !env.TWILIO_API_KEY_SECRET ||
-      !/^VA[a-f0-9]{32}$/i.test(env.TWILIO_VERIFY_SERVICE_SID || "")) {
+  if (!twilioConfigured(env)) {
     throw new Failure(503, "Verification is not configured yet.");
   }
   let response: Response;
@@ -147,7 +150,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
       const hash = await digest(request.headers.get('CF-Connecting-IP') || 'local');
       await limited(env, 'sms-test-ip:' + hash, 60, 3600);
     }
-    return smsTestRoute(request, path, env, () => body(request), (resource, params) => twilio(env, resource, params));
+    return smsTestRoute(request, path, env, () => body(request), (resource, params) => twilio(env, resource, params),twilioConfigured(env));
   }
   if (path.startsWith("/api/") && request.method === "POST") {
     const ip = request.headers.get("CF-Connecting-IP") || "local";
@@ -248,10 +251,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
   if(preparedImage&&request.method==='GET'){const invite=await authenticated(request,env);if(!await mugAllowed(env,invite))throw new PrintProblem(403,'Mug previews are unavailable.');return preparedMugImage(env,invite,preparedImage[1]);}
   const mockupSource=/^\/api\/gift\/mockup-source\/([a-f0-9]{64})$/.exec(path);
   if(mockupSource&&['GET','HEAD'].includes(request.method))return mugMockupSource(env,mockupSource[1]);
-  if(path==='/api/gift/mockup'&&request.method==='POST'){
-    const invite=await authenticated(request,env);await limited(env,'mug-mockup:'+invite.id,60,3600);
-    return json(await startMugMockup(request,env,invite));
-  }
+  if(path==='/api/gift/mockup'&&request.method==='POST')throw new PrintProblem(410,'Mug previews now use the prepared catalog.');
   if(path==='/api/gift/mockup/lookup'&&request.method==='POST'){
     const invite=await authenticated(request,env);await limited(env,'mug-cache:'+invite.id,120,600);
     return json(await lookupMugMockup(env,invite,await body(request)));
@@ -280,6 +280,11 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
   if(path==='/api/print/previews'&&request.method==='POST'){await authenticated(request,env);throw new PrintProblem(410,'Postcard previews are now generated locally. Reopen your postcard.');}
   const pictureProof=/^\/api\/print\/previews\/([a-f0-9]{64})(?:\/(front|inside|back))?$/.exec(path);
   if(pictureProof&&request.method==='GET'){const invite=await authenticated(request,env);return pictureProof[2]?handwryttenPreviewImage(env,invite,pictureProof[1],pictureProof[2]):json(await handwryttenPreviewStatus(env,invite,pictureProof[1]));}
+  if(path==='/api/print/digital/prepare'&&request.method==='POST'){
+    const invite=await authenticated(request,env);
+    await limited(env,'digital-postcard-prepare:'+invite.id,20,600);
+    return json(await prepareDigitalPostcard(env,invite,(await body(request)).confirmed));
+  }
   if(path==='/api/print/digital'){
     const invite=await authenticated(request,env);
     if(request.method==='GET')return json(await digitalStatus(env,invite));
@@ -288,7 +293,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
   const digital=/^\/api\/print\/digital\/(image|default\/(starry-night|evergreen|winterlight))$/.exec(path);
   if(digital&&request.method==='GET')return digitalImage(env,await authenticated(request,env),digital[2]);
   if(path==='/api/print/status'&&request.method==='GET')return json(await printStatus(request,env,await authenticated(request,env)));
-  if(path==='/api/print/orders'&&request.method==='POST'){const invite=await authenticated(request,env);await limited(env,'print-claim:'+invite.id,20,600);const result=await createPrintOrder(request,env,invite);if(['handwrytten_test','handwrytten_live'].includes(env.PRINT_ORDER_MODE||'')&&!result.reused)ctx.waitUntil(tickPrintFulfillment(env,result.order.id));return json(result);}
+  if(path==='/api/print/orders'&&request.method==='POST'){const invite=await authenticated(request,env);await limited(env,'print-claim:'+invite.id,20,600);const result=await createPrintOrder(request,env,invite);return json(result);}
   const theme=/^\/api\/theme\/(welcome|gift|closing)$/.exec(path);
   if(theme&&request.method==='GET'){
     const invite=await authenticated(request,env);
@@ -312,7 +317,7 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
       Object.assign(data,{keepsake});
       if(!giftStatus.eligible){data.gift.enabled=false;data.gift.designs=[];}
       const claim=giftStatus.claim;
-      Object.assign(data.gift,{hasOrder:!!claim,claim:claim?{designId:claim.designId,status:claim.status,configuration:claim.configuration,design:claim.design,...(claim.live?{live:true,fulfillment:claim.fulfillment,fulfillmentError:claim.fulfillmentError}: {})}:null,orderingEnabled:giftStatus.eligible&&(giftStatus.mode==='live'||simulatedOrders(request,env)),mode:giftStatus.mode,livePricing:printfulEnabled(env)});
+      Object.assign(data.gift,{hasOrder:!!claim,claim:claim?{designId:claim.designId,status:claim.status,approvalRequired:claim.approvalRequired,configuration:claim.configuration,design:claim.design,...(claim.live?{live:true,fulfillment:claim.fulfillment,fulfillmentError:claim.fulfillmentError}: {})}:null,orderingEnabled:giftStatus.eligible&&(giftStatus.mode==='live'||simulatedOrders(request,env)),mode:giftStatus.mode,livePricing:printfulEnabled(env)});
       // Old publications remain unchanged; resolve missing preview dimensions read-only.
       for(let offset=0;offset<data.photos.length;offset+=8)await Promise.all(data.photos.slice(offset,offset+8).map(async photo=>{
         if(!photo.width||!photo.height)Object.assign(photo,await previewDimensions(env.MEDIA,edition.photos.find(p=>p.id===photo.id)!.preview_key));
@@ -398,19 +403,27 @@ export default {
     return new Response(response.body, { status: response.status, headers });
   },
   async scheduled(_event: ScheduledEvent, env: Env) {
-    if(_event.cron==='23 9 * * *'){
-    await clearExpiredAddressVerifications(env.DB);
-    await cleanMugMockups(env);
-    await cleanSmsTests(env.DB);
-    await env.DB.batch([
-      env.DB.prepare('DELETE FROM contact_address_checks WHERE expires_at<=?1').bind(now()),
-      env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?1").bind(now()),
-      env.DB.prepare("DELETE FROM rate_limits WHERE expires_at<=?1").bind(now())
-    ]);
+    const nightly=_event.cron==='23 9 * * *';
+    const jobs:Array<[string,()=>Promise<unknown>]>=[
+      ['card fallback',()=>tickCardFallback(env)],
+      ['postcard fulfillment',()=>tickPrintFulfillment(env)],
+      ['mug fulfillment',()=>tickLiveMugFulfillment(env)],
+      ['prepared mug previews',()=>tickPreparedMugs(env,nightly)]
+    ];
+    if(nightly)jobs.unshift(
+      ['address cleanup',()=>clearExpiredAddressVerifications(env.DB)],
+      ['legacy mug cleanup',()=>cleanMugMockups(env)],
+      ['SMS test cleanup',()=>cleanSmsTests(env.DB)],
+      ['session cleanup',()=>env.DB.batch([
+        env.DB.prepare('DELETE FROM contact_address_checks WHERE expires_at<=?1').bind(now()),
+        env.DB.prepare('DELETE FROM sessions WHERE expires_at<=?1').bind(now()),
+        env.DB.prepare('DELETE FROM rate_limits WHERE expires_at<=?1').bind(now())
+      ])]
+    );
+    const errors:unknown[]=[];
+    for(const [name,run] of jobs){
+      try{await run();}catch(error){console.error('Scheduled task failed',name,error);errors.push(error);}
     }
-    try{await tickCardFallback(env);}catch(error){console.error('Card fallback scheduling failed',error);}
-    await tickPrintFulfillment(env);
-    await tickLiveMugFulfillment(env);
-    await tickPreparedMugs(env,_event.cron==='23 9 * * *');
+    if(errors.length)throw new AggregateError(errors,'One or more scheduled tasks failed');
   }
 };

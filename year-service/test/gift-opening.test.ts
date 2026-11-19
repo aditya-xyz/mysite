@@ -32,13 +32,13 @@ test('viewing an existing household gift never renders the selector, including o
  for(let i=0;i<2;i++){
   const opening=launch.onclick();
   assert.equal(modal.open,true);
-  assert.match(modal.innerHTML,i===0?/role="status">Loading your gift/:/Pixel perfect/);
+  assert.match(modal.innerHTML,i===0?/role="status">Loading your gift/:/excellent choice/);
   assert.doesNotMatch(modal.innerHTML,/data-design=|data-gift-next|Gift progress/);
   resolve(Response.json({claim:{status:'simulated',designId:designs[2].id,design:designs[2]}}));
   await opening;
-  assert.match(modal.innerHTML,/Pixel perfect/);
+  assert.match(modal.innerHTML,/excellent choice/);
   assert.match(displayedImages.at(-1).src,/mug-2/);
-  assert.equal(description.textContent,'your morning coffee is about to become more pawesome');
+  assert.equal(description.textContent,'claimed. your mornings are about to look a lot more like me.');
   modal.close();
  }
  assert.ok(history.every(html=>!html.includes('data-design=')));
@@ -49,7 +49,7 @@ test('a household order created since the journal loaded replaces the provisiona
  const fetch=mock.method(globalThis,'fetch',async()=>Response.json({claim:{status:'simulated',designId:designs[1].id,design:designs[1]}}));
  t.after(()=>fetch.mock.restore());
  const opening=launch.onclick();assert.equal(modal.open,true);assert.match(modal.innerHTML,/data-design=/);assert.match(modal.innerHTML,/data-gift-next\b[^>]*\bdisabled/);
- await opening;assert.match(modal.innerHTML,/Pixel perfect/);
+ await opening;assert.match(modal.innerHTML,/excellent choice/);
 });
 
 test('new mugshot selections open directly without a household gift loading screen',async t=>{
@@ -64,7 +64,7 @@ test('new mugshot selections open directly without a household gift loading scre
 test('existing gifts remain viewable after new ordering is disabled',async t=>{
  const {launch,modal,designs}=fixture(t,{orderingEnabled:false});
  const fetch=mock.method(globalThis,'fetch',async()=>Response.json({claim:{status:'simulated',design:designs[0]}}));t.after(()=>fetch.mock.restore());
- await launch.onclick();assert.equal(fetch.mock.callCount(),1);assert.match(modal.innerHTML,/Pixel perfect/);
+ await launch.onclick();assert.equal(fetch.mock.callCount(),1);assert.match(modal.innerHTML,/excellent choice/);
  assert.doesNotMatch(modal.innerHTML,/ordering opens soon|data-design=/);
 });
 
@@ -91,7 +91,7 @@ test('journal snapshot preloads the saved image and opens immediately while refr
  let resolve!:(value:Response)=>void;
  const fetch=mock.method(globalThis,'fetch',async(path:string)=>{assert.equal(path,'/api/gift/status');return new Promise<Response>(r=>resolve=r);});t.after(()=>fetch.mock.restore());
  const opening=launch.onclick();
- assert.equal(modal.open,true);assert.match(modal.innerHTML,/Pixel perfect/);
+ assert.equal(modal.open,true);assert.match(modal.innerHTML,/excellent choice/);
  assert.doesNotMatch(modal.innerHTML,/Loading your gift|data-design=|data-gift-next/);
  assert.equal(displayedImages[0],images[0],'Use the actual preloaded image, without another private image request');
  assert.doesNotMatch(modal.innerHTML,/src="\/api\/gift\/orders\/saved\/mockup"/);
@@ -103,7 +103,7 @@ test('journal snapshot preloads the saved image and opens immediately while refr
 test('cached gift stays visible when its background refresh fails',async t=>{
  const {launch,modal,status}=fixture(t,{claim:savedGift});
  const fetch=mock.method(globalThis,'fetch',async()=>{throw new Error('Temporarily offline');});t.after(()=>fetch.mock.restore());
- await launch.onclick();assert.match(modal.innerHTML,/Pixel perfect/);assert.equal(status.textContent,'Temporarily offline');
+ await launch.onclick();assert.match(modal.innerHTML,/excellent choice/);assert.equal(status.textContent,'Temporarily offline');
  assert.doesNotMatch(modal.innerHTML,/Loading your gift|couldn’t load your gift|data-design=/);
 });
 
@@ -112,13 +112,13 @@ test('background refresh replaces a stale saved gift and preloads its updated im
  const updated={...savedGift,designId:'mug-3',design:{id:'mug-3',src:'/api/gift/orders/new/artwork',mockupSrc:'/api/gift/orders/new/mockup'}};
  const fetch=mock.method(globalThis,'fetch',async()=>Response.json({claim:updated}));t.after(()=>fetch.mock.restore());
  const opening=launch.onclick();assert.equal(displayedImages.at(-1).src,savedGift.design.mockupSrc);
- await opening;assert.match(modal.innerHTML,/Pixel perfect/);assert.equal(images.length,2);assert.equal(displayedImages.at(-1).src,updated.design.mockupSrc);
+ await opening;assert.match(modal.innerHTML,/excellent choice/);assert.equal(images.length,2);assert.equal(displayedImages.at(-1).src,updated.design.mockupSrc);
 });
 
 test('a reset household gift becomes a fresh picker only after the server confirms the reset',async t=>{
  const {launch,modal}=fixture(t,{claim:savedGift});
  const fetch=mock.method(globalThis,'fetch',async()=>Response.json({claim:null}));t.after(()=>fetch.mock.restore());
- const opening=launch.onclick();assert.match(modal.innerHTML,/Pixel perfect/);
+ const opening=launch.onclick();assert.match(modal.innerHTML,/excellent choice/);
  await opening;assert.match(modal.innerHTML,/data-design=/);assert.equal(launch.textContent,'pick your mugshot');
 });
 
@@ -154,7 +154,7 @@ for(const live of [false,true])for(const failFirst of [false,true])test(`${live?
  await next.listeners.click();assert.equal(claims.length,1,'A second tap never creates another request');
  if(failFirst){respond(Response.json({error:'Please try again.'},{status:503}));await pending;assert.equal(status.textContent,'Please try again.');assert.match(modal.innerHTML,/confirm & order/);assert.doesNotMatch(modal.innerHTML,/pb-mug-submission/);pending=next.listeners.click();assert.equal(claims.length,2);assert.deepEqual(claims[0],claims[1],'Retry preserves the idempotency key and chosen mug');}
  respond(Response.json({claim:{live,fulfillment:live?'pending':undefined,status:'simulated',configuration:claims[0].configuration,designId:designs[0].id,design:designs[0]}}));await pending;
- assert.match(modal.innerHTML,/Pixel perfect. one of my favorite photos of me./);assert.doesNotMatch(modal.innerHTML,/<h3>Pixel perfect|excellent choice|that’s a wrap|pb-mug-submission/);assert.match(modal.className,/pb-mug-confirmation/);
+ assert.match(modal.innerHTML,/excellent choice/);assert.doesNotMatch(modal.innerHTML,/<h3>excellent choice|that’s a wrap|pb-mug-submission/);assert.match(modal.className,/pb-mug-confirmation/);
  if(live){assert.match(modal.innerHTML,/order received/);assert.match(modal.innerHTML,/head back to your scrapbook/);assert.doesNotMatch(modal.innerHTML,/mug ordered|Your mug order is with Printful/);assert.equal(fetch.mock.calls.filter(call=>call.arguments[0]==='/api/gift/status').length,1,'No supplier-status polling after the saved claim');}
 });
 
