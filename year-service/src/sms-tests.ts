@@ -23,6 +23,8 @@ interface TestInvite {
   country: typeof PHONE_COUNTRIES[number][0];
   phone_hint: string;
   expires_at: number;
+  redeemed_at: number | null;
+  session_hash: string | null;
   sent_at: number | null;
   sends: number;
   attempts: number;
@@ -116,9 +118,16 @@ export async function smsTestRoute(request: Request, path: string, env: SmsTestE
     const tokenHash = await digest(data.token);
     if (action === 'preview') {
       const invite = await db.prepare(`SELECT * FROM sms_test_invites
-        WHERE token_hash=?1 AND expires_at>?2 AND redeemed_at IS NULL AND revoked_at IS NULL`)
+        WHERE token_hash=?1 AND expires_at>?2 AND revoked_at IS NULL`)
         .bind(tokenHash, stamp).first<TestInvite>();
       if (!invite) throw new SmsTestProblem(401, 'This test invite was already used, expired, or revoked.');
+      if (invite.redeemed_at !== null) {
+        const raw = cookie(request, TEST_SESSION);
+        if (!validToken(raw) || await digest(raw) !== invite.session_hash) {
+          throw new SmsTestProblem(401, 'This test was started in another browser or window. Return to that browser, or ask for a fresh test link.');
+        }
+        return Response.json({...state(invite, stamp), resumed: true});
+      }
       return Response.json(state(invite, stamp));
     }
     const session = token();

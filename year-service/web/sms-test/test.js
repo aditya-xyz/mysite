@@ -55,8 +55,12 @@ async function run(action, data, focus) {
       if (location.hash) history.replaceState(null, '', location.pathname);
       currentAction = 'send';
     }
-    show(await request(action, data));
-    if (action === 'preview') pendingInvite = data.token;
+    const next = await request(action, data);
+    if (action === 'preview') {
+      pendingInvite = next.resumed ? '' : data.token;
+      if (next.resumed && location.hash) history.replaceState(null, '', location.pathname);
+    }
+    show(next);
     status.textContent = action === 'send' ? 'Text requested. Enter the code when it arrives.' : '';
     return true;
   } catch (error) {

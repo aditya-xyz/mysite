@@ -101,7 +101,9 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
     assert.deepEqual(sent, []);
     const opened = await Promise.all([guest('open', {token: linkCode(indiaInvite)}), guest('open', {token: linkCode(indiaInvite)})]);
     assert.deepEqual(opened.map(response => response.status).sort(), [200, 401]);
-    assert.equal((await guest('preview', {token: linkCode(indiaInvite)})).status, 401);
+    const wrongBrowser = await guest('preview', {token: linkCode(indiaInvite)}, '__Host-sms_test_session=' + existingSession);
+    assert.equal(wrongBrowser.status, 401);
+    assert.match(await wrongBrowser.text(), /started in another browser or window/);
     const indiaSession = opened.find(response => response.ok)!.headers.get('Set-Cookie')!;
     assert.match(indiaSession, /^__Host-sms_test_session=.*HttpOnly; Secure; SameSite=Strict/);
     const cookie = indiaSession.split(';')[0];
@@ -111,6 +113,12 @@ test('one-time SMS test links remain isolated from scrapbook access', async () =
 
     const send = await guest('send', {phone: '+31699999999'}, cookie);
     assert.equal(send.status, 200);
+    assert.equal((await guest('preview', {token: linkCode(indiaInvite)})).status, 401);
+    const resumed = await guest('preview', {token: linkCode(indiaInvite)}, cookie);
+    assert.equal(resumed.status, 200);
+    assert.equal(resumed.headers.has('Set-Cookie'), false);
+    assert.match(await resumed.text(), /"codePending":true.*"sendsRemaining":1.*"resumed":true/);
+    assert.equal((await guest('open', {token: linkCode(indiaInvite)}, cookie)).status, 401);
     assert.equal((await guest('send', {}, cookie)).status, 429);
     assert.equal((await guest('verify', {code: '000000'}, cookie)).status, 400);
     const verified = await guest('verify', {code: '123456'}, cookie);
