@@ -32,7 +32,7 @@ export function mountKeepsake(journal,section){
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
   let assembleNext=false,chosen=[],crops=new Map(),step='pick',file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
   const images=new Map(),defaultArt=new Map(),urls=new Set();let cardImages=[],editorCleanup=null,pickerCleanup=null,previewFrame=0,orderToast=null,toastTimer=null,digitalPreviewUrl=null,borderTransition=null,exportSignature=null;
-  const printFlow=createPrintFlow({previewOnly:journal.adminPreview===true,householdName:journal.name,householdSize:journal.householdSize,getData:()=>({file,defaultSrc:defaultSrc(),cardCount:1,personalized:!fixed,recipe:{format:'folded',mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:status=>{if(status?.order)setOrdered(status.order);if(modal.open&&step==='edit')updateExport();},onAddressStatus:message=>setStatus(message),onAvailabilityChange:updateExport,onOrdered:(message,simulated,order)=>{setOrdered(order);if(modal.open){showOrderToast(message,simulated);modal.querySelector('[data-close]')?.focus();}}});
+  const printFlow=createPrintFlow({previewOnly:journal.adminPreview===true,householdName:journal.name,householdSize:journal.householdSize,getData:()=>({file,defaultSrc:defaultSrc(),cardCount:1,personalized:!fixed,recipe:{format:'folded',mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:status=>{if(status?.order)setOrdered(status.order);if(modal.open&&step==='edit')updateExport();},onAddressStatus:message=>setStatus(message),onAvailabilityChange:updateExport,onOrdered:(message,simulated,order)=>{setOrdered(order);if(modal.open){showOrderToast(message,simulated);modal.querySelector('[data-back]')?.focus({preventScroll:true});}}});
   const digitalFlow=createDigitalFlow({journal,getData:()=>({frame,background:frameBackground(frame),images:cardImages.slice(0,3),crops:chosen.map(id=>crops.get(id)),photoIds:fixed?[]:[...chosen],cropMap:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)]))}),loadImage,onChange:state=>{if(state?.claimed){digitalOnly=true;if(fixed)frame=state.frame;updateDigitalEntry();}if(modal.open&&step==='edit'){updateExport();if(file)void digitalFlow.prewarm();}},onSaved:(state,message)=>{if(state?.claimed){digitalOnly=true;updateDigitalEntry();if(modal.open&&(fixed||step!=='preview')){step=fixed?'edit':'preview';render();}}if(message)setStatus(message);}});
   function updateDigitalEntry(){if(!digitalOnly)return;launch.textContent=fixed?'view your postcard':'make another postcard';entry.querySelector('.pb-present-copy>p').textContent='paperless fan club · unlimited downloads';}
   updateDigitalEntry();
@@ -98,10 +98,9 @@ export function mountKeepsake(journal,section){
   }
   function actions(){
     if(ordered)return '';
-    if(fixed&&digitalOnly)return `<div class="ks-export-actions">${exportActions()}</div>`;
     if(!fixed&&digitalOnly&&step==='edit')return `<button class="ks-primary" data-preview ${file&&!busy?'':'disabled'}>preview postcard ${arrow}</button>`;
     if(step==='pick')return `<span class="ks-count" role="status">${chosen.length} of 3 selected</span><button class="ks-primary" data-continue ${chosen.length===3?'':'disabled'}>Continue ${arrow}</button>`;
-    return (fixed||step==='preview'?frameMarkup():'')+`<div class="ks-export-actions">${exportActions()}</div>`;
+    return `<div class="ks-export-actions">${exportActions()}</div>`;
   }
   function exportActions(){
     const digital=digitalFlow.canUse()||digitalOnly;
@@ -137,10 +136,15 @@ export function mountKeepsake(journal,section){
     borderTransition?.cancel();borderTransition=null;
     pickerCleanup?.();pickerCleanup=null;editorCleanup?.();editorCleanup=null;cancelAnimationFrame(previewFrame);previewFrame=0;cardImages=[];
     revision++;file=null;busy=step!=='pick';printFlow.prepare();
-    modal.innerHTML=`<div class="ks-shell"><div class="ks-top"><button class="ks-icon" data-back aria-label="${step==='pick'?'Close postcard':'Back'}">${arrow}</button><h2 id="ks-title" tabindex="-1">${step==='pick'?'make a little postcard':'Your postcard'}</h2><button class="ks-icon" data-close aria-label="Close postcard">${cross}</button></div><div class="ks-body ${step==='pick'?'ks-select-body':'ks-edit-body'}">${step==='pick'?pickMarkup():editorMarkup()}<p class="ks-status" role="status" aria-live="polite"></p></div>${ordered?'':`<div class="ks-bottom">${actions()}</div>`}</div>`;
+    const picking=step==='pick';
+    const back=`<button type="button" class="ks-icon" data-back aria-label="${picking||fixed||ordered?'Close postcard':'Back'}">${arrow}</button>`;
+    const top=`<div class="ks-top${picking?'':' ks-top--title-only'}">${picking?back:''}<h2 id="ks-title" tabindex="-1">${picking?'make a little postcard':'Your postcard'}</h2>${picking?`<button class="ks-icon" data-close aria-label="Close postcard">${cross}</button>`:''}</div>`;
+    const frames=!ordered&&(fixed||step==='preview')?frameMarkup():'';
+    const footer=`<div class="ks-bottom${picking?'':' ks-bottom--editor'}">${frames}${picking?'':back}${actions()}</div>`;
+    modal.innerHTML=`<div class="ks-shell">${top}<div class="ks-body ${picking?'ks-select-body':'ks-edit-body'}">${picking?pickMarkup():editorMarkup()}<p class="ks-status" role="status" aria-live="polite"></p></div>${footer}</div>`;
     sessionImages.bind(modal);
     if(step==='pick')pickerCleanup=fitPostcardPicker(modal);
-    modal.querySelector('[data-close]').onclick=close;
+    const closeButton=modal.querySelector('[data-close]');if(closeButton)closeButton.onclick=close;
     modal.querySelector('[data-back]').onclick=()=>{if(step==='pick'||fixed||ordered)close();else{step=step==='preview'?'edit':'pick';render();modal.querySelector('h2').focus();}};
     modal.querySelectorAll('[data-pick]').forEach(button=>button.onclick=()=>{
       const id=button.dataset.pick,index=chosen.indexOf(id);
