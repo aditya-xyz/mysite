@@ -1,7 +1,8 @@
 import {addressAdminRoute,addressMode,autocompleteAvailable,type AddressEnv} from '../admin/src/address-verification.ts';
 import {addressAutocompleteRoute} from '../admin/src/address-autocomplete.ts';
 import {addressVerificationCurrent,type AddressState} from './address-state.ts';
-import {mailingAddress,PrintProblem,type MailingAddress} from './printing.ts';
+import {mugOrderEligible} from './mug-eligibility.ts';
+import {mailingAddress,printContext,PrintProblem,type MailingAddress} from './printing.ts';
 import {invitationRecipientName,type InvitationAudience} from './invitations.ts';
 interface Contact extends AddressState {id:string;name:string;version:number;mailing_address:string|null;address_verification_key:string|null}
 export async function deliveryContact(env:AddressEnv,invite:InvitationAudience){
@@ -32,10 +33,21 @@ export async function confirmDelivery(request:Request,env:AddressEnv,invite:Invi
  if(!result)throw new PrintProblem(409,'The invitation or address changed. Reopen the address step.');
  return {person,address:state.address as MailingAddress};
 }
+async function requireDeliveryEligibility(request:Request,env:AddressEnv,invite:InvitationAudience){
+ const postcard=await printContext(request,env,invite);
+ if(postcard.window.closed)throw new PrintProblem(403,'The gift deadline has passed.');
+ if(!postcard.reason||postcard.needsAddress)return;
+ if(await mugOrderEligible(request,env,invite,postcard.window,postcard.edition))return;
+ throw new PrintProblem(403,'Gifts are not available for this invitation.');
+}
 export async function deliveryAddressRoute(request:Request,env:AddressEnv,invite:InvitationAudience,path:string,readBody:()=>Promise<Record<string,unknown>>){
- if(path==='/api/delivery-address'&&request.method==='GET')return Response.json(await deliveryState(request,env,invite));
+ if(path==='/api/delivery-address'&&request.method==='GET'){
+  await requireDeliveryEligibility(request,env,invite);
+  return Response.json(await deliveryState(request,env,invite));
+ }
  const match=/^\/api\/delivery-address\/(autocomplete|place|verify|save|confirm)$/.exec(path);
  if(!match||request.method!=='POST')return null;
+ await requireDeliveryEligibility(request,env,invite);
  const data=await readBody(),person=await deliveryContact(env,invite),action=match[1];
  if(action==='confirm'){await confirmDelivery(request,env,invite,data.version);return Response.json(await deliveryState(request,env,invite));}
  const state=await deliveryState(request,env,invite);

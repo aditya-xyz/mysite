@@ -1,4 +1,6 @@
 import {liveGiftAllowed,liveGiftIntentStatement,liveGiftState} from './live-gifts.ts';
+import {mugAllowed} from './mug-eligibility.ts';
+export {mugAllowed};
 import {giftWindow,giftReservationOpenSQL} from './gift-deadline.ts';
 import {preparedMugCatalog,preparedMugPrint} from './prepared-mugs.ts';
 // @ts-expect-error Shared browser/server simulation catalog.
@@ -11,10 +13,6 @@ import {now,token} from './security.ts';
 import {invitationRecipientName,type InvitationAudience} from './invitations.ts';
 interface Order {id:string;design_id:string;caption:string;alt:string;artwork_key:string;status:string;recipient_name:string;address_json:string;created_at:number;budget_review_required?:number;budget_approved_cents?:number;configuration_json?:string;mockup_key?:string;mockup_id?:string;prepared_preview_id?:string}
 export function mugReceipt(o:Order){return {id:o.id,designId:o.design_id,status:o.status,approvalRequired:!!o.budget_review_required,createdAt:o.created_at,configuration:JSON.parse(o.configuration_json||JSON.stringify(legacyMugOptions())),address:{...JSON.parse(o.address_json),name:o.recipient_name},design:{id:o.design_id,name:'your mugshot',caption:o.caption,alt:o.alt,src:`/api/gift/orders/${o.id}/artwork`,...(o.mockup_key?{mockupSrc:`/api/gift/orders/${o.id}/mockup`}:{})}};}
-export async function mugAllowed(env:PrintEnv,invite:InvitationAudience,knownWindow?:Awaited<ReturnType<typeof giftWindow>>){
- if((knownWindow||await giftWindow(env.DB,invite)).closed)return false;
- const row=await env.DB.prepare('SELECT i.allow_mug,e.allow_mug_orders FROM invites i JOIN editions e ON e.year=i.edition_year WHERE i.id=?1 AND i.edition_year=?2').bind(invite.id,invite.edition_year).first<{allow_mug:number;allow_mug_orders:number}>();return row?.allow_mug===1&&row.allow_mug_orders===1;
-}
 export async function mugStatus(request:Request,env:PrintEnv,invite:InvitationAudience,knownWindow?:Awaited<ReturnType<typeof giftWindow>>){
  const allowed=mugAllowed(env,invite,knownWindow);
  const order=await env.DB.prepare("SELECT * FROM mug_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') LIMIT 1").bind(invite.id,invite.edition_year).first<Order>();
