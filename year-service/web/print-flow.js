@@ -4,9 +4,9 @@ import {readResource} from './read-resource.js';
 import {esc,householdOrderNote} from './pixelbook.js';
 import {foldedCardMarkup,bindFoldedCard} from './folded-card.js';
 import {createDeliveryAddress} from './delivery-address.js';
-export function createPrintFlow({getData,onChange,householdName='',householdSize=0,previewOnly=false,onOrdered=()=>{}}){
- let status=null,dialog=null,controller=null,closed=false,preparedDelivery=null,deliveryChanged=()=>{},frontDesign='personal';
- function prepareDelivery(){if(!preparedDelivery){preparedDelivery=createDeliveryAddress(()=>deliveryChanged());void preparedDelivery.load();}return preparedDelivery;}
+export function createPrintFlow({getData,onChange,householdName='',householdSize=0,previewOnly=false,onAddressStatus=()=>{},onOrdered=()=>{}}){
+ let status=null,dialog=null,controller=null,closed=false,preparedDelivery=null,deliveryCheck=null,opening=null,deliveryChanged=()=>{},frontDesign='personal';
+ function prepareDelivery(){if(!preparedDelivery){preparedDelivery=createDeliveryAddress(()=>deliveryChanged());deliveryCheck=preparedDelivery.load({timeoutMs:8000});}return preparedDelivery;}
  async function refresh(){
   controller?.abort();const current=controller=new AbortController();
   try{const data=await readResource('/api/print/status',{signal:current.signal});if(closed||controller!==current)return;status=data;if(status.eligible||status.canOrder)prepareDelivery();onChange(status);prepare();}catch{if(!closed&&controller===current&&!current.signal.aborted){status=null;onChange(status);}}
@@ -14,11 +14,29 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
  function previewData(){const data=getData();return {...data,recipe:{...data.recipe,frontDesign:data.personalized?frontDesign:'default'}};}
  function prepare(){} // Local artwork is already prepared by the editor.
  function buttonMarkup(){return (status?.eligible||status?.canOrder)?`<button class="ks-print ks-gift" aria-label="Order complimentary print" data-print ${getData().file?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18v4H3zm2 4v9h14v-9M12 8v13M12 8C5 8 4 2 8 3c3 0 4 5 4 5Zm0 0c7 0 8-6 4-5-3 0-4 5-4 5Z"/></svg><span>mail it, on us</span></button>`:'';}
- async function open(){
-  if(dialog||closed||!(status?.eligible||status?.canOrder))return;
+ async function open(event){
+  if(dialog||opening||closed||!(status?.eligible||status?.canOrder)||!getData().file)return;
+  const delivery=prepareDelivery();
+  if(!delivery.state){
+   const button=event?.currentTarget;
+   opening=delivery;
+   if(button)button.disabled=true;
+   onAddressStatus('Checking your saved address…');
+   if(delivery.error)deliveryCheck=delivery.load({timeoutMs:8000});
+   await deliveryCheck;
+   if(opening!==delivery||preparedDelivery!==delivery||closed)return;
+   opening=null;
+   if(button)button.disabled=false;
+   if(!delivery.state){
+    onAddressStatus(delivery.error||'Could not check the address. Please try again.');
+    return;
+   }
+   onAddressStatus('');
+   if(!(status?.eligible||status?.canOrder))return;
+  }
   let data=previewData();if(!data.file)return;
   const householdNote=householdOrderNote(householdName,householdSize);
-  const snapshot=structuredClone(status);const proofUrl=URL.createObjectURL(data.file);let delivery;let requestKey=crypto.randomUUID(),submitting=false;
+  const snapshot=structuredClone(status);const proofUrl=URL.createObjectURL(data.file);let requestKey=crypto.randomUUID(),submitting=false;
   let activeView='front';
   dialog=document.createElement('dialog');dialog.className='ks-print-dialog';dialog.setAttribute('aria-labelledby','print-title');
   dialog.innerHTML=`<div class="ks-top"><div class="ks-print-heading"><h2 id="print-title" tabindex="-1">Mail this postcard?</h2></div><button class="ks-icon" data-close-print aria-label="Close order confirmation"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="ks-print-body"><div data-print-pictures>${cardMarkup()}</div><div data-delivery-address></div><p class="ks-status" role="status" aria-live="polite"></p></div><div class="ks-bottom">${householdNote?`<p class="ks-household-note" id="ks-household-note">${esc(householdNote)} <img class="pb-dog-face-emoji" src="/pixel-face-emoji.png" width="30" height="30" alt="" aria-hidden="true"></p>`:''}<button class="ks-secondary" data-cancel-print>Not yet</button><button class="ks-primary" data-submit-print ${householdNote?'aria-describedby="ks-household-note"':''}>Yes, mail it</button></div>`;
@@ -38,8 +56,8 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
    slideStep(sheet,addressStep?'address':'review',addressStep?0:1,'.ks-print-body');
    if(previous!==addressStep&&sheet.open){sheet.scrollTop=0;(addressStep?region.querySelector('input:not([type="hidden"])'):sheet.querySelector('#print-title'))?.focus({preventScroll:true});}
   }
-  delivery=prepareDelivery();deliveryChanged=renderAddress;renderAddress();
-  function release(){URL.revokeObjectURL(proofUrl);deliveryChanged=()=>{};delivery.destroy();if(preparedDelivery===delivery)preparedDelivery=null;sheet.remove();if(dialog===sheet)dialog=null;}
+  deliveryChanged=renderAddress;renderAddress();
+  function release(){URL.revokeObjectURL(proofUrl);deliveryChanged=()=>{};delivery.destroy();if(preparedDelivery===delivery){preparedDelivery=null;deliveryCheck=null;}sheet.remove();if(dialog===sheet)dialog=null;}
   dialog.addEventListener('close',release,{once:true});
   dialog.querySelector('[data-close-print]').onclick=()=>closeDialog(sheet);
   dialog.querySelector('[data-cancel-print]').onclick=()=>closeDialog(sheet);
@@ -76,5 +94,5 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   };
   openDialog(dialog);dialog.querySelector('#print-title').focus({preventScroll:true});
  }
- return {buttonMarkup,prepare,bind:container=>{const b=container.querySelector('[data-print]');if(b)b.onclick=open;},refresh:()=>{closed=false;return refresh();},close:()=>{closed=true;controller?.abort();deliveryChanged=()=>{};preparedDelivery?.destroy();preparedDelivery=null;if(dialog?.open)dialog.close();}};
+ return {buttonMarkup,prepare,bind:container=>{const b=container.querySelector('[data-print]');if(b)b.onclick=open;},refresh:()=>{closed=false;return refresh();},close:()=>{closed=true;opening=null;controller?.abort();deliveryChanged=()=>{};preparedDelivery?.destroy();preparedDelivery=null;deliveryCheck=null;if(dialog?.open)dialog.close();}};
 }

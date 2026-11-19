@@ -9,7 +9,14 @@ export function createDeliveryAddress(changed=()=>{}){
  }
  function notify(){if(!disposed)changed();}
  async function run(action){if(busy)return;busy=true;error='';notify();controller?.abort();controller=new AbortController();try{await action(controller.signal);}catch(e){if(e.name!=='AbortError')error=e.message;}finally{busy=false;notify();}}
- async function load(){await run(async signal=>{state=await request('',undefined,signal);preview=null;editing=false;fields={...(state.address||{}),country:state.country||'US'};});}
+ async function load({timeoutMs}={}){
+  await run(async signal=>{
+   const deadline=timeoutMs?AbortSignal.timeout(timeoutMs):null;
+   try{state=await request('',undefined,deadline?AbortSignal.any([signal,deadline]):signal);}
+   catch(error){if(deadline?.aborted&&!signal.aborted)throw new Error('Could not check the address. Please try again.');throw error;}
+   preview=null;editing=false;fields={...(state.address||{}),country:state.country||'US'};
+  });
+ }
  function addressMarkup(address,name){return `<address>${esc(name)}<br>${esc(address.line1)}${address.line2?'<br>'+esc(address.line2):''}<br>${esc(address.country==='NL'?`${address.postalCode}  ${address.city}`:`${address.city}, ${address.state} ${address.postalCode}`)}<br>${esc(({US:'United States',IN:'India',NL:'Netherlands'})[address.country]||address.country)}</address>`;}
  function summaryMarkup({showNote=true}={}){return state?.verified?`<section class="delivery-panel delivery-summary" aria-label="Shipping address"><h3>Sending to</h3><div class="delivery-address-row">${addressMarkup(state.address,state.recipientName)}${showNote?(state.country==='US'?'<button type="button" class="button delivery-secondary" data-address-edit>Edit address</button>':'<p class="delivery-note">Contact mom or dad if this address needs to change.</p>'):''}</div></section>`:'';}
  function markup(){
@@ -31,5 +38,5 @@ export function createDeliveryAddress(changed=()=>{}){
   form.onsubmit=event=>{event.preventDefault();if(!form.reportValidity())return;fields=Object.fromEntries(new FormData(form));fields.state=fields.state.toUpperCase();run(async signal=>{preview=await request('verify',{version:state.version,address:fields},signal);});};
  }
  async function confirm(){if(!state?.verified||editing)throw new Error('Verify and save your mailing address first.');state=await request('confirm',{version:state.version});return state;}
- return {load,markup,summaryMarkup,bind,confirm,get state(){return state;},get ready(){return !!state?.verified&&!busy&&!editing;},destroy(){disposed=true;controller?.abort();}};
+ return {load,markup,summaryMarkup,bind,confirm,get state(){return state;},get error(){return error;},get ready(){return !!state?.verified&&!busy&&!editing;},destroy(){disposed=true;controller?.abort();}};
 }
