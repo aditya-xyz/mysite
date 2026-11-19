@@ -28,7 +28,19 @@ export function createSessionImages({maxBytes=32*1024*1024,maxEntries=64,fetchBl
   return false;
  }
  function load(image){const source=image.dataset.sessionSrc;delete image.dataset.sessionSrc;url(source).then(value=>{if(image.isConnected){image.dataset.loadedSrc=source;image.src=value;}}).catch(()=>{if(image.isConnected)image.alt=image.alt||'This image could not load. Please try again.';});}
- function bind(root){for(const image of pending)if(!image.isConnected){observer?.unobserve(image);pending.delete(image);}for(const image of root?.querySelectorAll?.('img[data-session-src]')||[]){if(image.loading==='lazy'&&typeof IntersectionObserver!=='undefined'){if(!observer)observer=new IntersectionObserver(items=>{for(const item of items)if(item.isIntersecting){observer.unobserve(item.target);pending.delete(item.target);load(item.target);}},{rootMargin:'200px'});pending.add(image);observer.observe(image);}else load(image);}}
+ function bind(root,{eager=false}={}){
+  for(const image of pending)if(!image.isConnected){observer?.unobserve(image);pending.delete(image);}
+  for(const image of root?.querySelectorAll?.('img[data-session-src]')||[]){
+   if(eager){
+    observer?.unobserve(image);pending.delete(image);image.loading='eager';load(image);
+   }else if(image.loading==='lazy'&&typeof IntersectionObserver!=='undefined'){
+    if(!observer)observer=new IntersectionObserver(items=>{
+     for(const item of items)if(item.isIntersecting&&pending.delete(item.target)){observer.unobserve(item.target);load(item.target);}
+    },{rootMargin:'200px'});
+    pending.add(image);observer.observe(image);
+   }else load(image);
+  }
+ }
 
  return {configure,clear,blob,url,isUsableURL,bind,stats:()=>({entries:entries.size,bytes})};
 }

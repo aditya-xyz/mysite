@@ -114,7 +114,7 @@ export function mountScrapbookMotion(root){
     schedule();
   }
   reduced.addEventListener('change',preferenceChanged);document.addEventListener('visibilitychange',schedule);window.addEventListener('scroll',wag,{passive:true});
-  return {photoReady,destroy(){destroyed=true;heroImage?.removeEventListener('load',heroLoaded);heroImage?.removeEventListener('error',heroFailed);hero?.classList.remove('pb-hero-awaiting');clearTimeout(timer);clearTimeout(swapTimer);observer?.disconnect();giftObserver?.disconnect();root.removeEventListener('focusin',giftFocused);gifts.forEach(gift=>gift.classList.remove('pb-gift-awaiting'));animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));stack?.removeEventListener('click',onClick);reduced.removeEventListener('change',preferenceChanged);document.removeEventListener('visibilitychange',schedule);window.removeEventListener('scroll',wag);}};
+  return {photoReady,revealGiftNow(gift){if(gifts.includes(gift))revealGift(gift,false);},destroy(){destroyed=true;heroImage?.removeEventListener('load',heroLoaded);heroImage?.removeEventListener('error',heroFailed);hero?.classList.remove('pb-hero-awaiting');clearTimeout(timer);clearTimeout(swapTimer);observer?.disconnect();giftObserver?.disconnect();root.removeEventListener('focusin',giftFocused);gifts.forEach(gift=>gift.classList.remove('pb-gift-awaiting'));animations.forEach(a=>a.cancel());cards.forEach(c=>c.classList.remove('pb-photo-waiting'));stack?.removeEventListener('click',onClick);reduced.removeEventListener('change',preferenceChanged);document.removeEventListener('visibilitychange',schedule);window.removeEventListener('scroll',wag);}};
 }
 
 export function assembleKeepsake(canvas,slots,frameBackground){

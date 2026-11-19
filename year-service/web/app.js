@@ -165,6 +165,13 @@ function showJournal() {
   app.querySelectorAll('[data-photo]').forEach(button => button.onclick=()=>openPhoto(journal.photos.find(p=>p.id===button.dataset.photo)));
   pixelGift=mountPixelGift(journal,app);
   sessionImages.bind(app);
+  app.querySelector('.pb-gift-postscript a')?.addEventListener('click',event=>{
+    if(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||!matchMedia('(max-width:760px)').matches)return;
+    const mug=app.querySelector('#pb-gift');
+    if(!mug)return;
+    sessionImages.bind(mug,{eager:true});
+    scrapbookMotion.revealGiftNow(mug);
+  });
   stopGiftDeadline=!journal.giftWindow?.closed&&app.querySelector('.pb-presents')?watchGiftDeadline(journal.giftWindow,()=>{
     pixelGift?.destroy();app.querySelector('#pb-gift')?.remove();app.querySelector('.pb-gift-postscript')?.remove();
     if(!keepsake?.hasSavedPostcard?.()){keepsake?.destroy();app.querySelector('.pb-presents')?.remove();}

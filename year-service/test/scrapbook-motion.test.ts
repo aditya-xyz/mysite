@@ -55,6 +55,15 @@ test('both gifts stay hidden until entering and never expose the resting card du
  }
 });
 
+test('an explicit jump can reveal the offscreen mug without changing the postcard entrance',t=>{
+ const f=fixture(t);
+ f.motion.revealGiftNow(f.mug);
+ assert(!f.mug.classList.contains('pb-gift-awaiting'));
+ assert(f.keepsake.classList.contains('pb-gift-awaiting'));
+ assert(!f.observers[1].observed.has(f.mug));
+ f.enter(f.mug);assert.equal(f.mug.calls.length,0);
+});
+
 test('keyboard focus reveals a waiting gift immediately',t=>{
  const f=fixture(t);f.listeners.get('focusin')!({target:f.keepsake.child});
  assert(!f.keepsake.classList.contains('pb-gift-awaiting'));assert.equal(f.keepsake.calls.length,0);
