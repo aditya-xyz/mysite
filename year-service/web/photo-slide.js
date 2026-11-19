@@ -1,5 +1,5 @@
 // Three decoded display images travel together; no canvas capture on the swipe path.
-export function createPhotoSlide(frame,image){
+export function createPhotoSlide(frame,image,isUsableURL=()=>true){
  const viewport=document.createElement('div'),rail=document.createElement('div');
  viewport.className='photo-slide-viewport';rail.className='photo-slide-rail';image.replaceWith(viewport);viewport.append(rail);rail.append(image);
  const sides=new Map(),prepared=new Set();
@@ -19,13 +19,13 @@ export function createPhotoSlide(frame,image){
   return current.finished.then(()=>{if(animation===current){complete=null;animation=null;done();current.cancel();rail.style.willChange='';}},()=>{});
  }
  function settle(){return travel(0,()=>{position(0);width=0;});}
- function ready(direction){const side=sides.get(direction);return side?.getAttribute('src')&&side.complete&&side.naturalWidth?{src:side.src,width:side.naturalWidth,height:side.naturalHeight,preview:!prepared.has(direction)}:null;}
+ function ready(direction){const side=sides.get(direction);return side?.getAttribute('src')&&side.complete&&side.naturalWidth&&isUsableURL(side.src)?{src:side.src,width:side.naturalWidth,height:side.naturalHeight,preview:!prepared.has(direction)}:null;}
  function neighbor(direction,src,canNavigate=true){const side=sides.get(direction);side.src=src;side.hidden=false;if(canNavigate)prepared.add(direction);else prepared.delete(direction);}
- function reveal(src,naturalWidth,naturalHeight,direction=0){
+ function reveal(src,naturalWidth,naturalHeight,direction=0,fallbackSource=src){
   const from=offset;cancel(true);position(from);width=frame.getBoundingClientRect().width;
-  const commit=()=>{image.src=src;image.style.visibility='visible';frame.style.setProperty('--photo-ratio',String(naturalWidth/naturalHeight));position(0);width=0;clearNeighbors();};
+  const commit=()=>{image.src=isUsableURL(src)?src:fallbackSource;image.style.visibility='visible';frame.style.setProperty('--photo-ratio',String(naturalWidth/naturalHeight));position(0);width=0;clearNeighbors();};
   if(!direction||reduced()||!image.getAttribute('src')||image.style.visibility==='hidden'){commit();return Promise.resolve();}
-  neighbor(direction,src);
+  neighbor(direction,isUsableURL(src)?src:fallbackSource);
   return travel(-Math.sign(direction)*width,commit);
  }
  function upgrade(src){image.src=src;}

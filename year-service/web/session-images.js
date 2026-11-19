@@ -21,9 +21,15 @@ export function createSessionImages({maxBytes=32*1024*1024,maxEntries=64,fetchBl
  }
  async function blob(source,options){const entry=await get(source,options);return entry?entry.blob:fetchBlob(source,options);}
  async function url(source,options){const entry=await get(source,options);if(!entry||entries.get(key(source))!==entry)return source;if(!entry.url)entry.url=createURL(entry.blob);return entry.url;}
+ function isUsableURL(url){
+  if(!url.startsWith('blob:'))return true;
+  if(scope&&now()>=expiresAt)clear();
+  for(const entry of entries.values())if(entry.url===url)return true;
+  return false;
+ }
  function load(image){const source=image.dataset.sessionSrc;delete image.dataset.sessionSrc;url(source).then(value=>{if(image.isConnected){image.dataset.loadedSrc=source;image.src=value;}}).catch(()=>{if(image.isConnected)image.alt=image.alt||'This image could not load. Please try again.';});}
  function bind(root){for(const image of pending)if(!image.isConnected){observer?.unobserve(image);pending.delete(image);}for(const image of root?.querySelectorAll?.('img[data-session-src]')||[]){if(image.loading==='lazy'&&typeof IntersectionObserver!=='undefined'){if(!observer)observer=new IntersectionObserver(items=>{for(const item of items)if(item.isIntersecting){observer.unobserve(item.target);pending.delete(item.target);load(item.target);}},{rootMargin:'200px'});pending.add(image);observer.observe(image);}else load(image);}}
 
- return {configure,clear,blob,url,bind,stats:()=>({entries:entries.size,bytes})};
+ return {configure,clear,blob,url,isUsableURL,bind,stats:()=>({entries:entries.size,bytes})};
 }
 export const sessionImages=createSessionImages();

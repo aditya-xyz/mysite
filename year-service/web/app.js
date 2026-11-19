@@ -2,7 +2,7 @@ import {sessionImages} from './session-images.js';
 import {readResource} from './read-resource.js';
 import {createPhotoSlide} from './photo-slide.js';
 import {dismissPhotoToThumbnail,openPhotoFromThumbnail} from './photo-dismiss.js';
-import {loadViewerPhoto} from './photo-image.js';
+import {loadViewerPhoto,photoThumbnail} from './photo-image.js';
 import {loadingPaw} from './loading.js';
 import {installLocalization} from './localization.js';
 import {watchGiftDeadline} from './gift-deadline.js';
@@ -22,7 +22,8 @@ const dialog = document.querySelector('#photo');
 const save = document.querySelector('#save');
 const fullResolution=document.querySelector('#full-resolution');
 const previousPhoto=document.querySelector('#previous-photo'),nextPhoto=document.querySelector('#next-photo'),photoStage=dialog.querySelector('.photo-stage');
-const photoSlide=createPhotoSlide(dialog.querySelector('.photo-image'),dialog.querySelector('img'));
+const photoSlide=createPhotoSlide(dialog.querySelector('.photo-image'),dialog.querySelector('img'),sessionImages.isUsableURL);
+const viewerLoading={resolveSource:source=>sessionImages.url(source),isUsableURL:sessionImages.isUsableURL};
 let photoOpening=null;
 let viewerPhotos=[],viewerIndex=-1,viewerReturnFocus,keepsake,pixelGift,scrapbookMotion,stopGiftDeadline;
 let preparedFile, selected, journal, saveMode = 'share', generation = 0, fullImageUrl, originalRequest, downloadPending=false, imageObserver, layoutObserver, closeTimer;
@@ -164,14 +165,17 @@ function showJournal() {
   stopGiftDeadline=app.querySelector('.pb-presents')?watchGiftDeadline(journal.giftWindow,()=>{keepsake?.destroy();pixelGift?.destroy();app.querySelector('.pb-presents')?.remove();},{refresh:()=>api('gift/deadline')}):null;
   window.scrollTo(0,0);
 }
+function galleryImage(photo){
+  return [...app.querySelectorAll('.card')].find(card=>card.dataset.photo===photo.id)?.querySelector('img');
+}
 function openPhoto(photo) {
   if(dialog.open)return;
   viewerPhotos=photoOrder(journal.photos);viewerIndex=viewerPhotos.findIndex(p=>p.id===photo.id);
   if(viewerIndex<0)return;
   viewerReturnFocus=document.activeElement;
   clearTimeout(closeTimer);dialog.classList.remove('is-closing');
-  const thumb=[...app.querySelectorAll('.card')].find(card=>card.dataset.photo===photo.id)?.querySelector('img');
-  showPhoto(photo,0,thumb?.complete&&thumb.naturalWidth?{src:thumb.src,width:thumb.naturalWidth,height:thumb.naturalHeight,origin:thumb.getBoundingClientRect(),element:thumb.closest('.card'),preview:true}:null);dialog.showModal();dialog.focus({preventScroll:true});
+  const thumb=galleryImage(photo),preview=photoThumbnail(thumb,sessionImages.isUsableURL);
+  showPhoto(photo,0,preview?{...preview,origin:thumb.getBoundingClientRect(),element:thumb.closest('.card')}:null);dialog.showModal();dialog.focus({preventScroll:true});
 }
 function showPhoto(photo,direction=0,thumbnail=null){
   originalRequest?.abort();originalRequest=null;
@@ -186,15 +190,20 @@ function showPhoto(photo,direction=0,thumbnail=null){
   loader.hidden=false;loader.innerHTML=loadingPaw()+'<span>Loading photo…</span>';
   document.querySelector('#photo-caption').textContent=photo.caption;
   const ready=thumbnail||(direction&&photoSlide.ready(direction)),settled=direction&&!ready?photoSlide.settle():Promise.resolve();
-  const viewerOptions={resolveSource:source=>sessionImages.url(source),isCurrent:()=>current===generation&&!preparedFile,
-    async reveal(src,width,height){await settled;if(current!==generation||preparedFile)return;const sliding=photoSlide.reveal(src,width,height,direction);loader.hidden=true;frame.removeAttribute('aria-busy');await sliding;
+  const viewerOptions={...viewerLoading,isCurrent:()=>current===generation&&!preparedFile,
+    async reveal(src,width,height){await settled;if(current!==generation||preparedFile)return;const sliding=photoSlide.reveal(src,width,height,direction,photo.viewerSrc||photo.src);loader.hidden=true;frame.removeAttribute('aria-busy');await sliding;
       if(thumbnail&&current===generation&&dialog.open){photoOpening=openPhotoFromThumbnail(dialog,image,thumbnail.origin,thumbnail.element);await photoOpening.finished;}
       if(current!==generation||!dialog.open)return;
-      for(const step of [-1,1]){const adjacent=viewerPhotos[viewerIndex+step];if(adjacent){const thumb=[...app.querySelectorAll('.card')].find(card=>card.dataset.photo===adjacent.id)?.querySelector('img');if(thumb?.complete&&thumb.naturalWidth)photoSlide.neighbor(step,thumb.src,false);loadViewerPhoto(adjacent,{resolveSource:source=>sessionImages.url(source),isCurrent:()=>current===generation&&dialog.open,reveal:source=>photoSlide.neighbor(step,source),fail(){}});}}
+      for(const step of [-1,1]){
+        const adjacent=viewerPhotos[viewerIndex+step];if(!adjacent)continue;
+        const preview=photoThumbnail(galleryImage(adjacent),sessionImages.isUsableURL);
+        if(preview)photoSlide.neighbor(step,preview.src,false);
+        loadViewerPhoto(adjacent,{...viewerLoading,isCurrent:()=>current===generation&&dialog.open,reveal:source=>photoSlide.neighbor(step,source),fail(){}});
+      }
     },
     fail(){photoSlide.cancel();image.style.visibility='hidden';frame.removeAttribute('aria-busy');loader.textContent='Couldn’t load this photo. ';const retry=document.createElement('button');retry.type='button';retry.textContent='Try again';retry.onclick=()=>showPhoto(photo);loader.append(retry);}
   };
-  if(ready){const rendered=viewerOptions.reveal(ready.src,ready.width,ready.height);if(ready.preview)rendered.then(()=>{if(current!==generation)return;loadViewerPhoto(photo,{resolveSource:source=>sessionImages.url(source),isCurrent:()=>current===generation&&dialog.open&&!preparedFile,reveal:src=>photoSlide.upgrade(src),fail(){}});});}else loadViewerPhoto(photo,viewerOptions);
+  if(ready){const rendered=viewerOptions.reveal(ready.src,ready.width,ready.height);if(ready.preview)rendered.then(()=>{if(current!==generation)return;loadViewerPhoto(photo,{...viewerLoading,isCurrent:()=>current===generation&&dialog.open&&!preparedFile,reveal:src=>photoSlide.upgrade(src),fail(){}});});}else loadViewerPhoto(photo,viewerOptions);
   document.querySelector('#save-status').textContent='';save.hidden=!photo.canSave;save.disabled=false;downloadPending=false;save.setAttribute('aria-label','Download preview photo');save.title='Download preview photo';fullResolution.hidden=!photo.canSave;fullResolution.disabled=false;fullResolution.textContent='Full res';fullResolution.classList.remove('is-ready');fullResolution.removeAttribute('aria-busy');
   previousPhoto.disabled=viewerIndex===0;nextPhoto.disabled=viewerIndex===viewerPhotos.length-1;
   document.querySelector('#photo-count').textContent=`Photo ${viewerIndex+1} of ${viewerPhotos.length}`;
