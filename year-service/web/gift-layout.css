@@ -207,3 +207,61 @@
     line-height: 1.4;
   }
 }
+
+/* One continuous surface per gift dialog, including confirmations and customization. */
+:root[data-palette=night] :is(#keepsake, .ks-print-dialog, .ks-digital-confirm) {
+  --pb-gift-surface: #39434a;
+  --pb-gift-edge: #667278;
+  --muted: #d5ccd0;
+  --pb-modal-fill: linear-gradient(145deg, #46545a 0%, var(--pb-gift-surface) 48%, #283238 100%);
+}
+:root[data-palette=night] .pb-gift-dialog {
+  --pb-gift-surface: #2b2332;
+  --pb-gift-edge: #55465a;
+  --pb-modal-fill: linear-gradient(145deg, #3b3040 0%, var(--pb-gift-surface) 50%, #201b28 100%);
+}
+:root[data-palette=moss] :is(#keepsake, .ks-print-dialog, .ks-digital-confirm) {
+  --pb-modal-fill: linear-gradient(145deg, #fcf8ef 0%, #f4f3e9 48%, var(--pb-light-postcard) 100%);
+}
+:root[data-palette=moss] .pb-gift-dialog {
+  --pb-modal-fill: linear-gradient(145deg, #fffbf4 0%, var(--pb-light-mug) 50%, #f4ecf0 100%);
+}
+:root[data-palette=night] {
+  --pb-modal-shadow: 0 10px 28px #00000020;
+  --pb-modal-highlight: #ffffff14;
+}
+:root[data-palette=moss] {
+  --pb-modal-shadow: 0 8px 24px #63452b0d;
+  --pb-modal-highlight: #ffffffb3;
+}
+:root[data-palette] :is(#keepsake, .ks-print-dialog, .ks-digital-confirm, .pb-gift-dialog) {
+  background: var(--pb-modal-fill);
+  border-color: var(--pb-gift-edge);
+  box-shadow: inset 0 1px 0 var(--pb-modal-highlight), var(--pb-modal-shadow);
+}
+:is(#keepsake, .ks-print-dialog, .ks-digital-confirm) .ks-bottom,
+.pb-gift-dialog :is(.pb-dialog-bottom, .pb-customizer-actions) {
+  background: transparent;
+}
+#keepsake:has(.ks-picks) .ks-bottom {
+  box-shadow: none;
+}
+#keepsake .ks-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Keep long address forms from scrolling underneath the transparent actions. */
+.pb-gift-dialog[open]:has(> .pb-dialog-body > .delivery-panel) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pb-gift-dialog[open]:has(> .pb-dialog-body > .delivery-panel) > :not(.pb-dialog-body) {
+  flex-shrink: 0;
+}
+.pb-gift-dialog[open]:has(> .pb-dialog-body > .delivery-panel) > .pb-dialog-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
