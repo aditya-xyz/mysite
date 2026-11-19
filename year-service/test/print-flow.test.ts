@@ -13,9 +13,10 @@ function fixture(t:import('node:test').TestContext){
  }}});
  t.after(()=>{globalThis.fetch=originalFetch;if(originalDocument)Object.defineProperty(globalThis,'document',originalDocument);else Reflect.deleteProperty(globalThis,'document');});
  const notices:string[]=[];
- const flow=createPrintFlow({getData:()=>({file:new File(['proof'],'proof.jpg',{type:'image/jpeg'}),cardCount:1,recipe:{}}),onChange(){},onAddressStatus(message:string){notices.push(message);}});
+ const button:any={disabled:false,isConnected:true,focused:false,removeAttribute(){},focus(){this.focused=true;}};
+ const flow=createPrintFlow({getData:()=>({file:new File(['proof'],'proof.jpg',{type:'image/jpeg'}),cardCount:1,recipe:{}}),onChange(){},onAddressStatus(message:string){notices.push(message);},onAvailabilityChange(){button.disabled=flow.isActive();}});
  t.after(()=>flow.close());
- const button:any={disabled:false};flow.bind({querySelector:()=>button});
+ flow.bind({querySelector:()=>button});
  return {flow,button,notices,sheet:()=>sheet};
 }
 test('keepsake review opens from preloaded data but rechecks permissions before saving',async t=>{
@@ -24,8 +25,11 @@ test('keepsake review opens from preloaded data but rechecks permissions before 
  globalThis.fetch=async(input:any)=>{const path=String(input);calls.push(path);return Response.json(path==='/api/print/status'?{...printStatus,eligible:allowed}:address);};
  await flow.refresh();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(calls.filter(p=>p==='/api/delivery-address').length,1);
- const before=calls.length,opened=button.onclick();
+ const before=calls.length,opened=button.onclick({currentTarget:button});
  const sheet=getSheet();assert.equal(sheet.open,true,'review opens synchronously');await opened;
+ assert.equal(button.disabled,true,'the editor button stays disabled behind the review');
+ await button.onclick({currentTarget:button});
+ assert.equal(getSheet(),sheet,'a repeat tap cannot open another review');
  assert.equal(calls.length,before,'opening adds no network round trip');
  assert.match(sheet.querySelector('[data-delivery-address]').innerHTML,/Example Friend/);
  allowed=false;await sheet.querySelector('[data-submit-print]').onclick();
@@ -50,9 +54,12 @@ test('slow address lookup leaves the editor open and shows the correct first che
   await button.onclick({currentTarget:button});
   assert.equal(calls,1);
   resolveAddress(Response.json({...address,verified}));await opening;
-  assert.equal(sheet().open,true);assert.equal(button.disabled,false);
+  assert.equal(sheet().open,true);assert.equal(button.disabled,true);
   assert.equal(sheet().querySelector('#print-title').textContent,verified?'Mail this postcard?':'where’s home?');
   assert.doesNotMatch(sheet().querySelector('[data-delivery-address]').innerHTML,/Checking your saved address|Try again/);
+  sheet().querySelector('[data-cancel-print]').onclick();
+  assert.equal(button.disabled,false);
+  assert.equal(button.focused,true);
  });
 });
 

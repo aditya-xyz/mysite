@@ -4,7 +4,7 @@ import {readResource} from './read-resource.js';
 import {esc,householdOrderNote} from './pixelbook.js';
 import {foldedCardMarkup,bindFoldedCard} from './folded-card.js';
 import {createDeliveryAddress} from './delivery-address.js';
-export function createPrintFlow({getData,onChange,householdName='',householdSize=0,previewOnly=false,onAddressStatus=()=>{},onOrdered=()=>{}}){
+export function createPrintFlow({getData,onChange,householdName='',householdSize=0,previewOnly=false,onAddressStatus=()=>{},onAvailabilityChange=()=>{},onOrdered=()=>{}}){
  let status=null,dialog=null,controller=null,closed=false,preparedDelivery=null,deliveryCheck=null,opening=null,deliveryChanged=()=>{},frontDesign='personal';
  function prepareDelivery(){if(!preparedDelivery){preparedDelivery=createDeliveryAddress(()=>deliveryChanged());deliveryCheck=preparedDelivery.load({timeoutMs:8000});}return preparedDelivery;}
  async function refresh(){
@@ -16,17 +16,18 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
  function buttonMarkup(){return (status?.eligible||status?.canOrder)?`<button class="ks-print ks-gift" aria-label="Order complimentary print" data-print ${getData().file?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h18v4H3zm2 4v9h14v-9M12 8v13M12 8C5 8 4 2 8 3c3 0 4 5 4 5Zm0 0c7 0 8-6 4-5-3 0-4 5-4 5Z"/></svg><span>mail it, on us</span></button>`:'';}
  async function open(event){
   if(dialog||opening||closed||!(status?.eligible||status?.canOrder)||!getData().file)return;
+  const button=event.currentTarget;
+  button.removeAttribute('data-button-pressed');
   const delivery=prepareDelivery();
   if(!delivery.state){
-   const button=event?.currentTarget;
    opening=delivery;
-   if(button)button.disabled=true;
+   onAvailabilityChange();
    onAddressStatus('Checking your saved address…');
    if(delivery.error)deliveryCheck=delivery.load({timeoutMs:8000});
    await deliveryCheck;
    if(opening!==delivery||preparedDelivery!==delivery||closed)return;
    opening=null;
-   if(button)button.disabled=false;
+   onAvailabilityChange();
    if(!delivery.state){
     onAddressStatus(delivery.error||'Could not check the address. Please try again.');
     return;
@@ -57,10 +58,17 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
    if(previous!==addressStep&&sheet.open){sheet.scrollTop=0;(addressStep?region.querySelector('input:not([type="hidden"])'):sheet.querySelector('#print-title'))?.focus({preventScroll:true});}
   }
   deliveryChanged=renderAddress;renderAddress();
-  function release(){URL.revokeObjectURL(proofUrl);deliveryChanged=()=>{};delivery.destroy();if(preparedDelivery===delivery){preparedDelivery=null;deliveryCheck=null;}sheet.remove();if(dialog===sheet)dialog=null;}
+  function release(){
+   URL.revokeObjectURL(proofUrl);deliveryChanged=()=>{};delivery.destroy();
+   if(preparedDelivery===delivery){preparedDelivery=null;deliveryCheck=null;}
+   sheet.remove();if(dialog===sheet)dialog=null;
+   if(!closed){onAvailabilityChange();if(button.isConnected&&!button.disabled)button.focus({preventScroll:true});}
+  }
   dialog.addEventListener('close',release,{once:true});
-  dialog.querySelector('[data-close-print]').onclick=()=>closeDialog(sheet);
-  dialog.querySelector('[data-cancel-print]').onclick=()=>closeDialog(sheet);
+  const cancel=dialog.querySelector('[data-cancel-print]');
+  dialog.querySelector('[data-close-print]').onclick=()=>{if(!submitting)closeDialog(sheet);};
+  cancel.onclick=()=>{if(!submitting)closeDialog(sheet);};
+  dialog.addEventListener('cancel',event=>{if(submitting)event.preventDefault();});
   function bindPictures(region){bindFoldedCard(region,{onSwap:swapPictures,onView:view=>activeView=view});}
   function cardMarkup(){
    const swapped=data.personalized&&data.recipe.frontDesign==='default';
@@ -78,7 +86,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
    onOrdered(order.live?(order.status==='submitted'?'your card is off to the printers.':'Order received 💌'):order.testMode?'Test postcard ordered. No physical mail will be sent.':order.status==='simulated'?'Test postcard order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your postcard gift is headed your way 💌':'Your print request is recorded.',!order.live&&!order.testMode&&order.status==='simulated',order);
   }
   submit.onclick=async()=>{
-   if(previewOnly||submitting||!delivery.ready)return;submitting=true;submit.disabled=true;if(data.personalized)sheet.querySelector('[data-swap-card]')?.setAttribute('disabled','');message('Saving your order…');
+   if(previewOnly||submitting||!delivery.ready)return;submitting=true;submit.disabled=true;cancel.disabled=true;if(data.personalized)sheet.querySelector('[data-swap-card]')?.setAttribute('disabled','');message('Saving your order…');
    try{
     await delivery.confirm();await refresh();
     if(dialog!==sheet)return;
@@ -89,10 +97,10 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
     if(!response.ok)throw new Error(result.error||'The order could not be confirmed.');
     if(dialog!==sheet){await refresh();return;}
     finish(result.order);
-   }catch(error){await refresh();if(dialog!==sheet)return;if(status?.order){finish(status.order);}else{requestKey=crypto.randomUUID();submitting=false;if(data.personalized)sheet.querySelector('[data-swap-card]')?.removeAttribute('disabled');submit.disabled=!delivery.ready;message(error.message+' No additional order will be created if one is already recorded.');}}
+   }catch(error){await refresh();if(dialog!==sheet)return;if(status?.order){finish(status.order);}else{requestKey=crypto.randomUUID();submitting=false;cancel.disabled=false;if(data.personalized)sheet.querySelector('[data-swap-card]')?.removeAttribute('disabled');submit.disabled=!delivery.ready;message(error.message+' No additional order will be created if one is already recorded.');}}
 
   };
-  openDialog(dialog);dialog.querySelector('#print-title').focus({preventScroll:true});
+  openDialog(dialog);onAvailabilityChange();dialog.querySelector('#print-title').focus({preventScroll:true});
  }
- return {buttonMarkup,prepare,bind:container=>{const b=container.querySelector('[data-print]');if(b)b.onclick=open;},refresh:()=>{closed=false;return refresh();},close:()=>{closed=true;opening=null;controller?.abort();deliveryChanged=()=>{};preparedDelivery?.destroy();preparedDelivery=null;deliveryCheck=null;if(dialog?.open)dialog.close();}};
+ return {buttonMarkup,prepare,isActive:()=>!!(opening||dialog?.open),bind:container=>{const b=container.querySelector('[data-print]');if(b)b.onclick=open;},refresh:()=>{closed=false;return refresh();},close:()=>{closed=true;opening=null;controller?.abort();deliveryChanged=()=>{};preparedDelivery?.destroy();preparedDelivery=null;deliveryCheck=null;if(dialog?.open)dialog.close();}};
 }

@@ -146,7 +146,20 @@
 .pb-order-review .pb-mug-specs > div{display:grid;grid-template-columns:minmax(84px,1fr) minmax(0,1.3fr);align-items:baseline;gap:16px;margin:0}
 .pb-mug-specs dt{font-size:14px;color:var(--muted)}
 .pb-order-review .pb-mug-specs dd{margin:0;font-size:16px;font-weight:500;line-height:1.4;overflow-wrap:anywhere;text-align:right}
-.pb-mug-specs dd::first-letter{text-transform:uppercase}
+.pb-mug-color-swatch{display:none}
+.pb-mug-color-swatch:is([data-mug-color=white],[data-mug-color=black],[data-mug-color=red],[data-mug-color=blue],[data-mug-color="dark blue"]){
+  display:inline-block;
+  inline-size:.85em;
+  block-size:.85em;
+  margin-inline-end:.4em;
+  vertical-align:-.07em;
+  border:1px solid var(--ink);
+  border-radius:50%;
+  background:var(--mug-accent,#faf7ef);
+}
+.pb-mug-color-swatch[data-mug-color="dark blue"]{--mug-accent:#273d64}
+.pb-mug-specs dd>span:last-child{display:inline-block}
+.pb-mug-specs dd>span:last-child::first-letter{text-transform:uppercase}
 @media(max-width:700px){
  .pb-order-review > .pb-mug-details{max-width:460px}
  .pb-order-review .pb-mug-details .pb-gift-price{margin:0 0 10px;padding:0 0 8px}
@@ -155,48 +168,69 @@
  .pb-gift-dialog.pb-mug-review[open] .pb-order-review{flex:1;min-height:0;grid-template-rows:minmax(0,1fr) auto}
  .pb-gift-dialog.pb-mug-review[open] .pb-order-review > .pb-mug-preview{height:100%;min-height:0}
  .pb-gift-dialog.pb-mug-review[open] .pb-order-review :is(.pb-printful-mockup,.pb-mockup-wait){flex:1;min-height:0;height:0}
- .pb-gift-dialog.pb-mug-review[open] .pb-dialog-bottom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:12px 18px;gap:8px}
+ .pb-gift-dialog.pb-mug-review[open] .pb-dialog-bottom{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(0,max-content);padding:12px 18px;gap:8px}
 }
 
-/* Match the existing mobile reminder placement on wider screens. */
-@media (min-width: 801px) {
-  .pb-dialog-bottom:has(.pb-household-note) {
-    grid-template-columns: auto auto;
-    justify-content: space-between;
-  }
-  .pb-dialog-bottom .pb-household-note {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    justify-self: center;
-    width: fit-content;
-    max-width: 100%;
-    min-width: 0;
-    height: auto;
-    overflow-wrap: anywhere;
-  }
-  .pb-dialog-bottom:has(.pb-household-note) [data-gift-back] {
-    grid-column: 1;
-    grid-row: 2;
-  }
-  .pb-dialog-bottom:has(.pb-household-note) [data-gift-next] {
-    grid-column: 2;
-    grid-row: 2;
-  }
+/* Both confirmation footers put Pixel’s reminder above the decision buttons. */
+:is(.ks-print-dialog .ks-bottom,.pb-gift-dialog .pb-dialog-bottom):has(> :is(.ks-household-note,.pb-household-note)){
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:12px;
+  align-items:center;
+}
+:is(.ks-household-note,.pb-household-note){
+  grid-column:1 / -1;
+  grid-row:1;
+  justify-self:center;
+  width:fit-content;
+  max-width:100%;
+  min-width:0;
+  margin:0;
+  padding:8px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--surface);
+  color:var(--ink);
+  font-size:16px;
+  font-weight:600;
+  line-height:1.5;
+  text-align:center;
+  white-space:pre-line;
+  overflow-wrap:anywhere;
+}
+@media(min-width:801px){
+  :is(.ks-household-note,.pb-household-note){justify-self:end}
+}
+:is(.ks-household-note,.pb-household-note) .pb-dog-face-emoji{
+  display:inline-block;
+  width:30px;
+  height:30px;
+  margin-inline-start:3px;
+  vertical-align:-8px;
+  object-fit:contain;
+}
+:is(.ks-bottom,.pb-dialog-bottom):has(> :is(.ks-household-note,.pb-household-note)) > :is([data-cancel-print],[data-gift-back]){
+  grid-column:1;
+  grid-row:2;
+  justify-self:start;
+  min-width:0;
+}
+:is(.ks-bottom,.pb-dialog-bottom):has(> :is(.ks-household-note,.pb-household-note)) > :is([data-submit-print],[data-gift-next]){
+  grid-column:2;
+  grid-row:2;
+  justify-self:end;
+  min-width:0;
+}
+@media(max-width:600px){
+  :is(.ks-household-note,.pb-household-note){font-size:14px;line-height:1.4;padding:8px 10px}
 }
 
 @media (max-width: 700px) {
   :root :is(body,#keepsake,#photo) .pb-gift-dialog.pb-mug-review[open] .pb-dialog-bottom .button {
     inline-size: 100%;
     padding-inline: 6px;
-    white-space: nowrap;
-  }
-  /* Postcard actions share the same sizing and left/right placement at each step. */
-  :root #keepsake .ks-export-actions {
-    justify-content: space-between;
-    gap: 12px;
-  }
-  :root :is(body,#keepsake) :is(.ks-print-dialog,.ks-digital-confirm) .ks-bottom {
-    justify-content: space-between;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   :root #keepsake .ks-export-actions > button,
   :root :is(body,#keepsake) :is(.ks-print-dialog,.ks-digital-confirm) .ks-bottom > button {
@@ -206,4 +240,40 @@
     font-weight: 600;
     line-height: 1.4;
   }
+}
+
+/* Confirmation choices stay together, with the household reminder above them. */
+.ks-print-dialog:not(.ks-address-step) [data-close-print]{display:none}
+.pb-mug-customizer .pb-customizer-actions{justify-content:flex-end;flex-wrap:wrap}
+#keepsake:has(~ .ks-print-dialog[open]) [data-print]{pointer-events:none}
+#keepsake:has(~ .ks-print-dialog[open][data-dialog-motion=enter]) [data-print]{
+  --pb-action-fill:radial-gradient(ellipse at 30% 0%,#ffffff3d,transparent 65%),linear-gradient(180deg,#cb4d52 0%,#b72b3c 48%,#922237 100%);
+  --pb-action-border:#dd7f83;
+  --pb-action-ink:#fff7eb;
+}
+.ks-print-dialog .ks-bottom:has(>.ks-household-note){
+  grid-template-columns:minmax(0,1fr) auto auto;
+}
+.ks-print-dialog .ks-bottom:has(>.ks-household-note)>[data-cancel-print]{grid-column:2}
+.ks-print-dialog .ks-bottom:has(>.ks-household-note)>[data-submit-print]{grid-column:3}
+.pb-gift-dialog .pb-dialog-bottom>[data-gift-next]:only-child{margin-inline-start:auto}
+.pb-gift-dialog [data-gift-back]{gap:.35em}
+.pb-address-short{display:none}
+
+@media(max-width:700px){
+  :root :is(body,#keepsake,#photo) .pb-gift-dialog[open] .pb-dialog-bottom [data-gift-back]{
+    inline-size:44px;
+    min-block-size:44px;
+    padding:0;
+  }
+  .pb-gift-back-label{display:none}
+  :root :is(body,#keepsake,#photo) .pb-gift-dialog.pb-mug-review[open] .pb-dialog-bottom :is([data-customize-mug],[data-gift-next]){
+    inline-size:auto;
+    justify-self:end;
+    padding-inline:12px;
+  }
+}
+@media(max-width:360px){
+  .pb-address-full{display:none}
+  .pb-address-short{display:inline}
 }

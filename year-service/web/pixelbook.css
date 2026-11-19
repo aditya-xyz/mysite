@@ -47,7 +47,7 @@ main{max-width:1320px;margin:0 auto;padding:0 var(--pb-content-gutter)}
   #app :is(.personal-photos,.shared-photos)>.grid{grid-auto-rows:auto;align-items:stretch;gap:9px}
   #app .grid .card{padding:4px 4px 8px;min-width:0}
   #app .grid .card img{aspect-ratio:1;object-fit:cover;height:auto}
-  #app .grid .card :is(.pb-photo-caption,.pb-photo-short-label){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;font-size:11px;margin-top:6px}
+  #app .grid .card :is(.pb-photo-caption,.pb-photo-short-label){display:block;overflow-wrap:anywhere;font-size:11px;margin-top:6px}
   #app .grid .card:has(.pb-photo-short-label) .pb-photo-caption{display:none}
   .pb-mug-review .pb-dialog-bottom .button,#keepsake .ks-paper-tabs .ks-frame{white-space:normal;overflow-wrap:anywhere}
 }
@@ -248,7 +248,7 @@ header .theme-toggle{min-width:44px;min-height:44px}
 /* Simulated mug customization; physical variants are verified when Printful connects. */
 .pb-pixel-pick{text-align:center}.pb-pixel-pick>p{margin:8px auto 16px;text-align:center}.pb-pixel-pick .pb-mug-preview{max-width:300px;margin:auto}.pb-mug-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0}.pb-mug-options select{width:100%;min-height:44px;padding:10px;border:1px solid var(--muted);border-radius:8px;background:var(--pb-sheet);color:inherit;font:inherit}.pb-mug-options label{min-width:0}
 .pb-mug-preview[data-mug-font=clean] .pb-mug-print p{font-family:Asap,sans-serif}.pb-mug-preview[data-mug-font=serif] .pb-mug-print p{font-family:Georgia,serif}.pb-mug-preview[data-mug-font=handwritten] .pb-mug-print p{font-family:Caveat,cursive;font-size:15px;font-weight:400}
-.pb-mug-preview[data-mug-size="15oz"] .pb-mug-ceramic{height:218px;top:4px}.pb-mug-preview[data-mug-style=latte] .pb-mug-ceramic{clip-path:polygon(0 0,100% 0,88% 100%,12% 100%);border-radius:8px 8px 25px 25px}.pb-mug-preview[data-mug-color=black]{--mug-accent:#303030}.pb-mug-preview[data-mug-color=red]{--mug-accent:#a93432}.pb-mug-preview[data-mug-color=blue]{--mug-accent:#315c8b}.pb-mug-preview[data-mug-style=color-inside] .pb-mug-handle{border-color:var(--mug-accent)}.pb-mug-preview[data-mug-style=color-inside] .pb-mug-ceramic{border-top-color:var(--mug-accent)}
+.pb-mug-preview[data-mug-size="15oz"] .pb-mug-ceramic{height:218px;top:4px}.pb-mug-preview[data-mug-style=latte] .pb-mug-ceramic{clip-path:polygon(0 0,100% 0,88% 100%,12% 100%);border-radius:8px 8px 25px 25px}:is(.pb-mug-preview,.pb-mug-color-swatch)[data-mug-color=black]{--mug-accent:#303030}:is(.pb-mug-preview,.pb-mug-color-swatch)[data-mug-color=red]{--mug-accent:#a93432}:is(.pb-mug-preview,.pb-mug-color-swatch)[data-mug-color=blue]{--mug-accent:#315c8b}.pb-mug-preview[data-mug-style=color-inside] .pb-mug-handle{border-color:var(--mug-accent)}.pb-mug-preview[data-mug-style=color-inside] .pb-mug-ceramic{border-top-color:var(--mug-accent)}
 @media(max-width:380px){.pb-mug-options{grid-template-columns:1fr}}
 
 .pb-dialog-bottom [data-customize-mug]{margin-left:auto}.pb-dialog-bottom .pb-secondary-button{background:transparent;color:var(--ink);border:1px solid var(--line)}
@@ -288,6 +288,12 @@ header .theme-toggle{min-width:44px;min-height:44px}
 /* Both physical gifts share one place and the same visual weight. */
 .pb-presents{margin:64px 0 56px}
 .pb-presents-heading{margin-bottom:28px}
+.pb-gift-jumps{display:none}
+.pb-presents .pb-present-card[id]{scroll-margin-top:16px}
+@media(max-width:760px){
+  .pb-gift-jumps{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:12px}
+  .pb-gift-jumps a{display:inline-flex;align-items:center;min-height:44px;color:var(--ink);text-underline-offset:.25em}
+}
 .pb-presents-heading .pb-eyebrow{margin:0 0 10px}
 .pb-presents-heading h2{font-size:clamp(36px,4vw,54px);line-height:1.08;letter-spacing:-.025em;color:var(--accent);margin:0}
 .pb-presents-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
@@ -322,21 +328,6 @@ header .theme-toggle{min-width:44px;min-height:44px}
  .pb-presents .pb-present-card .pb-present-copy>p{order:1;margin:0}
  .pb-presents .pb-present-copy .button{order:2;margin:0}
  .pb-presents .pb-present-card .pb-present-copy .pb-gift-allowance{order:3;margin:0}
-}
-
-.pb-dialog-bottom .pb-household-note{width:fit-content;max-width:100%;box-sizing:border-box;margin:0;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-size:16px;font-weight:600;line-height:1.5;text-align:center;white-space:pre-line}
-
-.pb-household-note .pb-dog-face-emoji{display:inline-block;width:30px;height:30px;margin-left:3px;vertical-align:-8px;object-fit:contain}
-
-.pb-dialog-bottom:has(.pb-household-note){display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center}
-.pb-dialog-bottom .pb-household-note{grid-column:2;grid-row:1;justify-self:end}
-.pb-dialog-bottom:has(.pb-household-note) [data-gift-back]{grid-column:1;grid-row:1;justify-self:start;min-width:0}
-.pb-dialog-bottom:has(.pb-household-note) [data-gift-next]{grid-column:3;grid-row:1;justify-self:end;min-width:0}
-@media(max-width:800px){
- .pb-dialog-bottom:has(.pb-household-note){grid-template-columns:auto auto;justify-content:space-between}
- .pb-dialog-bottom .pb-household-note{grid-column:1/-1;grid-row:1;justify-self:center}
- .pb-dialog-bottom:has(.pb-household-note) [data-gift-back]{grid-column:1;grid-row:2}
- .pb-dialog-bottom:has(.pb-household-note) [data-gift-next]{grid-column:2;grid-row:2}
 }
 
 /* Pixel checks the door while the invitation contact fetches their code. */
@@ -446,7 +437,6 @@ header .theme-toggle{min-width:44px;min-height:44px}
 @media(max-width:600px){
  .ks-print-dialog .delivery-summary h3{font-size:17px}
  .ks-print-dialog .delivery-summary address{font-size:15px;line-height:1.4}
- .ks-print-dialog .ks-household-note{font-size:14px;line-height:1.4;padding:8px 10px}
 }
 
 /* Pixel’s buttons keep the same relaxed case in both gift flows and all locales. */

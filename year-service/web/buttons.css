@@ -94,12 +94,6 @@
  .ks-print-dialog .fc-preview{--fc-mobile-height:clamp(100px,calc(100dvh - 512px),222px)}
 }
 
-/* The gift keeps its festive red, with the same glossy surface as other actions. */
-:root .ks-gift{
- --pb-action-fill:radial-gradient(ellipse at 30% 0%,#ffffff3d,transparent 65%),linear-gradient(180deg,#cb4d52 0%,#b72b3c 48%,#922237 100%);
- --pb-action-border:#861c30;
- --pb-action-shadow:inset 0 1px 0 #ffffff66,inset 0 -1px 0 #650e242e,0 1px 3px #54102724;
-}
 /* A restrained glass treatment: translucent tint, blur and a luminous rim. */
 :root :is(body,#keepsake,#photo) .pb-segments{
  background:linear-gradient(155deg,color-mix(in srgb,var(--paper) 82%,transparent),color-mix(in srgb,var(--surface) 64%,transparent));
@@ -165,7 +159,6 @@
  --pb-soft-fill:linear-gradient(180deg,#3a5140,#304735 55%,#293e2e);
  --pb-soft-shadow:inset 0 1px 0 #ffffff25,inset 0 -1px 0 #0002,0 1px 2px #0003;
 }
-:root[data-palette=night] .ks-gift{--pb-action-ink:#fff7eb;--pb-action-border:#dd7f83}
 :root[data-palette=night] :is(body,#keepsake,#photo) .pb-segments{box-shadow:inset 0 1px 0 #ffffff20,0 2px 8px #0002}
 :root[data-palette=night] :is(.pb-gift-dialog,.ks-print-dialog,#keepsake){
  --paper:#22342a;--surface:#334b3a;--line:#697c68;--ink:#f0efdf;--muted:#c2ccb9;--pb-sheet:#304438;

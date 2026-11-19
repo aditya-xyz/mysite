@@ -32,7 +32,7 @@ export function mountKeepsake(journal,section){
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
   let assembleNext=false,chosen=[],crops=new Map(),step='pick',file=null,busy=false,revision=0,abort=null,returnFocus,shareFallback=false;
   const images=new Map(),defaultArt=new Map(),urls=new Set();let cardImages=[],editorCleanup=null,pickerCleanup=null,previewFrame=0,orderToast=null,toastTimer=null,digitalPreviewUrl=null,borderTransition=null,exportSignature=null;
-  const printFlow=createPrintFlow({previewOnly:journal.adminPreview===true,householdName:journal.name,householdSize:journal.householdSize,getData:()=>({file,defaultSrc:defaultSrc(),cardCount:1,personalized:!fixed,recipe:{format:'folded',mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:status=>{if(status?.order)setOrdered(status.order);if(modal.open&&step==='edit')updateExport();},onAddressStatus:message=>setStatus(message),onOrdered:(message,simulated,order)=>{setOrdered(order);if(modal.open){showOrderToast(message,simulated);modal.querySelector('[data-close]')?.focus();}}});
+  const printFlow=createPrintFlow({previewOnly:journal.adminPreview===true,householdName:journal.name,householdSize:journal.householdSize,getData:()=>({file,defaultSrc:defaultSrc(),cardCount:1,personalized:!fixed,recipe:{format:'folded',mode:fixed?'default':'personal',defaultRevision:journal.keepsake.defaultRevision,photoIds:fixed?[]:[...chosen],crops:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)])),frame}}),onChange:status=>{if(status?.order)setOrdered(status.order);if(modal.open&&step==='edit')updateExport();},onAddressStatus:message=>setStatus(message),onAvailabilityChange:updateExport,onOrdered:(message,simulated,order)=>{setOrdered(order);if(modal.open){showOrderToast(message,simulated);modal.querySelector('[data-close]')?.focus();}}});
   const digitalFlow=createDigitalFlow({journal,getData:()=>({frame,background:frameBackground(frame),images:cardImages.slice(0,3),crops:chosen.map(id=>crops.get(id)),photoIds:fixed?[]:[...chosen],cropMap:fixed?{}:Object.fromEntries(chosen.map(id=>[id,crops.get(id)]))}),loadImage,onChange:state=>{if(state?.claimed){digitalOnly=true;if(fixed)frame=state.frame;updateDigitalEntry();}if(modal.open&&step==='edit'){updateExport();if(file)void digitalFlow.prewarm();}},onSaved:(state,message)=>{if(state?.claimed){digitalOnly=true;updateDigitalEntry();if(modal.open&&(fixed||step!=='preview')){step=fixed?'edit':'preview';render();}}if(message)setStatus(message);}});
   function updateDigitalEntry(){if(!digitalOnly)return;launch.textContent=fixed?'view your postcard':'make another postcard';entry.querySelector('.pb-present-copy>p').textContent='paperless fan club · unlimited downloads';}
   updateDigitalEntry();
@@ -101,7 +101,7 @@ export function mountKeepsake(journal,section){
     if(fixed&&digitalOnly)return `<div class="ks-export-actions">${exportActions()}</div>`;
     if(!fixed&&digitalOnly&&step==='edit')return `<button class="ks-primary" data-preview ${file&&!busy?'':'disabled'}>preview postcard ${arrow}</button>`;
     if(step==='pick')return `<span class="ks-count" role="status">${chosen.length} of 3 selected</span><button class="ks-primary" data-continue ${chosen.length===3?'':'disabled'}>Continue ${arrow}</button>`;
-    return frameMarkup()+`<div class="ks-export-actions">${exportActions()}</div>`;
+    return (fixed||step==='preview'?frameMarkup():'')+`<div class="ks-export-actions">${exportActions()}</div>`;
   }
   function exportActions(){
     const digital=digitalFlow.canUse()||digitalOnly;
@@ -113,7 +113,7 @@ export function mountKeepsake(journal,section){
     return (digitalOnly?'':printFlow.buttonMarkup())+`<button class="ks-primary ks-digital" ${useShare?'data-share':'data-save'} ${file?'':'disabled'}>${icon}<span>${digital&&!digitalOnly?'Keep it digital':useShare?'Share':'Save copy'}</span></button>`;
 
   }
-  function pickMarkup(){return `<div class="ks-pick-shell"><div class="ks-picks" data-photo-count="${photos.length}">${photos.map(p=>{const n=chosen.indexOf(p.id);return `<button class="ks-pick" data-pick="${esc(p.id)}" aria-label="${esc(p.caption||p.alt)}" aria-pressed="${n>=0}"><img data-session-src="${esc(p.src)}" alt="${esc(p.alt)}" ${p.width&&p.height?`width="${esc(p.width)}" height="${esc(p.height)}"`:''} loading="eager" decoding="async"><span class="ks-badge" ${n<0?'hidden':''}>${n+1}</span></button>`;}).join('')}</div></div>`;}
+  function pickMarkup(){return `<p class="ks-picker-instruction">Choose 3 photos</p><div class="ks-pick-shell"><div class="ks-picks" data-photo-count="${photos.length}">${photos.map(p=>{const n=chosen.indexOf(p.id);return `<button class="ks-pick" data-pick="${esc(p.id)}" aria-label="${esc(p.caption||p.alt)}" aria-pressed="${n>=0}"><img data-session-src="${esc(p.src)}" alt="${esc(p.alt)}" ${p.width&&p.height?`width="${esc(p.width)}" height="${esc(p.height)}"`:''} loading="eager" decoding="async"><span class="ks-badge" ${n<0?'hidden':''}>${n+1}</span></button>`;}).join('')}</div></div>`;}
   function frameMarkup(){if(fixed&&digitalOnly)return '';return `<div class="ks-paper-tabs pb-segments" role="group" aria-label="Frame style">${keepsakeFrames.map(({id:value,label})=>`<button class="ks-frame" data-frame="${value}" aria-pressed="${frame===value}"><span class="ks-swatch ${value}" aria-hidden="true"></span><span>${label}</span></button>`).join('')}</div>`;}
   function receiptMarkup(){
     const swapped=ordered.personalized&&ordered.frontDesign==='default'&&ordered.defaultSrc;
@@ -127,7 +127,11 @@ export function mountKeepsake(journal,section){
     if(!fixed&&step==='preview')return `<div class="ks-complete-stage"><img class="ks-complete-preview" alt="Your complete digital postcard"></div>`;
     if(fixed&&digitalOnly)return `<div class="ks-default-editor"><p class="ks-description">paperless fan club · unlimited downloads</p><img class="ks-default-image" src="/api/print/digital/image" alt="Your complete digital postcard"></div>`;
     if(fixed)return `<div class="ks-default-editor"><p class="ks-description">Pixel picked these for you. Choose your border.</p><div class="ks-preview-wrap"><img class="ks-default-image" data-default-image src="${esc(defaultSrc())}" alt="Pixel’s fixed postcard: family photo above, dogs on the lower left and family on the lower right"></div></div>`;
-    return `<div class="ks-editor-stage"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five postcard: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Photo ${i+1}: drag vertically to reframe, drag onto another photo to swap" aria-describedby="ks-direct-help"></button>`).join('')}</div></div><p id="ks-direct-help" class="ks-crop-hint">Drag to reframe. Drop onto another photo to swap.</p><span class="ks-editor-announcement" role="status" aria-live="polite"></span></div>`;}
+    return `<div class="ks-editor-stage"><div class="ks-editor-art"><div class="ks-preview-wrap"><canvas class="ks-preview" width="1200" height="1500" role="img" aria-label="Your four-by-five postcard: three selected photos, a few of our favorite humans, and Pixel in a Santa hat"></canvas><div class="ks-tap-slots">${cardSlots.map((s,i)=>`<button data-crop="${i}" data-photo-id="${esc(chosen[i])}" aria-pressed="false" aria-label="Edit photo ${i+1}" aria-expanded="false" aria-controls="ks-edit-tools" aria-describedby="ks-direct-help"></button>`).join('')}</div></div></div>${digitalOnly?'':frameMarkup()}<div class="ks-editor-controls"><p id="ks-direct-help" class="ks-crop-hint">Tap a photo to edit. You can also drag to reframe or swap.</p><div class="ks-edit-tools" id="ks-edit-tools" hidden>
+      <div data-edit-mode="choose"><button type="button" data-edit-action="reframe">Reframe</button><button type="button" data-edit-action="swap">Swap</button><button type="button" data-edit-action="done">Done</button></div>
+      <div data-edit-mode="reframe" hidden><button type="button" data-edit-action="up">Move up</button><button type="button" data-edit-action="down">Move down</button><button type="button" data-edit-action="done">Done</button></div>
+      <div data-edit-mode="swap" hidden><p>Tap another photo to swap.</p><button type="button" data-edit-action="done">Cancel swap</button></div>
+    </div></div><span class="ks-editor-announcement" role="status" aria-live="polite"></span></div>`;}
   function render(){
     exportSignature=null;
     borderTransition?.cancel();borderTransition=null;
@@ -183,7 +187,9 @@ export function mountKeepsake(journal,section){
       printFlow.bind(bottom);
     }
     bottom.setAttribute('aria-busy',String(busy));
-    bottom.querySelectorAll('button').forEach(button=>button.disabled=!file||busy);
+    bottom.querySelectorAll('button').forEach(button=>{
+      button.disabled=!file||busy||button.matches('[data-print]')&&printFlow.isActive();
+    });
   }
   function drawCard(canvas,loaded){
     const ctx=canvas.getContext('2d');canvas.dataset.paper=drawKeepsakeFrame(ctx,frame,loaded[4]);

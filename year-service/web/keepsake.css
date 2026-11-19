@@ -98,7 +98,7 @@ html:has(#keepsake[open]){overflow:hidden}
 @media(max-width:600px){
  #keepsake .ks-edit-body{padding:10px 12px 16px}#keepsake .ks-editor-stage .ks-preview-wrap{width:100%}
  #keepsake .ks-body:has(.ks-picks){padding:16px 20px 24px}#keepsake .ks-picks{gap:12px;padding:0}#keepsake:has(.ks-picks) .ks-bottom{padding-inline:20px}
- #keepsake .ks-bottom:has(.ks-paper-tabs){padding:10px 12px max(12px,env(safe-area-inset-bottom));gap:9px}
+ #keepsake .ks-bottom:has(.ks-paper-tabs),#keepsake:has(.ks-editor-stage .ks-paper-tabs) .ks-bottom{padding:10px 12px max(12px,env(safe-area-inset-bottom));gap:9px}
  .ks-paper-tabs{margin:0 auto;justify-content:center}#keepsake .ks-paper-tabs .ks-frame{min-height:40px;padding:7px 11px;font-size:12px}
  .ks-export-actions{width:100%;gap:10px}.ks-export-actions>*{flex:1}
  #keepsake .ks-crop-hint{font-size:12px}#keepsake .ks-crop-hint span{font-size:11px}
@@ -185,21 +185,6 @@ html:has(#keepsake[open]){overflow:hidden}
  .ks-print-dialog .fc-preview{--fc-mobile-height:clamp(100px,calc(100dvh - 480px),246px)}
 }
 
-.ks-print-dialog .ks-household-note{width:fit-content;max-width:100%;box-sizing:border-box;margin:0;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-size:16px;font-weight:600;line-height:1.5;text-align:center;white-space:pre-line}
-
-.ks-household-note .pb-dog-face-emoji{display:inline-block;width:30px;height:30px;margin-left:3px;vertical-align:-8px;object-fit:contain}
-
-.ks-print-dialog .ks-bottom:has(.ks-household-note){display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center}
-.ks-print-dialog .ks-bottom .ks-household-note{grid-column:2;grid-row:1;justify-self:end}
-.ks-print-dialog .ks-bottom:has(.ks-household-note) [data-cancel-print]{grid-column:1;grid-row:1;justify-self:start;min-width:0}
-.ks-print-dialog .ks-bottom:has(.ks-household-note) [data-submit-print]{grid-column:3;grid-row:1;justify-self:end;min-width:0}
-@media(max-width:800px){
- .ks-print-dialog .ks-bottom:has(.ks-household-note){grid-template-columns:auto auto;justify-content:space-between}
- .ks-print-dialog .ks-bottom .ks-household-note{grid-column:1/-1;grid-row:1;justify-self:center}
- .ks-print-dialog .ks-bottom:has(.ks-household-note) [data-cancel-print]{grid-column:1;grid-row:2}
- .ks-print-dialog .ks-bottom:has(.ks-household-note) [data-submit-print]{grid-column:2;grid-row:2}
-}
-
 .ks-swatch.starry-night{background:#092038}.ks-swatch.evergreen{background:#15391c}.ks-swatch.winterlight{background:#fff3db}
 
 /* Up to six desktop choices fit in two rows; larger libraries keep scrolling. */
@@ -226,7 +211,25 @@ html:has(#keepsake[open]){overflow:hidden}
 #keepsake .ks-edit-body:has(.ks-complete-stage){overflow:hidden}#keepsake .ks-complete-stage{flex:1;min-height:0;align-self:stretch;display:flex;align-items:center;justify-content:center}#keepsake .ks-complete-preview{width:100%;height:100%;max-width:340px;max-height:100%;object-fit:contain;box-shadow:none}
 /* Fit each postcard stage to its dialog. */
 #keepsake .ks-select-body{display:flex;flex-direction:column;overflow:hidden;gap:6px}#keepsake .ks-pick-shell{display:flex;flex:1;min-height:0;flex-direction:column;width:100%;gap:12px}#keepsake .ks-picks{flex:1;min-height:0;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(var(--pick-rows),minmax(0,1fr));gap:12px;padding:4px}#keepsake .ks-pick{width:100%;height:100%;min-height:0;aspect-ratio:auto}#keepsake .ks-pick img{object-fit:contain}
-#keepsake .ks-edit-body{overflow:hidden}#keepsake .ks-editor-stage{flex:1;min-height:0;container-type:size;justify-content:center;margin:0}#keepsake .ks-editor-stage .ks-preview-wrap{width:min(100%,calc((100cqh - 60px)*.8));min-width:0;flex:none}#keepsake .ks-crop-hint{flex:none;text-align:center}
+#keepsake .ks-edit-body{overflow:hidden}
+#keepsake .ks-editor-stage{flex:1;min-height:0;margin:0;gap:8px}
+.ks-editor-stage .ks-paper-tabs{flex:none;margin-inline:auto}
+.ks-editor-art{display:grid;place-items:center;flex:1;min-height:0;width:100%;container-type:size}
+#keepsake .ks-editor-stage .ks-preview-wrap{width:min(100%,calc(100cqh * .8));min-width:0}
+#keepsake .ks-picker-instruction{margin:0 4px;font-weight:600}
+.ks-editor-controls{flex:none;width:100%;min-height:44px;display:grid;place-items:center}
+#keepsake .ks-editor-controls:has(.ks-edit-tools:not([hidden])) .ks-crop-hint{
+  position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%)
+}
+.ks-edit-tools [data-edit-mode]:not([hidden]){display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 8px}
+#keepsake .ks-edit-tools button{
+  min-height:44px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);color:var(--ink);cursor:pointer;font-size:14px
+}
+#keepsake .ks-edit-tools button:disabled{opacity:.55;cursor:default}
+.ks-edit-tools p{margin:0;font-size:14px}
+#keepsake .ks-tap-slots button[aria-expanded=true]{outline:2px solid #fff;outline-offset:-4px;box-shadow:inset 0 0 0 4px #2d5744}
+#keepsake .ks-crop-hint{flex:none;text-align:center}
 #keepsake .ks-default-editor{flex:1;min-height:0;container-type:size;justify-content:center;margin:0}#keepsake .ks-default-editor .ks-preview-wrap{width:min(100%,calc((100cqh - 60px)*.8));min-width:0}#keepsake .ks-default-editor>.ks-default-image{flex:1;min-height:0;width:100%;object-fit:contain}
 .ks-digital-confirm{height:calc(100dvh - 32px);max-height:1000px;overflow:hidden}.ks-digital-confirm[open]{display:flex;flex-direction:column}.ks-digital-confirm-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;gap:12px;padding:0 24px 12px}.ks-digital-confirm-body>img{flex:1;min-height:0;width:100%;max-height:none;object-fit:contain;margin:0}.ks-digital-confirm-body p{flex:none;margin:0;width:100%;font-size:14px}.ks-digital-confirm .ks-bottom{flex:none;position:static}
 @media(max-width:600px){#keepsake .ks-picks{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(var(--pick-mobile-rows),minmax(0,1fr))}#keepsake .ks-crop-hint span{display:none}.ks-digital-confirm .ks-top h2{font-size:20px}.ks-digital-confirm-body{padding-inline:16px;gap:8px}.ks-digital-confirm-body p{font-size:13px}}

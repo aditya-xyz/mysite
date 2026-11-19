@@ -45,6 +45,9 @@
   --pb-gift-edge-hover: #8ed0b470;
   --pb-gift-glow: #a9d49f0a;
 }
+:root[data-palette=night] #keepsake {
+  --pb-gift-glow: #bacfc321;
+}
 :root[data-palette=night] :is(#pb-gift, .pb-gift-dialog, .pb-mug-customizer) {
   --pb-gift-surface: var(--pb-night-mug);
   --pb-gift-edge: #c4a5d140;

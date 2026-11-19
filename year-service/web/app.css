@@ -10,3 +10,7 @@
 @import './dialog-motion.css';
 @import './privacy-links.css';
 @import './theme.css';
+
+/* Pixel’s button voice is lowercase. Wrap Christmas in .pb-keep-case when used in a label. */
+:root body button{text-transform:lowercase}
+:root body button .pb-keep-case{text-transform:none}
