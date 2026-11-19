@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {liveGiftAllowed,liveGiftIntentStatement,resetPostcardIntentStatement} from '../src/live-gifts.ts';
 import {checkedMugDraft,tickLiveMugFulfillment,liveMugSource} from '../src/live-mug-fulfillment.ts';
-import {resetPrintAllowance} from '../admin/src/simulated-order-reset.ts';
+import {resetMugAllowance,resetPrintAllowance} from '../admin/src/simulated-order-reset.ts';
 import {tickPrintFulfillment} from '../src/handwrytten-fulfillment.ts';
 import {digest} from '../src/security.ts';
 
@@ -19,6 +19,11 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
  CREATE TABLE handwrytten_previews(id TEXT PRIMARY KEY,invitation_id TEXT,year INTEGER,status TEXT,card_id INTEGER,front_key TEXT,inside_key TEXT,back_key TEXT,updated_at INTEGER);`);
  for(const file of ['0029_handwrytten_fulfillment.sql','0033_handwrytten_quote_only.sql','0041_scoped_live_gifts.sql'])await db.batch((await readFile('migrations/'+file,'utf8')).split('--> statement-breakpoint').filter(s=>s.trim()).map(s=>db.prepare(s)));
  await db.prepare("INSERT INTO live_gift_permissions(year,invitation_id,person_id,member_ids,postcard_enabled,mug_enabled,enabled,expires_at) VALUES(2026,'home','owner','[\"owner\",\"partner\"]',1,1,1,unixepoch()+86400)").run();
+ await db.prepare("INSERT INTO live_gift_orders(order_id,kind,year,invitation_id,max_cents,state,provider_id,payload_json,asset_token_hash,asset_expires_at) VALUES('mug-migrated','mug',2026,'home',2500,'submitted','321','{}','synthetic-token',unixepoch()+3600)").run();
+ const beforeMigration=await db.prepare("SELECT * FROM live_gift_orders WHERE order_id='mug-migrated'").first<Record<string,unknown>>();
+ await db.batch((await readFile('migrations/0044_live_mug_allowance_reset.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+ assert.deepEqual(await db.prepare("SELECT * FROM live_gift_orders WHERE order_id='mug-migrated'").first(),{...beforeMigration,allowance_reset_at:null});
+ await db.prepare("DELETE FROM live_gift_orders WHERE order_id='mug-migrated'").run();
  const env={DB:db as any,MEDIA:media as any,LIVE_GIFT_ORDERING:'true',PRINT_ORDER_MODE:'handwrytten_live',PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'synthetic',PRINTFUL_STORE_ID:'123',SOCIAL_JOURNAL_ORIGIN:'https://live.test',HANDWRYTTEN_API_KEY:'synthetic',HANDWRYTTEN_PREVIEWS_ENABLED:'true'};
  const address={line1:'1 Synthetic Lane',line2:'',city:'Testville',state:'CA',postalCode:'90001',country:'US'};
  const calls:string[]=[];let mug:any=null,mugPayload:any=null,mugCost='19.99',loseConfirm=false,loseCreate=false,costsPending=false,readOnlyOrderToken=false,mode=0,previewTotal=4.86,basket:any[]=[],basketTotal=4.86,postcardAccepted=false,nextVendorId=100,vendorOrders=new Map<number,any>(),placeMetadata:string[]=[],detailIds:number[]=[],postcardDetailsStatus:string|null=null,postcardDetailsError=false,onPostcardDetails:((id:number)=>Promise<void>|void)|null=null;
@@ -177,7 +182,22 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
    }
   });
    await t.test('expired mutation leases never retry payment',async()=>{await reset();await seedMug();await db.prepare("UPDATE live_gift_orders SET state='submitting',lease_until=unixepoch()-1").run();await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'unknown');assert.equal((await db.prepare("SELECT status FROM mug_orders WHERE id='mug-live'").first<any>()).status,'unknown');assert.equal(calls.length,0);});
-  await t.test('same household cannot create a second live mug intent after allowance reset',async()=>{await reset();await seedMug();await db.prepare("INSERT INTO mug_orders VALUES('mug-second','home',2026,'simulated',?1,'Synthetic',NULL,NULL,4,NULL,unixepoch())").bind(JSON.stringify(address)).run();await liveGiftIntentStatement(env,'mug-second','mug','home',2026).run();assert.equal(await liveState('mug-second'),undefined);});
+  await t.test('same household cannot create a second live mug intent while the first is unresolved',async()=>{await reset();await seedMug();await db.prepare("INSERT INTO mug_orders VALUES('mug-second','home',2026,'simulated',?1,'Synthetic',NULL,NULL,4,NULL,unixepoch())").bind(JSON.stringify(address)).run();await liveGiftIntentStatement(env,'mug-second','mug','home',2026).run();assert.equal(await liveState('mug-second'),undefined);});
+  await t.test('a confirmed mug reset preserves fulfillment and permits one new live intent',async()=>{
+   await reset();await seedMug();await tickLiveMugFulfillment(env);
+   assert.equal(await liveState('mug-live'),'submitted');
+   const before=calls.length;
+   const release=await resetMugAllowance(env,2026,'home',{orderId:'mug-live',confirm:true});
+   assert.equal(release.historyCleared,false);
+   const original=await db.prepare("SELECT state,provider_id,allowance_reset_at FROM live_gift_orders WHERE order_id='mug-live'").first<any>();
+   assert.deepEqual(original,{state:'submitted',provider_id:'123',allowance_reset_at:release.resetAt});
+   assert.equal(calls.length,before);
+   await db.prepare("INSERT INTO mug_orders VALUES('mug-second','home',2026,'simulated',?1,'Synthetic',NULL,NULL,4,NULL,unixepoch())").bind(JSON.stringify(address)).run();
+   await liveGiftIntentStatement(env,'mug-second','mug','home',2026).run();
+   assert.equal(await liveState('mug-second'),'pending');
+   await assert.rejects(()=>resetMugAllowance(env,2026,'home',{orderId:'mug-live',confirm:true}),/allowance changed/);
+   assert.equal(await liveState('mug-second'),'pending');
+  });
   const seedSecondLivePrint=async()=>{
    await db.prepare("INSERT INTO live_gift_permissions(year,invitation_id,person_id,member_ids,postcard_enabled,mug_enabled,enabled,expires_at) VALUES(2026,'other','friend','[\"friend\"]',1,1,1,unixepoch()+86400)").run();
    await seedPrint(true,'print-live-2','other','proof-2');

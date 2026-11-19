@@ -2,7 +2,7 @@ import {postcardAllowanceResettableSQL,postcardLiveJoinSQL} from '../../src/live
 import {quoteSavedPrintOrder} from '../../src/handwrytten-quote.ts';
 import {prepareSavedOrderProof} from '../../src/handwrytten-previews.ts';
 import {handwryttenStatus} from '../../src/handwrytten.ts';
-import {resetSimulatedOrder} from './simulated-order-reset.ts';
+import {resetPrintAllowance} from './simulated-order-reset.ts';
 import {simulatedOrders,PrintProblem,type PrintEnv} from '../../src/printing.ts';
 export async function printAdminRoute(request:Request,env:PrintEnv,path:string,year:number,readBody:()=>Promise<Record<string,unknown>>){
  if(path==='/api/handwrytten/status'&&request.method==='GET')return Response.json(await handwryttenStatus(env));
@@ -15,7 +15,7 @@ export async function printAdminRoute(request:Request,env:PrintEnv,path:string,y
  }
  const reset=/^\/api\/invitations\/([a-z0-9-]{1,100})\/reset-print-allowance$/.exec(path);
  if(reset&&request.method==='POST'){
-  return Response.json(await resetSimulatedOrder(env,'print',year,reset[1],await readBody()));
+  return Response.json(await resetPrintAllowance(env,year,reset[1],await readBody()));
  }
  if(path==='/api/print-orders'&&request.method==='GET'){
   const rows=await env.DB.prepare("SELECT o.id,o.invitation_id,o.status,o.recipient_name,o.note,o.default_note,o.address_json,o.created_at,o.allowance_reset_at,o.card_count,o.format,o.back_text,o.authors,o.handwrytten_preview_id,o.handwrytten_order_json,o.handwrytten_quote_json,o.recipe_json,o.provider_id,o.budget_review_required,o.budget_approved_cents,o.budget_approved_by,o.budget_approved_at,f.quote_only,f.state AS fulfillment_state,f.error AS fulfillment_error FROM print_orders o LEFT JOIN print_fulfillment f ON f.order_id=o.id WHERE o.year=?1 AND o.status IN ('preparing','simulated','submitted','unknown') ORDER BY o.created_at DESC LIMIT 200").bind(year).all();

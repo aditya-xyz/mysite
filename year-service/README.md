@@ -460,18 +460,13 @@ scrapbook switch off. External provider traffic is blocked. Never deploy this
 fixture or treat its verification badge as real USPS verification.
 
 
-### Print allowance resets
+### Gift allowance resets
 
-The current simulation flow uses migration `0015_simulated_mug_orders.sql`.
-Each invitation has independent postcard and mug counters (0 or 1). Admin reset
-requires the exact current completed simulated order and explicit confirmation;
-it deletes that order and private proof, sets the counter to 0, and removes its
-history row. Processing/uncertain or real submitted orders cannot be cleared by
-this simulation-only action. A stale reset cannot clear a newer order.
-
-When real fulfillment is implemented, allowance resets must preserve old orders
-and frozen designs, allowing a household's history to contain multiple orders.
-That future behavior is intentionally different from today's disposable test data.
+Each invitation has independent postcard and mug allowances. A reset lets the
+household order one more gift and keeps the previous order and its saved proof
+in Studio. A mug reset requires a completed simulation or a confirmed live
+order. An in-progress or uncertain mug stays reserved. Use the exact active
+order ID to reset an allowance. Apply migration 0044 before deploying mug reset.
 
 Guests see no print action or exhausted-allowance message once it is used. Opening
 the keepsake again refreshes eligibility after an admin reset. Apply migration

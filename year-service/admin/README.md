@@ -610,9 +610,9 @@ marker, so no new boolean or migration is needed. History counts include release
 orders. Reset targets the exact current order and cannot release a newer one on
 retry. Completed simulations and confirmed submitted test orders can be reset;
 processing/uncertain jobs and review jobs with a staged basket item are blocked.
-Reset never cancels or resends an order. Mug reset still deletes only its completed
-simulation and saved artwork, as before. Apply migration 0015 before deploying
-either Worker.
+Reset preserves order history and saved artwork. Apply migration 0044 before
+deploying the mug allowance reset. It preserves existing live fulfillment records
+and permits a new intent only after an explicit reset of a confirmed mug.
 
 
 ## Google address verification and autocomplete
@@ -821,9 +821,8 @@ and postcard order histories and counters; view their saved proofs before reset.
 
 Migration 0015 adds `mug_orders` and `invites.print_order_count` /
 `invites.mug_order_count`. Atomic order reservations and database triggers keep
-these independent allowance markers at 0 or 1. Print reset preserves prior orders
-and proofs by releasing their allowance timestamp; mug reset deletes the completed
-simulated mug order and its private artwork. `ORDER_MODE=simulation` is set in both Worker configs;
+these independent allowance markers at 0 or 1. Both reset actions preserve prior
+orders and artwork and set the allowance reset timestamp. `ORDER_MODE=simulation` is set in both Worker configs;
 normal same-origin backend requests are used. Fulfillment remains simulated;
 address autocomplete and USPS verification through Google are live. Approved
 verified addresses are saved to the invitation verification contact in People.
@@ -1197,9 +1196,8 @@ Previews request Handle left / Handle right. New source and proof IDs prevent
 reuse of the previous one-sided artwork, while historical proofs remain available.
 Migration 0030 preserves all existing preview rows and permits handle-left views.
 New Printful-enabled simulated mug orders freeze `print.png` plus layout version
-3 independently of the cutout used in the picker. Mug allowance reset continues
-to delete its simulated order and both private artwork files. Actual mug ordering
-remains disabled. Admin Prepare previews must prepare the new versioned sources;
+3 independently of the cutout used in the picker. Mug allowance reset preserves
+the order and both private artwork files. Admin Prepare previews must prepare the new versioned sources;
 Printful mockups then fill in under the existing background rate limits.
 
 International shipping estimates use the immutable saved order destination for

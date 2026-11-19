@@ -39,6 +39,8 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
  const design=edition&&publishedMugs(edition).find(d=>d.id===data.designId);
  if(!row?.is_active||!design?.cutoutVersion)throw new PrintProblem(409,'Choose a current published mugshot.');
  if(typeof data.requestKey!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(data.requestKey))throw new PrintProblem(400,'Check the order request.');
+ const released=await env.DB.prepare('SELECT id FROM mug_orders WHERE invitation_id=?1 AND year=?2 AND request_key=?3 AND allowance_reset_at IS NOT NULL').bind(invite.id,invite.edition_year,data.requestKey).first();
+ if(released)throw new PrintProblem(409,'This order was already saved. Reopen the gift picker to use the new allowance.');
  const catalog=printfulEnabled(env)?await preparedMugCatalog(env,invite.edition_year,true)||await printfulCatalog(env):null;
  const configuration=validMugOptions(data.configuration===undefined?pixelMugOptions():data.configuration,catalog?.styles);
  if(!configuration)throw new PrintProblem(400,'Choose an available mug style, size, color and font.');
@@ -71,7 +73,7 @@ export async function createMugOrder(request:Request,env:PrintEnv,invite:Invitat
    SELECT ?1,i.id,e.year,?2,'simulated',?3,?4,?5,?6,?7,?8,?9,e.published_version,?16,?17,?18,?19,?20,?21,?22 FROM invites i JOIN editions e ON e.year=i.edition_year
    WHERE i.id=?10 AND i.version=?11 AND i.revoked_at IS NULL AND i.expires_at>?12 AND e.is_active=1 AND e.allow_mug_orders=1 AND e.published_version=?13 AND i.mug_order_count=0 AND i.allow_mug=1
    AND unixepoch()<?23 AND ${giftReservationOpenSQL}
-   ${live?"AND EXISTS(SELECT 1 FROM live_gift_permissions g WHERE g.invitation_id=i.id AND g.year=e.year AND g.enabled=1 AND g.mug_enabled=1 AND g.expires_at>unixepoch() AND g.person_id=i.person_id AND g.member_ids=i.member_ids) AND NOT EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.invitation_id=i.id AND l.year=e.year AND l.kind='mug')":''}
+   ${live?"AND EXISTS(SELECT 1 FROM live_gift_permissions g WHERE g.invitation_id=i.id AND g.year=e.year AND g.enabled=1 AND g.mug_enabled=1 AND g.expires_at>unixepoch() AND g.person_id=i.person_id AND g.member_ids=i.member_ids) AND NOT EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.invitation_id=i.id AND l.year=e.year AND l.kind='mug' AND l.allowance_reset_at IS NULL)":''}
    AND i.person_id=?14 AND EXISTS(SELECT 1 FROM people p WHERE p.id=?14 AND p.version=?15 AND p.address_verified=1 AND p.address_verification_key IS NOT NULL AND (p.address_verifier IN ('google','local_mock') OR (p.address_verifier='admin' AND json_extract(p.mailing_address,'$.country')='IN')) AND (p.address_verifier!='google' OR p.address_verified_until>?12))
    AND NOT EXISTS(SELECT 1 FROM mug_orders WHERE invitation_id=i.id AND year=e.year AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown')) ON CONFLICT DO NOTHING RETURNING id`)
    .bind(id,data.requestKey,design.id,design.caption,design.alt,key,JSON.stringify(address),recipientName,1,invite.id,(invite as InvitationAudience&{version:number}).version,now(),row.published_version,delivery.person.id,delivery.person.version,JSON.stringify(configuration),quote?JSON.stringify(quote):null,mockup?.id||null,prepared?.id||null,printKey,print?.layoutVersion||1,Number(!!quote&&!quote.withinBudget),window.closesAt??Number.MAX_SAFE_INTEGER);
