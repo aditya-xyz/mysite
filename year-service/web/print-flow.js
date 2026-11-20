@@ -4,9 +4,15 @@ import {readResource} from './read-resource.js';
 import {esc,householdOrderNote} from './pixelbook.js';
 import {foldedCardMarkup,bindFoldedCard} from './folded-card.js';
 import {createDeliveryAddress} from './delivery-address.js';
-export function createPrintFlow({getData,onChange,householdName='',householdSize=0,previewOnly=false,onAddressStatus=()=>{},onAvailabilityChange=()=>{},onOrdered=()=>{}}){
+export function createPrintFlow({getData,onChange,householdName='',householdSize=0,previewOnly=false,onDismiss=()=>{},onAddressStatus=()=>{},onAvailabilityChange=()=>{},onOrdered=()=>{}}){
  let status=null,dialog=null,controller=null,closed=false,preparedDelivery=null,deliveryCheck=null,opening=null,deliveryChanged=()=>{},frontDesign='personal';
- function prepareDelivery(){if(!preparedDelivery){preparedDelivery=createDeliveryAddress(()=>deliveryChanged());deliveryCheck=preparedDelivery.load({timeoutMs:8000});}return preparedDelivery;}
+ function prepareDelivery(savedState=null){
+  if(!preparedDelivery){
+   preparedDelivery=createDeliveryAddress(()=>deliveryChanged(),savedState);
+   deliveryCheck=savedState?null:preparedDelivery.load({timeoutMs:8000});
+  }
+  return preparedDelivery;
+ }
  async function refresh(){
   controller?.abort();const current=controller=new AbortController();
   try{const data=await readResource('/api/print/status',{signal:current.signal});if(closed||controller!==current)return;status=data;if(status.eligible||status.canOrder)prepareDelivery();onChange(status);prepare();}catch{if(!closed&&controller===current&&!current.signal.aborted){status=null;onChange(status);}}
@@ -37,10 +43,10 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   }
   let data=previewData();if(!data.file)return;
   const householdNote=householdOrderNote(householdName,householdSize);
-  const snapshot=structuredClone(status);const proofUrl=URL.createObjectURL(data.file);let requestKey=crypto.randomUUID(),submitting=false;
+  const snapshot=structuredClone(status);const proofUrl=URL.createObjectURL(data.file);let requestKey=crypto.randomUUID(),submitting=false,attemptedOrder=false;
   let activeView='front';
   dialog=document.createElement('dialog');dialog.className='ks-print-dialog';dialog.setAttribute('aria-labelledby','print-title');
-  dialog.innerHTML=`<div class="ks-top"><div class="ks-print-heading"><h2 id="print-title" tabindex="-1">Mail this postcard?</h2></div><button class="ks-icon" data-close-print aria-label="Close order confirmation"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="ks-print-body"><div data-print-pictures>${cardMarkup()}</div><div data-delivery-address></div><p class="ks-status" role="status" aria-live="polite"></p></div><div class="ks-bottom">${householdNote?`<p class="ks-household-note" id="ks-household-note">${esc(householdNote)} <img class="pb-dog-face-emoji" src="/pixel-face-emoji.png" width="30" height="30" alt="" aria-hidden="true"></p>`:''}<button class="ks-secondary" data-cancel-print>Not yet</button><button class="ks-primary" data-submit-print ${householdNote?'aria-describedby="ks-household-note"':''}>Yes, mail it</button></div>`;
+  dialog.innerHTML=`<div class="ks-top"><div class="ks-print-heading"><h2 id="print-title" tabindex="-1">Mail this postcard?</h2></div><button type="button" class="ks-icon" data-close-print aria-label="Close postcard"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="ks-print-body"><div data-print-pictures>${cardMarkup()}</div><div data-delivery-address></div><p class="ks-status" role="status" aria-live="polite"></p></div><div class="ks-bottom">${householdNote?`<p class="ks-household-note" id="ks-household-note">${esc(householdNote)} <img class="pb-dog-face-emoji" src="/pixel-face-emoji.png" width="30" height="30" alt="" aria-hidden="true"></p>`:''}<button class="ks-secondary" data-cancel-print>Not yet</button><button class="ks-primary" data-submit-print ${householdNote?'aria-describedby="ks-household-note"':''}>Yes, mail it</button></div>`;
   const sheet=dialog;document.body.append(dialog);bindFoldedCard(dialog,{onSwap:swapPictures,onView:view=>activeView=view});
   const message=text=>{sheet.querySelector('.ks-status').textContent=text;};
   const submit=dialog.querySelector('[data-submit-print]');
@@ -59,14 +65,19 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   }
   deliveryChanged=renderAddress;renderAddress();
   function release(){
+   const savedState=attemptedOrder?null:delivery.settledState;
    URL.revokeObjectURL(proofUrl);deliveryChanged=()=>{};delivery.destroy();
-   if(preparedDelivery===delivery){preparedDelivery=null;deliveryCheck=null;}
+   if(preparedDelivery===delivery){
+    preparedDelivery=null;deliveryCheck=null;
+    if(!closed&&(status?.eligible||status?.canOrder))prepareDelivery(savedState);
+   }
    sheet.remove();if(dialog===sheet)dialog=null;
    if(!closed){onAvailabilityChange();if(button.isConnected&&!button.disabled)button.focus({preventScroll:true});}
   }
   dialog.addEventListener('close',release,{once:true});
   const cancel=dialog.querySelector('[data-cancel-print]');
-  dialog.querySelector('[data-close-print]').onclick=()=>{if(!submitting)closeDialog(sheet);};
+  const dismiss=dialog.querySelector('[data-close-print]');
+  dismiss.onclick=()=>{if(!submitting)return closeDialog(sheet).then(onDismiss);};
   cancel.onclick=()=>{if(!submitting)closeDialog(sheet);};
   dialog.addEventListener('cancel',event=>{if(submitting)event.preventDefault();});
   function bindPictures(region){bindFoldedCard(region,{onSwap:swapPictures,onView:view=>activeView=view});}
@@ -86,7 +97,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
    onOrdered(order.live?(order.status==='submitted'?'your card is off to the printers.':'Order received 💌'):order.testMode?'Test postcard ordered. No physical mail will be sent.':order.status==='simulated'?'Test postcard order saved. No physical mail or charges.':order.status==='submitted'?'Keep an eye on your mailbox—your postcard gift is headed your way 💌':'Your print request is recorded.',!order.live&&!order.testMode&&order.status==='simulated',order);
   }
   submit.onclick=async()=>{
-   if(previewOnly||submitting||!delivery.ready)return;submitting=true;submit.disabled=true;cancel.disabled=true;if(data.personalized)sheet.querySelector('[data-swap-card]')?.setAttribute('disabled','');message('Saving your order…');
+   if(previewOnly||submitting||!delivery.ready)return;attemptedOrder=true;submitting=true;submit.disabled=true;cancel.disabled=true;dismiss.disabled=true;if(data.personalized)sheet.querySelector('[data-swap-card]')?.setAttribute('disabled','');message('Saving your order…');
    try{
     await delivery.confirm();await refresh();
     if(dialog!==sheet)return;
@@ -97,7 +108,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
     if(!response.ok)throw new Error(result.error||'The order could not be confirmed.');
     if(dialog!==sheet){await refresh();return;}
     finish(result.order);
-   }catch(error){await refresh();if(dialog!==sheet)return;if(status?.order){finish(status.order);}else{requestKey=crypto.randomUUID();submitting=false;cancel.disabled=false;if(data.personalized)sheet.querySelector('[data-swap-card]')?.removeAttribute('disabled');submit.disabled=!delivery.ready;message(error.message+' No additional order will be created if one is already recorded.');}}
+   }catch(error){await refresh();if(dialog!==sheet)return;if(status?.order){finish(status.order);}else{requestKey=crypto.randomUUID();submitting=false;cancel.disabled=false;dismiss.disabled=false;if(data.personalized)sheet.querySelector('[data-swap-card]')?.removeAttribute('disabled');submit.disabled=!delivery.ready;message(error.message+' No additional order will be created if one is already recorded.');}}
 
   };
   openDialog(dialog,{offset:8,scale:1});onAvailabilityChange();dialog.querySelector('#print-title').focus({preventScroll:true});

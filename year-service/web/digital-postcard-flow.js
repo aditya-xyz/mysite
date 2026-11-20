@@ -3,7 +3,7 @@ import {readBlob,readResource} from './read-resource.js';
 import {digitalCardFile} from './digital-card.js';
 import {translateText} from './localization.js';
 import {digitalDictionary} from './digital-copy.js';
-export function createDigitalFlow({journal,getData,loadImage,onChange,onSaved}){
+export function createDigitalFlow({journal,getData,loadImage,onChange,onSaved,onDismiss=()=>{}}){
  let state=null,closed=false,dialog=null,controller=null,working=false,preparedRecipe=null,cancelConfirmation=null,cachedFile=null,cachedKey=null,preparing=null;
  async function refresh(){controller?.abort();const current=controller=new AbortController();try{const data=await readResource('/api/print/digital',{signal:current.signal});if(!closed&&controller===current){state=data;onChange(state);}}catch{if(!closed&&controller===current&&!current.signal.aborted){state=null;onChange(state);}}}
  const copy=value=>translateText(value,{...digitalDictionary(journal.language),...journal.uiTranslations});
@@ -16,9 +16,9 @@ export function createDigitalFlow({journal,getData,loadImage,onChange,onSaved}){
   return digitalCardFile({personalized:state.personalized,images:d.images,crops:d.crops,defaultImage,background,note,authors:state.authors,year:journal.year});
  }
  function confirm(file,recipe){return new Promise(resolve=>{const url=URL.createObjectURL(file),d=document.createElement('dialog');dialog=d;d.className='ks-digital-confirm';d.setAttribute('aria-labelledby','digital-title');d.setAttribute('aria-describedby','digital-choice');
-  d.innerHTML=`<div class="ks-top"><h2 id="digital-title" tabindex="-1">joining the paperless fan club? 🌿</h2></div><div class="ks-digital-confirm-body"><p id="digital-choice">Choosing digital means we’ll skip mailing a postcard to your household.</p><img src="${url}" alt="Preview of your digital postcard"><p class="ks-status" role="status"></p></div><div class="ks-bottom"><button class="ks-secondary" data-cancel>Not yet</button><button class="ks-primary" data-confirm ${journal.adminPreview?'disabled':''}>Save digital postcard</button></div>`;
-  let finished=false,committing=false;const finish=result=>{if(finished)return;finished=true;cancelConfirmation=null;closeDialog(d).then(()=>{URL.revokeObjectURL(url);d.remove();if(dialog===d)dialog=null;resolve(result);});};
-  cancelConfirmation=()=>finish(null);d.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=()=>{if(!committing)finish(null);});d.addEventListener('cancel',e=>{e.preventDefault();if(!committing)finish(null);});
+  d.innerHTML=`<div class="ks-top"><h2 id="digital-title" tabindex="-1">joining the paperless fan club? 🌿</h2><button type="button" class="ks-icon" data-cancel data-close-postcard aria-label="Close postcard"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="ks-digital-confirm-body"><p id="digital-choice">Choosing digital means we’ll skip mailing a postcard to your household.</p><img src="${url}" alt="Preview of your digital postcard"><p class="ks-status" role="status"></p></div><div class="ks-bottom"><button class="ks-secondary" data-cancel>Not yet</button><button class="ks-primary" data-confirm ${journal.adminPreview?'disabled':''}>Save digital postcard</button></div>`;
+  let finished=false,committing=false;const finish=(result,dismiss=false)=>{if(finished)return;finished=true;cancelConfirmation=null;closeDialog(d).then(()=>{URL.revokeObjectURL(url);d.remove();if(dialog===d)dialog=null;resolve(result);if(dismiss)onDismiss();});};
+  cancelConfirmation=()=>finish(null);d.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=()=>{if(!committing)finish(null,b.hasAttribute('data-close-postcard'));});d.addEventListener('cancel',e=>{e.preventDefault();if(!committing)finish(null);});
   d.querySelector('[data-confirm]').onclick=async()=>{committing=true;const button=d.querySelector('[data-confirm]');button.disabled=true;d.querySelectorAll('[data-cancel]').forEach(b=>b.disabled=true);d.querySelector('.ks-status').textContent='Saving your digital-only choice…';
    try{
     const noteResponse=await fetch('/api/print/digital/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmed:true}),signal:controller?.signal});

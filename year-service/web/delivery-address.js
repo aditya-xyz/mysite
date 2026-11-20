@@ -1,8 +1,8 @@
 import {policyLinks} from './policy-links.js';
 import {bindAddressAutocomplete} from './address-autocomplete.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export function createDeliveryAddress(changed=()=>{}){
- let state=null,fields={},preview=null,error='',busy=false,controller=null,disposed=false,editing=false,loading=null;
+export function createDeliveryAddress(changed=()=>{},initialState=null){
+ let state=initialState,fields=initialState?{...initialState.address,country:initialState.country||'US'}:{},preview=null,error='',busy=false,controller=null,disposed=false,editing=false,loading=null;
  async function request(action,data,signal){
   const response=await fetch('/api/delivery-address'+(action?'/'+action:''),{method:data===undefined?'GET':'POST',...(data===undefined?{}:{headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}),signal});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not check the address. Please try again.');return result;
@@ -40,5 +40,5 @@ export function createDeliveryAddress(changed=()=>{}){
   form.onsubmit=event=>{event.preventDefault();if(!form.reportValidity())return;fields=Object.fromEntries(new FormData(form));fields.state=fields.state.toUpperCase();run(async signal=>{preview=await request('verify',{version:state.version,address:fields},signal);});};
  }
  async function confirm(){if(!state?.verified||editing)throw new Error('Verify and save your mailing address first.');state=await request('confirm',{version:state.version});return state;}
- return {load,markup,summaryMarkup,bind,confirm,get state(){return state;},get error(){return error;},get ready(){return !!state?.verified&&!busy&&!editing;},destroy(){disposed=true;controller?.abort();}};
+ return {load,markup,summaryMarkup,bind,confirm,get state(){return state;},get settledState(){return busy?null:state;},get error(){return error;},get ready(){return !!state?.verified&&!busy&&!editing;},destroy(){disposed=true;controller?.abort();}};
 }

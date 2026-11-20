@@ -6,13 +6,13 @@ import {mountPixelGift} from '../web/pixelbook-gift.js';
 function fixture(t: any,{hasOrder=true,orderingEnabled=true,claim=null as any,livePricing=false,receiptFigure=false}={}){
  const previousDocument=(globalThis as any).document;
  const node=()=>({disabled:false,textContent:'',onclick:null as any,focus(){},setAttribute(){},listeners:{} as Record<string,Function>,addEventListener(event:string,handler:Function){this.listeners[event]=handler;},append(){},after(){}});
- const description=node(),launch=node(),heading=node(),status=node(),next=node(),history:string[]=[],images:any[]=[],displayedImages:any[]=[];
+ const description=node(),launch=node(),heading=node(),status=node(),next=node(),back=node(),history:string[]=[],images:any[]=[],displayedImages:any[]=[];
  const figure={isConnected:true,dataset:{},children:[] as any[],querySelector(){return null;},replaceChildren(...children:any[]){this.children=children;}};
  const listeners:Record<string,()=>void>={};
  const modal={open:false,isConnected:true,html:'',className:'',
   set innerHTML(value:string){this.html=value;history.push(value);status.textContent='';},get innerHTML(){return this.html;},
   setAttribute(){},removeAttribute(){},querySelectorAll(){return [];},
-  querySelector(selector:string){if(selector==='.pb-mug-preview'&&receiptFigure)return figure;if(selector==='h2')return heading;if(selector==='.pb-gift-status')return status;if(selector==='[data-gift-next]')return next;if(selector==='[data-saved-gift-image]'&&this.html.includes('data-saved-gift-image'))return {className:'pb-printful-mockup',alt:'Saved gift',replaceWith(image:any){displayedImages.push(image);}};return null;},
+  querySelector(selector:string){if(selector==='.pb-mug-preview'&&receiptFigure)return figure;if(selector==='h2')return heading;if(selector==='.pb-gift-status')return status;if(selector==='[data-gift-next]')return next;if(selector==='[data-gift-back]'&&this.html.includes('data-gift-back'))return back;if(selector==='[data-saved-gift-image]'&&this.html.includes('data-saved-gift-image'))return {className:'pb-printful-mockup',alt:'Saved gift',replaceWith(image:any){displayedImages.push(image);}};return null;},
   addEventListener(event:string,handler:()=>void){listeners[event]=handler;},
   showModal(){this.open=true;},close(){this.open=false;listeners.close?.();},remove(){this.isConnected=false;}
  };
@@ -21,7 +21,7 @@ function fixture(t: any,{hasOrder=true,orderingEnabled=true,claim=null as any,li
  const gift=mountPixelGift({name:'Household',gift:{enabled:true,hasOrder,orderingEnabled,designs,claim,livePricing}},
   {querySelector(selector:string){return selector==='[data-open-gift]'?launch:selector==='#pb-gift .pb-present-copy>p'?description:null;}});
  t.after(()=>{gift.destroy();(globalThis as any).document=previousDocument;});
- return {launch,modal,history,status,designs,next,images,displayedImages,description,figure};
+ return {launch,modal,history,status,designs,next,back,images,displayedImages,description,figure};
 }
 
 test('viewing an existing household gift never renders the selector, including on reopen',async t=>{
@@ -131,8 +131,8 @@ test('browsing the gallery does not start background mug-preview downloads',asyn
  assert.equal(fetch.mock.callCount(),0);
 });
 
-test('mug review preloads the address and continuing joins the same lookup',async t=>{
- const {launch,modal,next}=fixture(t,{hasOrder:false});
+test('mug review joins the preloaded address lookup and reuses it when returning from details',async t=>{
+ const {launch,modal,next,back}=fixture(t,{hasOrder:false});
  let resolveAddress!:(response:Response)=>void,lookups=0;
  const fetch=mock.method(globalThis,'fetch',async(path:string)=>{
   if(path==='/api/gift/status')return Response.json({claim:null});
@@ -140,11 +140,23 @@ test('mug review preloads the address and continuing joins the same lookup',asyn
   return new Promise<Response>(resolve=>resolveAddress=resolve);
  });t.after(()=>fetch.mock.restore());
  await launch.onclick();assert.equal(lookups,0);
- await next.listeners.click();assert.match(modal.innerHTML,/the details/);assert.equal(lookups,1);
+ await next.listeners.click();assert.match(modal.innerHTML,/the details/);assert.match(modal.innerHTML,/data-close-gift/);assert.equal(lookups,1);
  const continuing=next.listeners.click();assert.equal(lookups,1);assert.equal(next.disabled,true);
- resolveAddress(Response.json({verified:true,version:1,country:'US',recipientName:'Friend',address:{line1:'123 Sample Lane',city:'Example',state:'CA',postalCode:'90001',country:'US'}}));
+ const address={verified:true,version:1,country:'US',recipientName:'Friend',address:{line1:'123 Sample Lane',city:'Example',state:'CA',postalCode:'90001',country:'US'}};
+ resolveAddress(Response.json(address));
  await continuing;
- assert.match(modal.innerHTML,/Sending to/);assert.match(modal.innerHTML,/confirm & order/);
+ assert.match(modal.innerHTML,/Sending to/);assert.match(modal.innerHTML,/data-close-gift/);assert.match(modal.innerHTML,/confirm & order/);
+ for(let attempt=0;attempt<2;attempt++){
+  back.listeners.click();assert.match(modal.innerHTML,/the details/);
+  const continuingAgain=next.listeners.click();
+  assert.match(modal.innerHTML,/Sending to/,'the saved address is shown without waiting');
+  assert.doesNotMatch(modal.innerHTML,/Checking your saved address/);
+  assert.equal(lookups,1);
+  await continuingAgain;
+ }
+ modal.close();await launch.onclick();await next.listeners.click();
+ assert.equal(lookups,2,'a new session checks for address changes');
+ resolveAddress(Response.json(address));
 });
 
 // @ts-expect-error Shared browser mug catalog.

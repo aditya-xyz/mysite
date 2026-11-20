@@ -243,7 +243,6 @@
 }
 
 /* Confirmation choices stay together, with the household reminder above them. */
-.ks-print-dialog:not(.ks-address-step) [data-close-print]{display:none}
 .pb-mug-customizer .pb-customizer-actions{justify-content:flex-end;flex-wrap:wrap}
 #keepsake:has(~ .ks-print-dialog[open]) [data-print]{pointer-events:none}
 #keepsake:has(~ .ks-print-dialog[open][data-dialog-motion=enter]) [data-print]{

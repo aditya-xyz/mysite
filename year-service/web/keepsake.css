@@ -291,11 +291,13 @@ html:has(#keepsake[open]){overflow:hidden}
 }
 
 /* Keep postcard navigation opposite the export action, under any frame choices. */
-#keepsake .ks-top--title-only{justify-content:center;min-height:72px}
+#keepsake .ks-top--centered{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;min-height:72px}
+#keepsake .ks-top--centered h2{grid-column:2}
+#keepsake .ks-top--centered [data-close]{grid-column:3;justify-self:end}
 #keepsake .ks-bottom--editor{display:grid;grid-template-columns:44px minmax(0,1fr)}
 #keepsake .ks-bottom--editor>.ks-paper-tabs{grid-column:1/-1;justify-self:center;margin-inline:0}
 #keepsake .ks-bottom--editor>[data-back]{justify-self:start}
 #keepsake .ks-bottom--editor>:is([data-preview],.ks-export-actions){justify-self:end;min-width:0}
 #keepsake .ks-bottom--editor .ks-digital{flex-direction:row;flex-wrap:nowrap;align-items:center;white-space:nowrap}
 #keepsake .ks-bottom--editor .ks-digital svg{translate:0 -1px}
-@media(max-width:600px){#keepsake .ks-top--title-only{min-height:54px}}
+@media(max-width:600px){#keepsake .ks-top--centered{min-height:54px}}

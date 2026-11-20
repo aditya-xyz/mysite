@@ -26,8 +26,14 @@ export function mountPixelGift(journal,root){
   const mockups=createMugMockups();
   const local=journal.gift.mode==='preview',simulated=journal.gift.mode==='simulation',ordering=local||journal.gift.orderingEnabled===true;
   const closeIcon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
-  const delivery=createDeliveryAddress(()=>{if(modal.open&&step==='address')render();});
-  let reviewAddress=null,previousStep;
+  function updateAddress(){if(modal.open&&step==='address')render();}
+  let delivery=createDeliveryAddress(updateAddress);
+  let reviewAddress=null,previousStep,addressNeedsRefresh=false;
+  function resetAddress(savedState=null){
+    delivery.destroy();
+    delivery=createDeliveryAddress(updateAddress,savedState);
+    reviewAddress=null;addressNeedsRefresh=false;
+  }
   const canConfirm=()=>delivery.ready&&!journal.adminPreview;
   const steps=()=>`<ol class="pb-order-steps" aria-label="Gift progress">${['your mugshot','the details','your address'].map((s,i)=>`<li ${['pick','review','address'].indexOf(step)===i?'aria-current="step"':''}><span>${i+1}</span>${s}</li>`).join('')}</ol>`;
   function pickMarkup(){
@@ -62,7 +68,7 @@ export function mountPixelGift(journal,root){
     const householdNote=step==='address'&&delivery.ready?householdOrderNote(journal.name,journal.householdSize):'';
     const pending=step==='loading'||step==='error'||step==='submitting',finished=step==='done'||pending;
     const title=step==='submitting'?'Saving your household’s gift…':step==='done'?'Your household’s gift':step==='loading'?'your household’s gift.':step==='error'?'couldn’t load your gift.':step==='pick'?'pick your mugshot.':step==='address'?'where’s home?':step==='review'?'the details':'that’s a wrap.';
-    const closeButton=step==='review'||step==='address'?'':`<button type="button" class="pb-close" data-close-gift aria-label="Close gift picker" ${step==='submitting'?'disabled':''}>${closeIcon}</button>`;
+    const closeButton=`<button type="button" class="pb-close" data-close-gift aria-label="Close mug gift" ${step==='submitting'?'disabled':''}>${closeIcon}</button>`;
     const backButton=step==='pick'?'':'<button type="button" class="button pb-secondary-button" data-gift-back aria-label="Back"><span aria-hidden="true">←</span><span class="pb-gift-back-label">back</span></button>';
     modal.innerHTML=`<div class="pb-dialog-top">${step==='done'||step==='submitting'?`<h2 id="pb-order-title" class="pb-receipt-title" tabindex="-1">${title}</h2>`:`<div><p class="pb-eyebrow">a gift from Pixel</p><h2 id="pb-order-title" tabindex="-1">${title}</h2></div>`}${step==='done'?'<span class="pb-done-mark" aria-hidden="true">✓</span>':''}${closeButton}</div>${!ordering&&!finished?'<p class="pb-preview-banner">Gift ordering opens soon. You can browse the mugshots for now.</p>':''}${journal.adminPreview?'<p class="pb-preview-banner">Admin preview · Final ordering is disabled. No allowance is used.</p>':''}${finished?'':steps()}<div class="pb-dialog-body">${pending?(step==='submitting'?mugSubmissionMarkup():step==='loading'?'<p role="status">Loading your gift…</p>':''):step==='pick'?pickMarkup():step==='address'?addressMarkup():step==='review'?reviewMarkup():doneMarkup()}<p class="pb-gift-status error" role="alert"></p></div><div class="pb-dialog-bottom">${householdNote?`<p class="pb-household-note" id="pb-household-note">${esc(householdNote)} <img class="pb-dog-face-emoji" src="/pixel-face-emoji.png" width="30" height="30" alt="" aria-hidden="true"></p>`:''}${step==='submitting'?'':finished?'<button class="button" data-close-gift>back to my scrapbook</button>':`${backButton}${step==='review'?`<button type="button" class="button pb-secondary-button" data-customize-mug>Customize</button>`:''}${step==='address'&&!delivery.ready?'':`<button class="button" data-gift-next ${step==='review'?'aria-label="Continue to address"':''} ${householdNote?'aria-describedby="pb-household-note"':''} ${(step==='pick'&&(!selected||!ordering||opening)||step==='address'&&!canConfirm())?'disabled':''}>${step==='pick'?ordering?'this is the one →':'ordering opens soon':step==='review'?'<span class="pb-address-full">Continue to address</span><span class="pb-address-short">Continue</span>':'confirm & order'}</button>`}`}</div>`;
     modal.querySelectorAll('[data-close-gift]').forEach(b=>b.onclick=()=>closeDialog(modal));
@@ -76,7 +82,13 @@ export function mountPixelGift(journal,root){
     modal.querySelector('[data-customize-mug]')?.addEventListener('click',()=>{
       customizer=openMugCustomizer(selected,configuration,value=>{configuration=value;customizer=null;render();modal.querySelector('[data-customize-mug]').focus();},styles,(element,design,value)=>{mockups.update(element,design,value);warmOptions(design,value);},previewMarkup,(design,value)=>mockups.available(design,value));
     });
-    modal.querySelector('[data-gift-back]')?.addEventListener('click',()=>{step=step==='address'?'review':'pick';render();});
+    modal.querySelector('[data-gift-back]')?.addEventListener('click',()=>{
+      if(step==='address'){
+        resetAddress(addressNeedsRefresh?null:delivery.settledState);
+        step='review';
+      }else step='pick';
+      render();
+    });
     modal.querySelector('[data-edit-address]')?.addEventListener('click',()=>{step='address';render();});
     modal.querySelector('[data-gift-next]')?.addEventListener('click',next);
     sessionImages.bind(modal);
@@ -100,12 +112,14 @@ export function mountPixelGift(journal,root){
     if(busy||opening||!contextReady||!ordering)return;
     if(step==='pick'){
       if(!selected)return;
-      step='review';render();reviewAddress=delivery.load({timeoutMs:8000});return;
+      step='review';render();if(!delivery.state)reviewAddress=delivery.load({timeoutMs:8000});return;
     }
     if(step==='review'){
-      busy=true;modal.querySelector('[data-gift-next]').disabled=true;
-      await (reviewAddress||delivery.load({timeoutMs:8000}));
-      reviewAddress=null;busy=false;
+      if(reviewAddress||!delivery.state){
+        busy=true;modal.querySelector('[data-gift-next]').disabled=true;
+        await (reviewAddress||delivery.load({timeoutMs:8000}));
+        reviewAddress=null;busy=false;
+      }
       if(!modal.open||step!=='review')return;
       step='address';render();return;
     }
@@ -116,7 +130,7 @@ export function mountPixelGift(journal,root){
       // The persisted claim is the receipt. Supplier fulfillment continues server-side;
       // reopening the gift refreshes its status without keeping this dialog blocked.
       if(!modal.isConnected)return;selectReceipt();render();
-    }catch(error){if(error.name!=='AbortError'&&modal.open){step='address';render();modal.querySelector('.pb-gift-status').textContent=error.message;}}
+    }catch(error){if(error.name!=='AbortError'&&modal.open){addressNeedsRefresh=true;step='address';render();modal.querySelector('.pb-gift-status').textContent=error.message;}}
     finally{busy=false;if(step==='submitting')step='address';}
   }
   // Saved receipts use their own image URL; reconnect the matching prepared angles
@@ -173,7 +187,11 @@ export function mountPixelGift(journal,root){
   };
   modal.addEventListener('click',event=>{if(step!=='submitting'&&event.target===modal){const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeDialog(modal);}});
   modal.addEventListener('cancel',event=>{if(step==='submitting')event.preventDefault();});
-  modal.addEventListener('close',()=>{if(step!=='submitting')controller?.abort();returnFocus?.focus({preventScroll:true});});
+  modal.addEventListener('close',()=>{
+    if(step!=='submitting')controller?.abort();
+    resetAddress();
+    returnFocus?.focus({preventScroll:true});
+  });
   warmReceipt();
   return {destroy(){clearInterval(catalogTimer);catalogController.abort();controller?.abort();customizer?.destroy();mockups.destroy();delivery.destroy();modal.remove();}};
 }

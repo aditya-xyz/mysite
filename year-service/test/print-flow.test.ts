@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {createPrintFlow} from '../web/print-flow.js';
 const address={verified:true,version:1,recipientName:'Example Friend',address:{line1:'123 Example Lane',city:'Portland',state:'OR',postalCode:'97201',country:'US'}};
 const printStatus={eligible:true,mode:'simulation',contentVersion:1,addressVersion:1,confirmationKey:'test'};
-function fixture(t:import('node:test').TestContext){
+function fixture(t:import('node:test').TestContext,onDismiss=()=>{}){
  const originalFetch=globalThis.fetch,originalDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
  let sheet:any;
  Object.defineProperty(globalThis,'document',{configurable:true,value:{body:{append(node:any){node.isConnected=true;}},createElement(){
@@ -14,7 +14,7 @@ function fixture(t:import('node:test').TestContext){
  t.after(()=>{globalThis.fetch=originalFetch;if(originalDocument)Object.defineProperty(globalThis,'document',originalDocument);else Reflect.deleteProperty(globalThis,'document');});
  const notices:string[]=[];
  const button:any={disabled:false,isConnected:true,focused:false,removeAttribute(){},focus(){this.focused=true;}};
- const flow=createPrintFlow({getData:()=>({file:new File(['proof'],'proof.jpg',{type:'image/jpeg'}),cardCount:1,recipe:{}}),onChange(){},onAddressStatus(message:string){notices.push(message);},onAvailabilityChange(){button.disabled=flow.isActive();}});
+ const flow=createPrintFlow({onDismiss,getData:()=>({file:new File(['proof'],'proof.jpg',{type:'image/jpeg'}),cardCount:1,recipe:{}}),onChange(){},onAddressStatus(message:string){notices.push(message);},onAvailabilityChange(){button.disabled=flow.isActive();}});
  t.after(()=>flow.close());
  flow.bind({querySelector:()=>button});
  return {flow,button,notices,sheet:()=>sheet};
@@ -60,6 +60,20 @@ test('slow address lookup leaves the editor open and shows the correct first che
   sheet().querySelector('[data-cancel-print]').onclick();
   assert.equal(button.disabled,false);
   assert.equal(button.focused,true);
+  const noticeCount=notices.length;
+  for(let i=0;i<2;i++){
+   const reopening=button.onclick({currentTarget:button});
+   assert.equal(sheet().open,true,'review reopens synchronously after Not yet');
+   await reopening;
+   assert.equal(sheet().querySelector('#print-title').textContent,verified?'Mail this postcard?':'where’s home?');
+   assert.equal(calls,1,'each retry uses the address already checked in the editor');
+   assert.equal(notices.length,noticeCount,'no address-loading message flashes on retry');
+   sheet().querySelector('[data-cancel-print]').onclick();
+  }
+  flow.close();
+  await flow.refresh();
+  assert.equal(calls,2,'reopening the editor starts a fresh address check');
+  resolveAddress(Response.json({...address,verified}));
  });
 });
 
@@ -85,4 +99,18 @@ test('closing the postcard while its address loads prevents a late checkout dial
  flow.close();
  resolveAddress(Response.json(address));await first;
  assert.equal(sheet(),undefined);
+});
+
+test('the top-right close exits the postcard flow and Not yet stays in the editor',async t=>{
+ let dismissals=0;
+ const {flow,button,sheet}=fixture(t,()=>dismissals++);
+ globalThis.fetch=async input=>Response.json(String(input)==='/api/print/status'?printStatus:address);
+ await flow.refresh();
+ await button.onclick({currentTarget:button});
+ sheet().querySelector('[data-cancel-print]').onclick();
+ assert.equal(dismissals,0);
+ await button.onclick({currentTarget:button});
+ await sheet().querySelector('[data-close-print]').onclick();
+ assert.equal(sheet().open,false);
+ assert.equal(dismissals,1);
 });
