@@ -35,6 +35,11 @@
  color:var(--pb-action-ink);
  box-shadow:var(--pb-action-shadow);
 }
+:root :is(body,#keepsake,#photo) .fc-views .fc-swap{
+ --pb-control-fill:linear-gradient(180deg,color-mix(in srgb,var(--paper) 80%,var(--accent)),color-mix(in srgb,var(--paper) 91%,var(--accent)));
+ border-color:color-mix(in srgb,var(--line) 45%,var(--accent));
+ font-weight:600;
+}
 
 /* Text actions size to their label and wrap when space is tight. */
 :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.resolution-control){

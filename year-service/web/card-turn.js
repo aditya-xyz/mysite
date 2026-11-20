@@ -1,17 +1,18 @@
 // Display-only page motion; the original panels and printed artwork stay intact.
 const running=new WeakMap();
 export function turnCardView(root,view){
- running.get(root)?.cancel();
  const panels=[...root.querySelectorAll('[data-card-panel]:not([data-turn-ghost])')];
  const previous=panels.find(p=>!p.hidden),next=panels.find(p=>p.dataset.cardPanel===view);
  if(!next||previous===next)return;
+ running.get(root)?.cancel();
  const reduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
  let ghost;
  if(previous&&!reduced&&previous.animate&&next.animate){
   const r=previous.getBoundingClientRect(),p=root.getBoundingClientRect();
   if(r.width&&r.height){
    ghost=previous.cloneNode(true);ghost.dataset.turnGhost='true';ghost.hidden=false;ghost.inert=true;ghost.setAttribute('aria-hidden','true');
-   Object.assign(ghost.style,{position:'absolute',left:(r.left-p.left)+'px',top:(r.top-p.top)+'px',width:r.width+'px',height:r.height+'px',maxWidth:'none',margin:'0',pointerEvents:'none',zIndex:'2'});
+   // The measured offsets are relative to the whole preview, including its controls.
+   Object.assign(ghost.style,{position:'absolute',gridArea:'auto',left:(r.left-p.left)+'px',top:(r.top-p.top)+'px',width:r.width+'px',height:r.height+'px',maxWidth:'none',margin:'0',pointerEvents:'none',zIndex:'2'});
    const originals=previous.querySelectorAll('canvas');
    ghost.querySelectorAll('canvas').forEach((canvas,i)=>{canvas.width=originals[i].width;canvas.height=originals[i].height;canvas.getContext('2d')?.drawImage(originals[i],0,0);});
    root.append(ghost);
@@ -40,8 +41,18 @@ export function turnCardView(root,view){
   animations.push(next.animate([{opacity:0,transform:`perspective(1200px) rotateY(${toFront?65:-65}deg)`},{opacity:1,transform:'perspective(1200px) rotateY(0deg)'}],options));
  }else{
   const direction=view==='back'?-1:1;
-  animations.push(ghost.animate([{opacity:1,transform:'perspective(1200px) rotateY(0deg)'},{opacity:0,transform:`perspective(1200px) rotateY(${direction*90}deg)`}],{...options,duration:260}));
-  animations.push(next.animate([{opacity:0,transform:`perspective(1200px) rotateY(${-direction*90}deg)`},{opacity:1,transform:'perspective(1200px) rotateY(0deg)'}],{...options,delay:150,duration:330}));
+  const halfTurn=options.duration/2;
+  // Change faces at the midpoint, when both covers are edge-on.
+  animations.push(ghost.animate([
+   {opacity:1,transform:'perspective(1200px) rotateY(0deg)'},
+   {opacity:1,offset:.9},
+   {opacity:0,transform:`perspective(1200px) rotateY(${direction*90}deg)`}
+  ],{duration:halfTurn,easing:'ease-in',fill:'forwards'}));
+  animations.push(next.animate([
+   {opacity:0,transform:`perspective(1200px) rotateY(${-direction*90}deg)`},
+   {opacity:1,offset:.1},
+   {opacity:1,transform:'perspective(1200px) rotateY(0deg)'}
+  ],{delay:halfTurn,duration:halfTurn,easing:'ease-out',fill:'backwards'}));
  }
  let released=false;
  const release=()=>{if(released)return;released=true;ghost.remove();ghost.querySelectorAll('canvas').forEach(canvas=>{canvas.width=0;canvas.height=0;});if(running.get(root)===entry)running.delete(root);};

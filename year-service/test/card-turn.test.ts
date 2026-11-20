@@ -19,7 +19,9 @@ test('card views fold, preserve note pixels and safely replace an interrupted tu
  const root={querySelectorAll:()=>panels,getBoundingClientRect:()=>({left:0,top:0}),append:(ghost:any)=>ghosts.push(ghost)};
  try{
   turnCardView(root,'inside');assert.equal(panels[1].hidden,false);assert.equal(panels[0].hidden,true);assert.equal(ghosts.length,1);
+  assert.equal(ghosts[0].style.gridArea,'auto','The outgoing preview is positioned against the modal preview, outside its mobile grid row');
   assert.ok(animations.some(a=>a.frames.some((f:any)=>f.transform?.includes('150deg'))),'The cover hinges open instead of simply fading');
+  turnCardView(root,'inside');assert.equal(ghosts[0].removed,false,'Retapping the current view lets the ongoing turn finish');
   turnCardView(root,'back');assert.equal(ghosts[0].removed,true,'A rapid second choice cancels the prior overlay');
   assert.equal(panels[2].hidden,false);assert.equal(panels[1].hidden,true);assert.equal(copies,1,'The note canvas is copied into the outgoing spread');
   animations.forEach(a=>a.finish());await new Promise(r=>setImmediate(r));
@@ -27,5 +29,18 @@ test('card views fold, preserve note pixels and safely replace an interrupted tu
   const count=animations.length;reduced=true;turnCardView(root,'front');
   assert.equal(panels[0].hidden,false);assert.equal(animations.length,count,'Reduced motion changes the visible view immediately');
   turnCardView(root,'front');assert.equal(ghosts.length,2,'Choosing the current view adds no animation');
+  reduced=false;
+  for(const [view,direction] of [['back',-1],['front',1]] as const){
+   turnCardView(root,view);
+   const [outgoing,incoming]=animations.slice(-2);
+   assert.equal(incoming.options.delay,outgoing.options.duration,'The covers never overlap during a direct flip');
+   assert.equal(outgoing.options.fill,'forwards');
+   assert.equal(outgoing.frames.at(-1).opacity,0);
+   assert.equal(outgoing.frames.at(-1).transform,`perspective(1200px) rotateY(${direction*90}deg)`);
+   assert.equal(incoming.options.fill,'backwards','The incoming cover stays hidden during its delay');
+   assert.equal(incoming.frames[0].opacity,0);
+   assert.equal(incoming.frames[0].transform,`perspective(1200px) rotateY(${-direction*90}deg)`);
+   outgoing.finish();incoming.finish();await new Promise(r=>setImmediate(r));
+  }
  }finally{(globalThis as any).matchMedia=saved;}
 });

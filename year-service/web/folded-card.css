@@ -36,11 +36,13 @@
 
 .fc-preview .fc-views .fc-swap{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;border-color:currentColor;background:var(--surface,#e0e6d7);white-space:nowrap}
 .fc-swap svg{flex:none}
+.fc-swap .fc-swap-short{display:none}
 @media(max-width:600px){
  .fc-preview:has(.fc-swap) .fc-views{gap:6px}
  .fc-preview:has(.fc-swap) [data-card-view]{padding-inline:12px}
- .fc-preview .fc-views .fc-swap{width:44px;flex:0 0 44px;padding:10px}
- .fc-swap span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+ .fc-preview .fc-views .fc-swap{min-width:44px;padding:8px 10px}
+ .fc-swap :is(svg,.fc-swap-full){display:none}
+ .fc-swap .fc-swap-short{display:inline}
 }
 
 /* Match the approved 100%/100% API proof at the provider's 408px panel scale.

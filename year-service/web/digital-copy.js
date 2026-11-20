@@ -44,6 +44,8 @@ export const digitalUi=[
 ['Continue to address','पत्ता तपासा','繼續確認地址'],
 ['Choose 3 photos','३ फोटो निवडा','選 3 張照片'],
 ['Edit photo {number}','फोटो {number} बदला','編輯第 {number} 張照片'],
+['Swap pictures','चित्रांची अदलाबदल करा','交換圖片'],
+['Swap','अदलाबदल','交換'],
 ['Drag to reframe. Drop onto another photo to swap.','फ्रेम बदलण्यासाठी फोटो ओढा. जागा बदलण्यासाठी दुसऱ्या फोटोवर सोडा.','拖曳調整構圖，拖到另一張照片上即可交換位置。'],
 ['Photos swapped.','फोटोंची जागा बदलली.','已交換照片。'],
 ['Framing updated.','फ्रेम बदलली.','已調整構圖。'],
