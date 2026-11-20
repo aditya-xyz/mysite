@@ -3,6 +3,10 @@
 .fc-preview .fc-views button{min-height:44px;padding:8px 20px;border:1px solid #c7caba;border-radius:24px;background:transparent;color:inherit;font:inherit;cursor:pointer}
 .fc-preview .fc-views button[aria-pressed=true]{background:#2e5745;color:#fff9ec;border-color:#2e5745}
 .fc-surface{display:flex;max-width:225px;margin:auto;filter:drop-shadow(0 4px 7px #14251b18)}
+.ks-print-dialog .fc-surface{
+ filter:none;
+ box-shadow:0 0 0 1px color-mix(in srgb,var(--ink) 28%,var(--line)),0 5px 14px #07120f59;
+}
 .fc-surface[hidden]{display:none}
 .fc-page{box-sizing:border-box;aspect-ratio:4.25/5.5;background:#fff;min-width:0;width:100%;overflow:hidden}
 .fc-art{display:flex;align-items:center;justify-content:center;padding:5%}
