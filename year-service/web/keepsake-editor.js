@@ -17,63 +17,6 @@ export function bindKeepsakeEditor({wrap,slots,getImage,getCrop,setCrop,canStart
   let gesture=null,ghost=null,muted=false,muteTimer=null;
   const landings=new Set();
   const dialog=wrap.closest('dialog');
-  const tools=dialog.querySelector('.ks-edit-tools');
-  const panels=[...tools.querySelectorAll('[data-edit-mode]')];
-  const directions=[...tools.querySelectorAll('[data-edit-action="up"],[data-edit-action="down"]')];
-  let editing=-1,mode='choose';
-  function showTools(index,next='choose',focus=true){
-    editing=index;mode=next;
-    tools.hidden=index<0;
-    buttons.forEach((button,i)=>button.setAttribute('aria-expanded',String(i===index)));
-    panels.forEach(panel=>{panel.hidden=panel.dataset.editMode!==mode;});
-    if(mode==='reframe')updateDirections();
-    if(focus&&index>=0)tools.querySelector('[data-edit-mode]:not([hidden]) button:not(:disabled)')?.focus({preventScroll:true});
-  }
-  function closeTools(focus=false){
-    const previous=editing;
-    showTools(-1,'choose',false);
-    if(focus)buttons[previous]?.focus({preventScroll:true});
-  }
-  function updateDirections(){
-    const {width,height}=getImage(editing),slot=slots[editing],crop=getCrop(editing);
-    const verticalRoom=height-coverCrop(width,height,slot.width,slot.height,crop).height>0.5;
-    directions[0].disabled=!verticalRoom||crop.y>=1;
-    directions[1].disabled=!verticalRoom||crop.y<=0;
-  }
-  function movePhoto(index,delta){
-    const crop=getCrop(index);
-    setCrop(index,{...crop,y:Math.max(0,Math.min(1,crop.y+delta))});
-    onPreview();onCrop();onStatus('Framing updated.');
-  }
-  function activatePhoto(event){
-    const button=event.target.closest('[data-crop]');
-    if(!button||!canStart())return;
-    const index=Number(button.dataset.crop);
-    if(mode==='swap'&&editing>=0&&editing!==index){
-      const source=editing;
-      closeTools();
-      onSwap(source,index);onStatus('Photos swapped.');
-    }else if(editing===index)closeTools(true);
-    else showTools(index);
-  }
-  function activateTool(event){
-    const action=event.target.closest('[data-edit-action]')?.dataset.editAction;
-    if(!action||editing<0)return;
-    if(action==='done'){closeTools(true);return;}
-    if(action==='reframe'||action==='swap'){
-      showTools(editing,action);
-      if(action==='swap')buttons.find((_,i)=>i!==editing).focus({preventScroll:true});
-      if(action==='reframe'&&directions.every(button=>button.disabled))onStatus('This photo already fits its frame.');
-      return;
-    }
-    movePhoto(editing,action==='up'?.12:-.12);
-    updateDirections();
-    if(event.target.disabled)tools.querySelector('[data-edit-mode="reframe"] button:not(:disabled)')?.focus({preventScroll:true});
-  }
-  function cancelTools(event){
-    if(editing<0||gesture)return;
-    event.preventDefault();closeTools(true);
-  }
   // The top-layer dialog owns this absolute overlay. Pointer coordinates are
   // viewport-relative, so account for its desktop inset, border and scrolling.
   const ghostOrigin=()=>{const r=dialog.getBoundingClientRect();return {x:r.left+dialog.clientLeft-dialog.scrollLeft,y:r.top+dialog.clientTop-dialog.scrollTop};};
@@ -100,7 +43,7 @@ export function bindKeepsakeEditor({wrap,slots,getImage,getCrop,setCrop,canStart
     const current=gesture;gesture=null;
     setCrop(current.index,current.crop);
     if(commit&&current.target>=0&&current.target!==current.index)landGhost(current);else removeGhost();
-    buttons.forEach(b=>{b.classList.remove('ks-swap-source','ks-swap-target','ks-is-panning');});
+    buttons.forEach(b=>{b.classList.remove('ks-swap-source','ks-swap-target','ks-is-panning');b.setAttribute('aria-pressed','false');});
     if(current.pointer!==undefined&&current.button.hasPointerCapture?.(current.pointer))current.button.releasePointerCapture(current.pointer);
     if(current.started){
       if(commit&&current.target>=0&&current.target!==current.index){onSwap(current.index,current.target);onStatus('Photos swapped.');}
@@ -136,7 +79,7 @@ export function bindKeepsakeEditor({wrap,slots,getImage,getCrop,setCrop,canStart
     const dy=event.clientY-gesture.y,dx=event.clientX-gesture.x;
     if(!gesture.started&&Math.hypot(dx,dy)<6)return;
     event.preventDefault();
-    if(!gesture.started){gesture.started=true;closeTools();onStart();}
+    if(!gesture.started){gesture.started=true;onStart();}
     const next=photoSlotAt(rects(),event.clientX,event.clientY),previous=gesture.target;
     target(next);
     if(gesture.desktop&&(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)*.8||next!==gesture.index))gesture.lifted=true;
@@ -161,19 +104,26 @@ export function bindKeepsakeEditor({wrap,slots,getImage,getCrop,setCrop,canStart
     if(event.key==='Escape'&&gesture){event.preventDefault();stop(false);return;}
     if(!button)return;
     const index=Number(button.dataset.crop);
+    if(gesture?.keyboard){
+      if(['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(event.key)){
+        event.preventDefault();target((gesture.target+(['ArrowLeft','ArrowUp'].includes(event.key)?2:1))%3);
+        onStatus(`Swap photo ${gesture.index+1} with photo ${gesture.target+1}. Space confirms; Escape cancels.`);
+      }else if(event.key===' '||event.key==='Enter'){event.preventDefault();stop(true);}
+      return;
+    }
     if(!canStart()){if([' ','Enter','ArrowUp','ArrowDown'].includes(event.key))event.preventDefault();return;}
-    if(event.key==='ArrowUp'||event.key==='ArrowDown'){
-      event.preventDefault();movePhoto(index,event.key==='ArrowUp'?.04:-.04);
-      if(editing===index&&mode==='reframe')updateDirections();
+    if(event.key===' '){
+      event.preventDefault();gesture={index,button,crop:{...getCrop(index)},keyboard:true,target:index,started:true};
+      button.classList.add('ks-swap-source');button.setAttribute('aria-pressed','true');onStart();onStatus('Photo picked up. Use arrow keys to choose a photo to swap, then Space to drop.');
+    }else if(event.key==='ArrowUp'||event.key==='ArrowDown'){
+      event.preventDefault();const crop=getCrop(index);setCrop(index,{...crop,y:Math.max(0,Math.min(1,crop.y+(event.key==='ArrowUp'?-.04:.04)))});onCrop();
     }
   }
   const click=event=>{if(muted){event.preventDefault();event.stopImmediatePropagation();}};
   const blur=()=>stop(false);
   wrap.addEventListener('pointerdown',pointerDown);wrap.addEventListener('pointermove',pointerMove,{passive:false});wrap.addEventListener('pointerup',pointerUp);wrap.addEventListener('pointercancel',pointerCancel);wrap.addEventListener('keydown',keyDown);wrap.addEventListener('click',click,true);window.addEventListener('blur',blur);
-  wrap.addEventListener('click',activatePhoto);tools.addEventListener('click',activateTool);dialog.addEventListener('cancel',cancelTools,true);
   return ()=>{
     if(gesture){setCrop(gesture.index,gesture.crop);gesture=null;}
-    wrap.removeEventListener('click',activatePhoto);tools.removeEventListener('click',activateTool);dialog.removeEventListener('cancel',cancelTools,true);
     removeGhost();landings.forEach(image=>image.remove());landings.clear();clearTimeout(muteTimer);wrap.removeEventListener('pointerdown',pointerDown);wrap.removeEventListener('pointermove',pointerMove);wrap.removeEventListener('pointerup',pointerUp);wrap.removeEventListener('pointercancel',pointerCancel);wrap.removeEventListener('keydown',keyDown);wrap.removeEventListener('click',click,true);window.removeEventListener('blur',blur);
   };
 }
