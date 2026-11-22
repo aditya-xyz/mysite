@@ -1,3 +1,4 @@
+import {tailGreetingUi} from '../web/tail-greeting.js';
 import {digitalUi} from '../web/digital-copy.js';
 // Optional translation drafts; source-matched text publishes with the scrapbook.
 export const languages={en:'English',mr:'मराठी · Marathi','zh-TW':'繁體中文 · Traditional Chinese (Taiwan)'};
@@ -25,9 +26,7 @@ const existingUiDrafts=[
 ["photos by my humans. creative direction and sass by me.", "फोटो माझ्या माणसांनी काढलेत. कल्पना आणि खोडकरपणा माझा.", "我的人類負責拍照，我負責創意指導和吐槽。"],
 ["a note from your editor", "तुझ्या संपादकाकडून दोन शब्द", "來自總編輯的一封信"],
 ["oh, it’s you.", "अरे, तू आहेस तर.", "喔，原來是你。"],
-["my", "माझ्या", "我的"],
-["tail", "शेपटीला", "尾巴"],
-["knew first.", "आधीच कळलं होतं.", "早就知道了。"],
+...tailGreetingUi,
 ["hi {name}!", "हाय {name}!", "嗨，{name}！"],
 ["my humans’ friends", "माझ्या माणसांचे मित्र", "我的人類的朋友"],
 ["my friends", "माझे मित्र", "也是我的朋友"],
