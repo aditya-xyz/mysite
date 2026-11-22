@@ -486,3 +486,5 @@ html[data-input-modality=pointer] .pb-present-card:focus{outline:none}
 
 .pb-gift-postscript a{color:inherit;text-underline-offset:.2em}
 .grid .card.pb-photo-unavailable img{min-height:72px;background:var(--surface)}
+
+.pb-mug-preview figcaption:empty{display:none}

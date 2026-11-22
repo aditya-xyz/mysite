@@ -16,7 +16,6 @@ export const digitalUi=[
 ["dad’s got it", "बाबा बघतील", "老爸買單"],
 ["mail it, on us", "आमच्या खर्चाने टपालाने पाठवा", "寄出去，郵資我們出"],
 ["Mug preview", "मगची झलक", "馬克杯預覽"],
-["final placement may vary", "छपाईची मांडणी थोडी वेगळी असू शकते", "實際印刷位置可能略有差異"],
 ["p.s. scroll to the end—i got you something.", "ता. क. शेवटपर्यंत स्क्रोल करा—तुमच्यासाठी एक भेट आहे.", "附註：滑到最後，我有東西送你。"],
 ["oh, it’s you, {name}.", "अरे, {name}, तुम्ही आलात.", "喔，{name}，是你啊。"],
 ["i made a scrapbook. if you spot yourself in here, congratulations on making my camera roll.", "मी एक स्क्रॅपबुक बनवलंय. यात तुम्ही दिसलात तर अभिनंदन—माझ्या फोनच्या गॅलरीत जागा मिळाली.", "我做了一本剪貼簿。如果你在裡面看到自己，恭喜你登上我的相簿。"],

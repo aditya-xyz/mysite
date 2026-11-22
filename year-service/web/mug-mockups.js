@@ -39,12 +39,12 @@ export function createMugMockups(){
    const previousImage=element.querySelector('img.pb-printful-mockup');
    if(previousImage?.tagName==='IMG'){
     const caption=element.querySelector('figcaption');
-    if(caption)caption.textContent=record.error?'Preview unavailable. Tap the handle option to retry.':loading?`Loading ${record.view==='handle-right'?'right':'left'} handle…`:'Mug preview · final placement may vary';
+    if(caption)caption.textContent=record.error?'Preview unavailable. Tap the handle option to retry.':loading?`Loading ${record.view==='handle-right'?'right':'left'} handle…`:'';
    }
    if(record.imageUrl){
     if(element.dataset.mockupImage===record.imageUrl)continue;
     const image=document.createElement('img');image.className='pb-printful-mockup';image.src=record.imageUrl;image.alt=record.view==='handle-right'?'Printful preview of Santa Pixel and pixelbook ’26, handle on right':'Printful preview of your selected mugshot and caption, handle on left';
-    const caption=document.createElement('figcaption');caption.role='status';caption.ariaLive='polite';caption.textContent='Mug preview · final placement may vary';
+    const caption=document.createElement('figcaption');caption.role='status';caption.ariaLive='polite';caption.textContent='';
     if(prepared){
      const cached=controlsFor(element,record);
      const previous=element.querySelector('img.pb-printful-mockup');
