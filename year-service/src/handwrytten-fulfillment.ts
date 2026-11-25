@@ -1,3 +1,4 @@
+import {isAutomaticPostcard,livePostcardsConfigured} from './live-gifts.ts';
 import {PrintProblem,type PrintEnv} from './printing.ts';
 import {prepareSavedOrderProof} from './handwrytten-previews.ts';
 import {handwryttenBasket,handwryttenTestMutation,handwryttenSender,handwryttenCountry,requireHandwryttenTestMode,handwryttenCheckoutQuote,handwryttenTestOrder,requireHandwryttenLiveMode,handwryttenLiveMutation} from './handwrytten.ts';
@@ -108,13 +109,13 @@ async function reconcileBlockedLock(env:PrintEnv,live:boolean):Promise<'clear'|'
  }
 }
 export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
- const live=env.PRINT_ORDER_MODE==='handwrytten_live'&&env.LIVE_GIFT_ORDERING==='true';
+ const live=livePostcardsConfigured(env);
  if(!live&&env.PRINT_ORDER_MODE!=='handwrytten_test')return;
  if(await reconcileBlockedLock(env,live)!=='clear')return;
  // Expired non-idempotent calls are never replayed. Their remote result needs reconciliation.
  await env.DB.prepare("UPDATE print_fulfillment SET state='unknown',error='Submission outcome needs review; it will not be retried automatically.',updated_at=?1 WHERE state IN ('staging','staged','submitting') AND updated_at<?2").bind(now(),now()-600).run();
  const job=await env.DB.prepare(`SELECT f.*,o.year,o.handwrytten_order_json,o.address_json FROM print_fulfillment f JOIN print_orders o ON o.id=f.order_id
- WHERE ${live?"EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.order_id=o.id AND l.kind='postcard' AND l.state='pending') AND":''} o.status='simulated' AND o.allowance_reset_at IS NULL AND ((f.state='pending' AND f.next_at<=?1) OR (f.state='preparing' AND f.updated_at<?2))
+ WHERE ${live?"EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.order_id=o.id AND l.kind='postcard' AND l.state='pending') AND":"NOT EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.order_id=o.id AND l.kind='postcard') AND"} o.status='simulated' AND o.allowance_reset_at IS NULL AND ((f.state='pending' AND f.next_at<=?1) OR (f.state='preparing' AND f.updated_at<?2))
  ORDER BY CASE WHEN f.order_id=?3 THEN 0 ELSE 1 END,f.created_at LIMIT 1`).bind(now(),now()-300,preferredId||'').first<any>();
  if(!job)return;
  const owner=job.order_id+':'+crypto.randomUUID();
@@ -129,6 +130,11 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
   if(!current||current.status!=='simulated'||!['pending','preparing','staged'].includes(current.state)){canRelease=true;return;}
   // The supplier account setting determines whether this household checkout is a test.
   const testMode=live?await requireHandwryttenLiveMode(env,job.order_id):(await requireHandwryttenTestMode(env),true);
+  if(live&&testMode&&isAutomaticPostcard(job.order_id)){
+   const at=now();
+   await env.DB.prepare("UPDATE print_fulfillment SET state='pending',next_at=?1,updated_at=?2,error=?3 WHERE order_id=?4").bind(at+300,at,'Waiting for Handwrytten Test Mode to be turned off.',job.order_id).run();
+   return;
+  }
   if(!mutated){
    await env.DB.prepare("UPDATE print_fulfillment SET state='preparing',attempts=attempts+1,updated_at=?1 WHERE order_id=?2").bind(now(),job.order_id).run();
    const proof=await prepareSavedOrderProof(env,job.year,job.order_id);
@@ -161,7 +167,7 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
   await env.DB.batch([env.DB.prepare("UPDATE print_fulfillment SET state='staged',vendor_order_id=?1,basket_item_id=?2,updated_at=?3 WHERE order_id=?4").bind(checked.vendorId,checked.basketId,now(),job.order_id),env.DB.prepare('UPDATE print_orders SET handwrytten_quote_json=?1,budget_review_required=?3 WHERE id=?2').bind(JSON.stringify(quote),job.order_id,Number(!job.quote_only&&checked.amounts.total>approvedLimit))]);
   if(job.quote_only||checked.amounts.total>approvedLimit){
    await mutation('/basket/remove',{id:checked.basketId});
-   if(itemsOf(await handwryttenBasket(env)).some(i=>Number(i.id)===checked.vendorId))throw new PrintProblem(502,'The unsent test draft could not be removed.');
+   if(itemsOf(await handwryttenBasket(env)).some(i=>Number(i.id)===checked.vendorId))throw new PrintProblem(502,'The unsent draft could not be removed.');
    canRelease=true;await env.DB.prepare('UPDATE print_fulfillment SET basket_item_id=NULL WHERE order_id=?1').bind(job.order_id).run();await update('review',job.quote_only?null:live?'The postcard exceeds the $10 limit. No order was submitted.':`Checkout exceeds the ${saved.budget_approved_cents?'approved':'automatic'} $${(approvedLimit/100).toFixed(2)} limit. Admin approval is required. No order was submitted.`);return;
   }
   // Re-read exact basket identities, total and funding immediately before submission.

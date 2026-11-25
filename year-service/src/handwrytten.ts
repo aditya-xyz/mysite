@@ -1,4 +1,4 @@
-import {livePostcardsConfigured,requireLiveGift} from './live-gifts.ts';
+import {isAutomaticPostcard,livePostcardsConfigured,requireLiveGift} from './live-gifts.ts';
 import type {PrintEnv} from './printing.ts';
 import {imageDimensions} from './image-dimensions.ts';
 import {PrintProblem} from './printing.ts';
@@ -134,6 +134,7 @@ export async function requireHandwryttenLiveMode(env:PrintEnv,orderId:string){
  return mode===1;
 }
 export async function handwryttenLiveMutation(env:PrintEnv,orderId:string,path:'/orders/placeBasket'|'/basket/send'|'/basket/remove',body:Record<string,unknown>){
- await requireHandwryttenLiveMode(env,orderId);
+ const testMode=await requireHandwryttenLiveMode(env,orderId);
+ if(isAutomaticPostcard(orderId)&&testMode&&path!=='/basket/remove')throw new PrintProblem(409,'Automatic mailing is waiting for Handwrytten Test Mode to be turned off.');
  return api(env,path,body);
 }

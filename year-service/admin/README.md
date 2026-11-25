@@ -1335,8 +1335,12 @@ the cutoff controls, `GET /api/editions/:year/card-fallback` for diagnostics,
 `{internationalLastDay,usLastDay,previousPolicy}`, and
 `POST /api/editions/:year/card-fallback/retry/:invitation`. All use the existing
 admin identity and origin checks. The former exclusions endpoint is removed.
-Live mailing stays disabled; simulation and vendor Test Mode are still required
-and the normal manual approvals remain.
+With live postcard fulfillment enabled, the scheduler queues automatic cards
+for households with postcard permission and a complete saved address. It
+skips existing claims and paperless households, including overlapping
+invitations. Queued cards wait while Handwrytten is in Test Mode and are mailed
+only if the final total is at or below $10. Live automatic cards have no
+over-budget approval.
 
 ### Recipient languages and review
 

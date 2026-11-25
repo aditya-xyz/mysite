@@ -16,6 +16,7 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
  INSERT INTO editions VALUES(2026,1,1,1,NULL); INSERT INTO invites VALUES('home',2026,'owner','["owner","partner"]',NULL,unixepoch()+86400,1,1); INSERT INTO invites VALUES('other',2026,'friend','["friend"]',NULL,unixepoch()+86400,1,1);
  CREATE TABLE mug_orders(id TEXT PRIMARY KEY,invitation_id TEXT,year INTEGER,status TEXT,address_json TEXT,recipient_name TEXT,quote_json TEXT,print_artwork_key TEXT,print_layout_version INTEGER,allowance_reset_at INTEGER,updated_at INTEGER);
  CREATE TABLE print_orders(id TEXT PRIMARY KEY,invitation_id TEXT,year INTEGER,status TEXT,format TEXT,card_count INTEGER,handwrytten_preview_id TEXT,handwrytten_order_json TEXT,address_json TEXT,allowance_reset_at INTEGER,handwrytten_quote_json TEXT,budget_approved_cents INTEGER,budget_review_required INTEGER,provider_id TEXT,updated_at INTEGER);
+ CREATE TABLE digital_postcards(id TEXT PRIMARY KEY,year INTEGER,invitation_id TEXT,member_ids TEXT);
  CREATE TABLE handwrytten_previews(id TEXT PRIMARY KEY,invitation_id TEXT,year INTEGER,status TEXT,card_id INTEGER,front_key TEXT,inside_key TEXT,back_key TEXT,updated_at INTEGER);`);
  for(const file of ['0029_handwrytten_fulfillment.sql','0033_handwrytten_quote_only.sql','0041_scoped_live_gifts.sql'])await db.batch((await readFile('migrations/'+file,'utf8')).split('--> statement-breakpoint').filter(s=>s.trim()).map(s=>db.prepare(s)));
  await db.prepare("INSERT INTO live_gift_permissions(year,invitation_id,person_id,member_ids,postcard_enabled,mug_enabled,enabled,expires_at) VALUES(2026,'home','owner','[\"owner\",\"partner\"]',1,1,1,unixepoch()+86400)").run();
@@ -91,7 +92,7 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
  });
  async function reset(){
   calls.length=0;mug=null;mugPayload=null;mugCost='19.99';loseConfirm=false;loseCreate=false;costsPending=false;readOnlyOrderToken=false;mode=0;previewTotal=4.86;basket=[];basketTotal=4.86;postcardAccepted=false;nextVendorId=100;vendorOrders=new Map();placeMetadata=[];detailIds=[];postcardDetailsStatus=null;postcardDetailsError=false;onPostcardDetails=null;
-  await db.exec("DELETE FROM live_gift_orders; DELETE FROM live_gift_permissions WHERE invitation_id!='home'; DELETE FROM mug_orders; DELETE FROM print_orders; DELETE FROM print_fulfillment_lock; DELETE FROM handwrytten_previews;");
+  await db.exec("DELETE FROM digital_postcards; DELETE FROM live_gift_orders; DELETE FROM live_gift_permissions WHERE invitation_id!='home'; DELETE FROM mug_orders; DELETE FROM print_orders; DELETE FROM print_fulfillment_lock; DELETE FROM handwrytten_previews;");
  }
  async function seedMug(destination=address,shippingMethod='STANDARD'){
   await db.prepare("INSERT INTO mug_orders VALUES('mug-live','home',2026,'simulated',?1,'Synthetic Recipient',?2,'frozen.png',4,NULL,unixepoch())").bind(JSON.stringify(destination),JSON.stringify({currency:'USD',variantId:22373,totalCents:1999,withinBudget:true,destination:destination.country,shippingMethod})).run();
@@ -144,6 +145,28 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
    }finally{
     await db.exec(`UPDATE editions SET allow_print_orders=1; UPDATE invites SET allow_print=1,member_ids='["friend"]' WHERE id='other';`);
    }
+  });
+  await t.test('live automatic cards wait out supplier Test Mode, then send exactly once',async()=>{
+   await reset();const id='print-fallback-allowed';await seedPrint(true,id);
+   mode=1;await tickPrintFulfillment(env);
+   assert.equal(await liveState(id),'pending');
+   assert.deepEqual(calls,['GET /v2/checkauth/auth']);
+   assert.match((await db.prepare('SELECT error FROM print_fulfillment WHERE order_id=?1').bind(id).first<any>()).error,/waiting for Handwrytten Test Mode/i);
+   mode=0;await db.prepare('UPDATE print_fulfillment SET next_at=0 WHERE order_id=?1').bind(id).run();
+   await Promise.all([tickPrintFulfillment(env),tickPrintFulfillment(env)]);
+   await tickPrintFulfillment(env);
+   assert.equal(await liveState(id),'submitted');
+   assert.equal(calls.filter(call=>call==='POST /v2/basket/send').length,1);
+  });
+  await t.test('automatic fulfillment rechecks overlapping paperless preferences and the $10 cap',async()=>{
+   await reset();const id='print-fallback-protected';await seedPrint(true,id);
+   await db.prepare(`INSERT INTO digital_postcards VALUES('opt-out',2026,'other','["partner"]')`).run();
+   await tickPrintFulfillment(env);
+   assert.equal(await liveState(id),'review');assert.equal(calls.length,0);
+   await reset();await seedPrint(true,id);basketTotal=10.01;
+   await tickPrintFulfillment(env);
+   assert.equal(await liveState(id),'review');
+   assert.ok(calls.includes('POST /v2/basket/remove'));assert.ok(!calls.includes('POST /v2/basket/send'));
   });
   await t.test('mug submits one exact print file once under concurrent workers',async()=>{await reset();await seedMug();await Promise.all([tickLiveMugFulfillment(env),tickLiveMugFulfillment(env)]);await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'submitted');assert.equal(calls.filter(c=>c==='POST /orders/123/confirm').length,1);const url=new URL(mugPayload.items[0].files[0].url);assert.match(url.pathname,/^\/api\/gift\/order-source\/[a-f0-9]{64}$/);const capability=url.pathname.split('/').pop()!;assert.deepEqual(new Uint8Array(await (await liveMugSource(env,capability)).arrayBuffer()),new Uint8Array([1,2,3]));await db.prepare("UPDATE editions SET taken_offline_at=unixepoch() WHERE year=2026").run();try{await assert.rejects(()=>liveMugSource(env,capability),/not found/);}finally{await db.prepare("UPDATE editions SET taken_offline_at=NULL WHERE year=2026").run();}await assert.rejects(()=>liveMugSource(env,'0'.repeat(64)),/not found/);});
   await t.test('verified layout versions 5 and 6 submit once through the real fulfillment path',async()=>{

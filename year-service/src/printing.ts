@@ -143,15 +143,15 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  return {order:printOrderView({id,status:'simulated',created_at:now(),card_count:personalized?2:1,recipe_json:JSON.stringify(recipe),format:'folded',back_text:foldedBackText(c.i.edition_year),live:c.mode==='handwrytten_live',fulfillment_state:['handwrytten_test','handwrytten_live'].includes(env.PRINT_ORDER_MODE||'')?'pending':undefined,note:(personalized?c.published!.printNote:c.published!.defaultPrintNote?.trim()||c.published!.printNote)||'',authors:c.published!.authors}),reused:false};
 }
 
-// Both paths freeze the same payload; only explicit guest checkout may add a live intent.
-export async function finishSavedPrintOrder(env:PrintEnv,id:string,year:number,liveInvitation?:Pick<InvitationAudience,'id'>&{version:number}){
+// Automatic checkout already has a live intent from its order reservation.
+export async function finishSavedPrintOrder(env:PrintEnv,id:string,year:number,liveInvitation?:(Pick<InvitationAudience,'id'>&{version:number})|'reserved'){
  const snapshot=await env.DB.prepare('SELECT note,recipient_name,address_json FROM print_orders WHERE id=?1 AND year=?2').bind(id,year).first<{note:string;recipient_name:string;address_json:string}>();
  if(!snapshot)throw new PrintProblem(404,'Saved card order not found.');
  const address=JSON.parse(snapshot.address_json) as MailingAddress,name=snapshot.recipient_name.trim().split(/\s+/);
  const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:({US:'United States',IN:'India',NL:'Netherlands'})[address.country],message:handwryttenMessage(snapshot.note)}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
  const requiresIntent=liveInvitation?"AND EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.order_id=?1 AND l.kind='postcard')":'';
  const statements=[env.DB.prepare("UPDATE print_orders SET handwrytten_order_json=?1 WHERE id=?2 AND year=?3 AND status='preparing'").bind(JSON.stringify(payload),id,year)];
- if(liveInvitation)statements.push(liveGiftIntentStatement(env,id,'postcard',liveInvitation.id,year,liveInvitation.version));
+ if(liveInvitation&&liveInvitation!=='reserved')statements.push(liveGiftIntentStatement(env,id,'postcard',liveInvitation.id,year,{invitationVersion:liveInvitation.version}));
  if(env.PRINT_ORDER_MODE==='handwrytten_test'||liveInvitation)statements.push(env.DB.prepare(`INSERT INTO print_fulfillment(order_id,state) SELECT id,'pending' FROM print_orders WHERE id=?1 AND year=?2 AND status='preparing' ${requiresIntent} ON CONFLICT(order_id) DO NOTHING`).bind(id,year));
  // Commit the queue, optional live intent and ready state together. A stale preparer cannot reset a vendor payload.
  statements.push(env.DB.prepare(`UPDATE print_orders SET status='simulated',provider_id='local-'||id,updated_at=unixepoch() WHERE id=?1 AND year=?2 AND status='preparing' ${requiresIntent} RETURNING id`).bind(id,year));

@@ -1,3 +1,4 @@
+import {automaticPostcardPrefix,liveGiftIntentStatement,livePostcardsConfigured} from './live-gifts.ts';
 import {countryDeadline,type CardFallbackPolicy} from './gift-deadline.ts';
 import {mailingAddress,printedGreeting,foldedBackText,finishSavedPrintOrder,type PrintEnv,type MailingAddress} from './printing.ts';
 import {invitationMembers,invitationName,invitationRecipientName,type InvitationAudience} from './invitations.ts';
@@ -5,6 +6,8 @@ import {printOrderLimitCents} from './handwrytten-fulfillment.ts';
 import {imageDimensions} from './image-dimensions.ts';
 import {digest,now} from './security.ts';
 import {digitalMailingAllowedSQL,type DigitalPostcard} from './digital-postcards.ts';
+
+export const automaticCardMode=(env:PrintEnv)=>livePostcardsConfigured(env)?'live':env.ORDER_MODE==='simulation'&&env.PRINT_ORDER_MODE==='handwrytten_test'?'test':'disabled';
 
 type Candidate=InvitationAudience&{version:number;revoked_at:number|null;expires_at:number;mailing_address:string|null;person_name:string;person_version:number;print_order_count:number};
 interface Job {invitation_id:string;year:number;household_key:string;cutoff_at:number;run_at:number;state:string;reason:string;order_id:string|null;attempts:number}
@@ -16,7 +19,7 @@ async function fallbackPlan(env:PrintEnv,year:number,at:number){
  const policy=await env.DB.prepare('SELECT * FROM card_fallback_policies WHERE year=?1').bind(year).first<CardFallbackPolicy>();
  if(!policy)return {policy:null,rows:[],edition:null,defaults:null};
  const [edition,defaults,invitations,jobs,orders,digital]=await Promise.all([
-  env.DB.prepare('SELECT published_json,published_version,is_active,allow_print_orders FROM editions WHERE year=?1').bind(year).first<any>(),
+  env.DB.prepare('SELECT published_json,published_version,is_active,taken_offline_at,allow_print_orders FROM editions WHERE year=?1').bind(year).first<any>(),
   env.DB.prepare('SELECT revision,frames_json FROM keepsake_defaults WHERE year=?1').bind(year).first<{revision:string;frames_json:string}>(),
   env.DB.prepare('SELECT i.*,p.mailing_address,p.name AS person_name,p.version AS person_version FROM invites i LEFT JOIN people p ON p.id=i.person_id WHERE i.edition_year=?1 ORDER BY i.id').bind(year).all<Candidate>(),
   env.DB.prepare('SELECT * FROM card_fallback_jobs WHERE year=?1').bind(year).all<Job>(),
@@ -36,15 +39,15 @@ async function fallbackPlan(env:PrintEnv,year:number,at:number){
   const existing=orders.results.find(o=>o.invitation_id===invitation.id||overlap(audience,members(invitations.results.find(i=>i.id===o.invitation_id)!)));
   let reason='',decision='';
   if(existing){
-   decision=job?.state==='failed'&&existing.id===job.order_id&&existing.status==='preparing'?'failed':existing.budget_review_required?'awaiting-approval':existing.status==='unknown'||['unknown','review'].includes(existing.fulfillment_state)?'needs-review':existing.status==='submitted'?'submitted':'ordered';
+   decision=job?.state==='failed'&&existing.id===job.order_id&&existing.status==='preparing'?'failed':existing.budget_review_required&&!livePostcardsConfigured(env)?'awaiting-approval':existing.status==='unknown'||['unknown','review'].includes(existing.fulfillment_state)?'needs-review':existing.status==='submitted'?'submitted':'ordered';
    reason=decision==='failed'?job!.reason:'A card order already exists for this household.';
   }else if(digital.results.some(d=>d.invitation_id===invitation.id||overlap(audience,JSON.parse(d.member_ids)))){decision='skipped';reason='This household permanently chose a digital postcard.';}
   else if(job&&['saved','skipped','failed'].includes(job.state)){decision=job.state;reason=job.reason||'The cutoff decision has already been recorded.';}
   else if(job&&job.household_key!==key)reason='Household membership changed after cutoff; admin review is required.';
   else if(invitation.revoked_at||invitation.expires_at<=at)reason='Invitation is inactive.';
   else if(!invitation.allow_print)reason='Card permission is off.';
-  else if(!edition?.is_active||!edition.published_version||!published)reason='Scrapbook is not published and active.';
-  else if(!edition.allow_print_orders)reason='Card orders are turned off.';
+  else if(!edition?.is_active||edition.taken_offline_at!==null||!edition.published_version||!published)reason='Scrapbook is not published and active.';
+  else if(!livePostcardsConfigured(env)&&!edition.allow_print_orders)reason='Card orders are turned off.';
   else if(!address)reason=invitation.mailing_address?'Saved address is incomplete or unsupported.':'No saved mailing address.';
   else if(!note)reason='The default card note is not published.';
   else if(!defaultKey)reason='Approved Starry Night artwork is unavailable.';
@@ -63,7 +66,8 @@ export async function cardFallbackPreview(env:PrintEnv,year:number,at=now()){
  let artworkAvailable=false;
  if(plan.defaultKey)artworkAvailable=!!await env.MEDIA.head(plan.defaultKey);
  const rows=plan.rows.map(({invitation,job,...row})=>!artworkAvailable&&['scheduled','due'].includes(row.decision)?{...row,decision:'skipped',reason:'Approved Starry Night artwork is missing from storage.'}:row);
- return {year,asOf:at,policy:plan.policy,policyEditable:!!plan.policy&&at<Math.min(plan.policy.international_cutoff,plan.policy.us_cutoff)&&!plan.rows.some(row=>row.job),frame:'starry-night',testMode:true,submissionEnabled:env.ORDER_MODE==='simulation'&&env.PRINT_ORDER_MODE==='handwrytten_test',automaticLimitCents:printOrderLimitCents,artworkAvailable,rows,summary:rows.reduce<Record<string,number>>((counts,row)=>({...counts,[row.decision]:(counts[row.decision]||0)+1}),{})};
+ const mode=automaticCardMode(env);
+ return {year,asOf:at,policy:plan.policy,policyEditable:!!plan.policy&&at<Math.min(plan.policy.international_cutoff,plan.policy.us_cutoff)&&!plan.rows.some(row=>row.job),frame:'starry-night',mode,testMode:mode==='test',submissionEnabled:mode!=='disabled',automaticLimitCents:printOrderLimitCents,artworkAvailable,rows,summary:rows.reduce<Record<string,number>>((counts,row)=>({...counts,[row.decision]:(counts[row.decision]||0)+1}),{})};
 }
 
 export async function tickCardFallback(env:PrintEnv,at=now()){
@@ -77,8 +81,9 @@ export async function tickCardFallback(env:PrintEnv,at=now()){
     .bind(row.invitationId,year,row.householdKey,row.cutoffAt,row.runAt,['scheduled','due'].includes(row.decision)?'pending':'skipped',row.reason,at).run();
   }
  }
- // No live adapter is enabled by this automation. Vendor Test Mode is checked again by fulfillment.
- if(env.ORDER_MODE!=='simulation'||env.PRINT_ORDER_MODE!=='handwrytten_test')return;
+ const mode=automaticCardMode(env);
+ if(mode==='disabled')return;
+ const live=mode==='live';
  const owner=crypto.randomUUID();
  const job=await env.DB.prepare(`UPDATE card_fallback_jobs SET state='preparing',owner=?1,lease_until=?2,attempts=attempts+1,updated_at=?3
  WHERE (year,invitation_id)=(SELECT year,invitation_id FROM card_fallback_jobs WHERE run_at<=?3 AND next_at<=?3 AND (state='pending' OR (state='preparing' AND lease_until<=?3)) ORDER BY run_at,created_at,invitation_id LIMIT 1)
@@ -86,12 +91,13 @@ export async function tickCardFallback(env:PrintEnv,at=now()){
  if(!job)return;
  const update=async(state:string,reason='',orderId:string|null=job.order_id)=>env.DB.prepare('UPDATE card_fallback_jobs SET state=?1,reason=?2,order_id=coalesce(order_id,?3),owner=NULL,lease_until=0,next_at=?4,updated_at=?5 WHERE year=?6 AND invitation_id=?7 AND owner=?8').bind(state,reason,orderId,at+60*Math.min(10,job.attempts),at,job.year,job.invitation_id,owner).run();
  try{
+  const queuedMessage=live?'Default Starry Night card queued for live fulfillment.':'Default Starry Night card queued in Test Mode.';
   // Resume a crash during preparation using the frozen order, never submit a second vendor order.
   if(job.order_id){
    const saved=await env.DB.prepare('SELECT status FROM print_orders WHERE id=?1').bind(job.order_id).first<{status:string}>();
-   if(saved?.status==='preparing')await finishSavedPrintOrder(env,job.order_id,job.year);
+   if(saved?.status==='preparing')await finishSavedPrintOrder(env,job.order_id,job.year,live?'reserved':undefined);
    else if(!saved||!['simulated','submitted','unknown'].includes(saved.status)){await update('failed','The reserved order was canceled or failed; admin review is required.');return;}
-   await update('saved','Fallback order is saved; normal test fulfillment and budget approval apply.');return;
+   await update('saved',queuedMessage);return;
   }
   const plan=await fallbackPlan(env,job.year,at),row=plan.rows.find(r=>r.invitationId===job.invitation_id);
   if(!row||!['due','scheduled'].includes(row.decision)){await update('skipped',row?.reason||'Invitation is no longer eligible.');return;}
@@ -99,7 +105,7 @@ export async function tickCardFallback(env:PrintEnv,at=now()){
   if(!file)throw new Error('Approved Starry Night artwork is unavailable.');
   const bytes=new Uint8Array(await file.arrayBuffer()),dimensions=imageDimensions(bytes);
   if(dimensions?.width!==1200||dimensions.height!==1500)throw new Error('Approved Starry Night artwork has invalid dimensions.');
-  const id='print-fallback-'+(await digest(JSON.stringify([job.year,job.invitation_id]))).slice(0,24),key=`${job.year}/print-orders/${id}/${owner}/front.jpg`;
+  const id=automaticPostcardPrefix+(await digest(JSON.stringify([job.year,job.invitation_id]))).slice(0,24),key=`${job.year}/print-orders/${id}/${owner}/front.jpg`;
   await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:'image/jpeg'}});
   const recipientName=await invitationRecipientName(env.DB,row.invitation,row.invitation.person_name);
   const recipe={format:'folded',mode:'default',source:'automatic-fallback',frame:'starry-night',frontDesign:'default',photoIds:[],crops:{},defaultRevision:plan.defaults!.revision,layout:'a2-portrait-v1'};
@@ -109,20 +115,24 @@ export async function tickCardFallback(env:PrintEnv,at=now()){
     FROM invites i JOIN editions e ON e.year=i.edition_year JOIN people p ON p.id=i.person_id
     JOIN card_fallback_jobs j ON j.invitation_id=i.id AND j.year=e.year
     WHERE i.id=?10 AND i.version=?11 AND p.version=?12 AND e.published_version=?13
-    AND i.revoked_at IS NULL AND i.expires_at>?14 AND i.allow_print=1 AND i.print_order_count=0 AND e.is_active=1 AND e.allow_print_orders=1
+    AND i.revoked_at IS NULL AND i.expires_at>?14 AND i.allow_print=1 AND i.print_order_count=0 AND e.is_active=1 AND e.taken_offline_at IS NULL
+    ${live?"AND NOT EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.year=e.year AND l.invitation_id=i.id AND l.kind='postcard' AND l.allowance_reset_at IS NULL)":'AND e.allow_print_orders=1'}
     AND ${digitalMailingAllowedSQL} AND j.owner=?15 AND j.state='preparing' AND j.run_at<=?14
     AND EXISTS(SELECT 1 FROM keepsake_defaults d WHERE d.year=e.year AND d.revision=?8)
     AND NOT EXISTS(SELECT 1 FROM print_orders o JOIN invites other ON other.id=o.invitation_id WHERE o.year=e.year AND o.status IN ('preparing','simulated','submitted','unknown') AND
-      (other.id=i.id OR other.person_id=i.person_id OR EXISTS(SELECT 1 FROM json_each(other.member_ids) a JOIN json_each(i.member_ids) b ON a.value=b.value)))
+      (other.id=i.id OR other.person_id=i.person_id OR i.person_id IN (SELECT value FROM json_each(other.member_ids))
+       OR other.person_id IN (SELECT value FROM json_each(i.member_ids))
+       OR EXISTS(SELECT 1 FROM json_each(other.member_ids) a JOIN json_each(i.member_ids) b ON a.value=b.value)))
     ON CONFLICT DO NOTHING RETURNING id`)
     .bind(id,JSON.stringify(row.address),recipientName,printedGreeting(row.invitation)+plan.note,plan.published.authors,JSON.stringify(recipe),key,plan.defaults!.revision,foldedBackText(job.year),row.invitationId,row.invitation.version,row.invitation.person_version,plan.edition.published_version,at,owner),
-   env.DB.prepare("UPDATE card_fallback_jobs SET order_id=?1 WHERE year=?2 AND invitation_id=?3 AND owner=?4 AND EXISTS(SELECT 1 FROM print_orders WHERE id=?1 AND invitation_id=?3 AND status='preparing')").bind(id,job.year,job.invitation_id,owner)
+   ...(live?[liveGiftIntentStatement(env,id,'postcard',row.invitationId,job.year,{invitationVersion:row.invitation.version,artworkKey:key})]:[]),
+   env.DB.prepare("UPDATE card_fallback_jobs SET order_id=?1 WHERE year=?2 AND invitation_id=?3 AND owner=?4 AND EXISTS(SELECT 1 FROM print_orders WHERE id=?1 AND invitation_id=?3 AND status='preparing' AND artwork_key=?5)").bind(id,job.year,job.invitation_id,owner,key)
   ]);
   if(!inserted[0].results.length){await env.MEDIA.delete(key);await update('skipped','Eligibility changed or a household card order already exists.');return;}
   // Link was committed with the reservation, so a crash resumes this exact immutable order.
   job.order_id=id;
-  await finishSavedPrintOrder(env,id,job.year);
-  await update('saved','Default Starry Night card queued in Test Mode; normal budget approval applies.',id);
+  await finishSavedPrintOrder(env,id,job.year,live?'reserved':undefined);
+  await update('saved',queuedMessage,id);
  }catch(error){
   await update(job.attempts>=3?'failed':'pending',error instanceof Error?error.message:'Card preparation failed.');
  }

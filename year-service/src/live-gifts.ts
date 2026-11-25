@@ -1,3 +1,4 @@
+import {digitalMailingAllowedSQL} from './digital-postcards.ts';
 import {PrintProblem,type PrintEnv} from './printing.ts';
 export type LiveGiftKind='postcard'|'mug';
 export const liveGiftLimit=(kind:LiveGiftKind)=>kind==='postcard'?1000:2500;
@@ -5,6 +6,8 @@ export const liveMugsConfigured=(env:PrintEnv)=>env.LIVE_GIFT_ORDERING==='true';
 export const livePostcardsConfigured=(env:Pick<PrintEnv,'LIVE_GIFT_ORDERING'|'PRINT_ORDER_MODE'>)=>env.LIVE_GIFT_ORDERING==='true'&&env.PRINT_ORDER_MODE==='handwrytten_live';
 const giftInvitationSQL=(kind:LiveGiftKind)=>`i.allow_${kind==='mug'?'mug':'print'}=1 AND i.person_id IS NOT NULL
  AND i.revoked_at IS NULL AND i.expires_at>unixepoch() AND e.is_active=1 AND e.taken_offline_at IS NULL`;
+export const automaticPostcardPrefix='print-fallback-';
+export const isAutomaticPostcard=(orderId:string)=>orderId.startsWith(automaticPostcardPrefix);
 const orderTable=(kind:LiveGiftKind)=>kind==='mug'?'mug_orders':'print_orders';
 export async function liveGiftAllowed(env:PrintEnv,invitationId:string,year:number,kind:LiveGiftKind){
  if(!(kind==='mug'?liveMugsConfigured(env):livePostcardsConfigured(env)))return false;
@@ -17,16 +20,17 @@ export async function requireLiveGift(env:PrintEnv,orderId:string,kind:LiveGiftK
   JOIN ${orderTable(kind)} o ON o.id=l.order_id AND o.invitation_id=l.invitation_id AND o.year=l.year
   JOIN invites i ON i.id=l.invitation_id AND i.edition_year=l.year JOIN editions e ON e.year=l.year
   WHERE l.order_id=?1 AND l.kind=?2 AND o.allowance_reset_at IS NULL AND o.status IN ('simulated','submitted')
-  AND i.person_id=l.${kind}_person_id AND i.member_ids=l.${kind}_member_ids AND ${giftInvitationSQL(kind)}`).bind(orderId,kind).first<any>();
+  AND i.person_id=l.${kind}_person_id AND i.member_ids=l.${kind}_member_ids AND ${giftInvitationSQL(kind)}
+  ${kind==='postcard'&&isAutomaticPostcard(orderId)?'AND '+digitalMailingAllowedSQL:''}`).bind(orderId,kind).first<any>();
  if(!intent||intent.max_cents!==liveGiftLimit(kind))throw new PrintProblem(403,'This household is not enabled for live ordering.');
  return intent;
 }
-export function liveGiftIntentStatement(env:PrintEnv,orderId:string,kind:LiveGiftKind,invitationId:string,year:number,invitationVersion?:number){
+export function liveGiftIntentStatement(env:PrintEnv,orderId:string,kind:LiveGiftKind,invitationId:string,year:number,checkout?:{invitationVersion:number;artworkKey?:string}){
  return env.DB.prepare(`INSERT INTO live_gift_orders(order_id,kind,year,invitation_id,max_cents,${kind}_person_id,${kind}_member_ids)
   SELECT ?1,?2,i.edition_year,i.id,?5,i.person_id,i.member_ids FROM invites i JOIN editions e ON e.year=i.edition_year
-  WHERE i.edition_year=?3 AND i.id=?4 AND ${giftInvitationSQL(kind)} ${invitationVersion===undefined?'':'AND i.version=?6'}
-  AND EXISTS(SELECT 1 FROM ${orderTable(kind)} o WHERE o.id=?1 AND o.invitation_id=i.id AND o.year=e.year AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated')) ON CONFLICT DO NOTHING`)
-  .bind(orderId,kind,year,invitationId,liveGiftLimit(kind),...(invitationVersion===undefined?[]:[invitationVersion]));
+  WHERE i.edition_year=?3 AND i.id=?4 AND ${giftInvitationSQL(kind)} ${checkout?'AND i.version=?6':''}
+  AND EXISTS(SELECT 1 FROM ${orderTable(kind)} o WHERE o.id=?1 AND o.invitation_id=i.id AND o.year=e.year AND o.allowance_reset_at IS NULL AND o.status IN ('preparing','simulated') ${checkout?.artworkKey?"AND o.status='preparing' AND o.artwork_key=?7":''}) ON CONFLICT DO NOTHING`)
+  .bind(orderId,kind,year,invitationId,liveGiftLimit(kind),...(checkout?[checkout.invitationVersion]:[]),...(checkout?.artworkKey?[checkout.artworkKey]:[]));
 }
 export async function liveGiftState(env:PrintEnv,orderId:string){
  if(env.LIVE_GIFT_ORDERING!=='true')return null;

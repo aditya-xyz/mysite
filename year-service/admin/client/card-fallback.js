@@ -6,13 +6,17 @@ export function lastChoiceDate(cutoff){
 }
 export function mountCardFallback({panel,year,api,toast}){
  const section=document.createElement('section');section.className='panel form-panel card-fallback';
- section.innerHTML=`<div class="row-head"><div><h2>Automatic cards</h2><p class="hint">Choose when gift selection ends. The next morning at 6 a.m. Pacific, eligible households that haven’t ordered get a default Starry Night card.</p></div><span class="badge">Test mode · nothing mailed</span></div><div data-fallback-policy></div><p class="hint">No address + no existing order = no card sent. Mugs are never ordered automatically. Both gift options disappear after the cutoff. Cards over $10 still need your or Angela’s approval.</p><p class="hint" role="status" data-fallback-status></p>`;
+ section.innerHTML=`<div class="row-head"><div><h2>Automatic cards</h2><p class="hint">Choose when gift selection ends. The next morning at 6 a.m. Pacific, eligible households that haven’t ordered get a default Starry Night card.</p></div><span class="badge" data-fallback-mode></span></div><div data-fallback-policy></div><p class="hint" data-fallback-rules></p><p class="hint" role="status" data-fallback-status></p>`;
  panel.after(section);
  const status=section.querySelector('[data-fallback-status]'),policy=section.querySelector('[data-fallback-policy]');
  async function load(){
   status.textContent='Loading saved cutoff dates…';
   try{
    const data=await api('card-fallback/schedule');if(!section.isConnected)return;
+   section.querySelector('[data-fallback-mode]').textContent=({live:'Live mailing · $10 cap',test:'Test mode · nothing mailed',disabled:'Automatic mailing disabled'})[data.mode];
+   section.querySelector('[data-fallback-rules]').textContent=data.mode==='live'?
+    'A complete saved address and postcard permission are required. Paperless households and households with an existing postcard order are skipped. Cards above $10 are held without mailing.':
+    'A complete saved address and postcard permission are required. Test orders above $10 require approval.';
    if(!data.policy){policy.innerHTML='<p class="hint">No automatic card schedule is configured for this edition.</p>';status.textContent='Nothing will be ordered automatically.';return;}
    const values={internationalLastDay:lastChoiceDate(data.policy.international_cutoff),usLastDay:lastChoiceDate(data.policy.us_cutoff)};
    policy.innerHTML=`<form data-cutoff-form><p class="hint"><strong>Last day to choose gifts</strong> · through 11:59 p.m. Pacific</p><div class="form-grid">${[['internationalLastDay','India & Netherlands',data.policy.international_run_at],['usLastDay','United States',data.policy.us_run_at]].map(([key,label,runAt])=>`<label class="field"><span>${label}</span><input type="date" name="${key}" aria-label="${label} cutoff date" value="${values[key]}" min="${year}-01-01" max="${year}-12-31" required ${data.policyEditable?'':'disabled'}><small class="hint">Automatic cards start ${esc(date(runAt))}.</small></label>`).join('')}</div><div class="actions"><button type="submit" class="button" data-save-cutoffs disabled>Save cutoff dates</button></div><p class="hint" role="status" data-cutoff-status>${data.policyEditable?'Dates are saved. You only need to change them if you want a different deadline.':'A cutoff has started. These dates are locked to preserve recorded decisions and existing orders.'}</p></form>`;
@@ -23,7 +27,7 @@ export function mountCardFallback({panel,year,api,toast}){
     try{await api('card-fallback/dates',{internationalLastDay:form.elements.namedItem('internationalLastDay').value,usLastDay:form.elements.namedItem('usLastDay').value,previousPolicy:data.policy});await load();toast('Cutoff dates saved. People and existing orders are unchanged.');}
     catch(error){message.textContent=error.message;save.disabled=false;}
    };
-   status.textContent=data.submissionEnabled?'':'Automatic test submission is currently disabled.';
+   status.textContent=data.mode==='live'?'Live mailing starts on schedule once Handwrytten Test Mode is off.':data.submissionEnabled?'':'Automatic submission is disabled.';
   }catch(error){status.textContent=error.message;}
  }
  load();

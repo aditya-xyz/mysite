@@ -19,8 +19,11 @@ intent. Resetting an allowance does not authorize a second paid gift.
   design; call `/outbound/process` for a non-ordering full-price preview; then
   stage only that order in an empty basket. Verify exact identities, quantity,
   destination, full total and funding again before `/basket/send`. Shared basket
-  access is serialized and fenced. Automatic fallback jobs are disabled in live
-  mode and never create live intents.
+  access is serialized and fenced. Automatic cards use the same checkout and
+  $10 cap. At 6 a.m. Pacific following their cutoff, eligible households with
+  postcard permission and a complete saved address may receive a default
+  Starry Night card. Existing postcard claims and paperless households are
+  excluded. Automatic orders wait while the supplier is in Test Mode.
 * Mugs: freeze the same version-4 full-wrap PNG used by the prepared mockups,
   never the thumbnail or cutout. Obtain a destination-aware USD estimate, create
   an unconfirmed supplier draft with a unique `external_id`, verify the exact

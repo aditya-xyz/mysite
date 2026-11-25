@@ -17,7 +17,7 @@ import {giftMarkup} from '../web/pixelbook.js';
 // @ts-expect-error Shared browser clock helper.
 import {watchGiftDeadline} from '../web/gift-deadline.js';
 
-test('fallback cards preserve eligibility, household uniqueness, frozen content and test-only fulfillment',async t=>{
+test('fallback cards preserve eligibility, household uniqueness, frozen content and fulfillment modes',async t=>{
  const mf=new Miniflare(convertV4MiniflareOptions({modules:true,script:'export default {fetch(){return new Response("ok")}}',compatibilityDate:'2026-08-06',d1Databases:['DB'],r2Buckets:['MEDIA']}));
  try{
   const db=await mf.getD1Database('DB'),bucket=await mf.getR2Bucket('MEDIA');
@@ -29,7 +29,7 @@ test('fallback cards preserve eligibility, household uniqueness, frozen content 
   const request=new Request('https://guest.test/api/print/orders',{method:'POST'});
   const published={authors:'Pixel',printNote:'Personal note.',defaultPrintNote:'Default holiday note.',photos:[],mugDesigns:[]};
   async function reset(){
-   await db.exec('DELETE FROM card_fallback_jobs; DELETE FROM card_fallback_exclusions; DELETE FROM print_fulfillment; DELETE FROM print_orders; DELETE FROM invites; DELETE FROM people;');
+   await db.exec('DELETE FROM card_fallback_jobs; DELETE FROM card_fallback_exclusions; DELETE FROM live_gift_orders; DELETE FROM digital_postcards; DELETE FROM print_fulfillment; DELETE FROM print_orders; DELETE FROM invites; DELETE FROM people;');
    await db.prepare('UPDATE editions SET is_active=1,allow_print_orders=1,allow_mug_orders=1,published_json=?1,published_version=1 WHERE year=2026').bind(JSON.stringify(published)).run();
    await db.prepare('UPDATE card_fallback_policies SET international_cutoff=?1,international_run_at=?2,us_cutoff=?3,us_run_at=?4 WHERE year=2026').bind(at+200,at+300,at+400,at+500).run();
    await db.prepare("INSERT INTO keepsake_defaults(year,revision,frames_json) VALUES(2026,'approved',?1) ON CONFLICT(year) DO UPDATE SET revision='approved',frames_json=excluded.frames_json").bind(JSON.stringify({'starry-night':'approved.jpg'})).run();
@@ -91,6 +91,24 @@ test('fallback cards preserve eligibility, household uniqueness, frozen content 
    assert.equal(JSON.parse(order.handwrytten_order_json).addresses[0].to_country,'India');assert.equal((await db.prepare('SELECT state FROM print_fulfillment').first<any>()).state,'pending');
    assert.equal(await count('mug_orders'),0);
    await tickCardFallback(env,at+500);assert.equal(await count('print_orders'),2);
+  });
+  await t.test('live cutoff queues one capped intent for an unclaimed household and honors paperless and prior claims',async()=>{
+   await reset();
+   const liveEnv={...env,PRINT_ORDER_MODE:'handwrytten_live',LIVE_GIFT_ORDERING:'true'};
+   await add('india','IN');await add('paperless','IN');await add('claimed','IN');await add('us');
+   await db.prepare('UPDATE editions SET allow_print_orders=0 WHERE year=2026').run();
+   await db.prepare(`INSERT INTO digital_postcards(id,year,invitation_id,member_ids,personalized,frame,note,authors,frames_json,default_revision,artwork_key,recipe_json)
+    VALUES('paperless-card',2026,'paperless','["paperless"]',0,'starry-night','Note','Pixel','{}','approved','digital.jpg','{}')`).run();
+   await db.prepare(`INSERT INTO print_orders(id,invitation_id,year,request_key,status,address_json,recipient_name,note,authors,recipe_json,artwork_key,published_version,format)
+    VALUES('claimed-card','claimed',2026,'prior','submitted','{}','Guest','Note','Pixel','{}','already.jpg',1,'folded')`).run();
+   await tickCardFallback(liveEnv,at+299);assert.equal(await count('live_gift_orders'),0);
+   await Promise.all([tickCardFallback(liveEnv,at+300),tickCardFallback(liveEnv,at+300)]);
+   assert.deepEqual(await db.prepare('SELECT invitation_id,max_cents,postcard_person_id FROM live_gift_orders').first(),{invitation_id:'india',max_cents:1000,postcard_person_id:'india'});
+   assert.equal(await count('print_orders'),2);assert.equal(await count('print_fulfillment'),1);
+   assert.equal(await count('mug_orders'),0);
+   await tickCardFallback(liveEnv,at+500);
+   assert.equal(await count('live_gift_orders'),2);
+   assert.equal((await cardFallbackPreview(liveEnv,2026,at+500)).mode,'live');
   });
   await t.test('expired verification does not discard a complete admin-owned address; saved card is immutable',async()=>{
    await reset();await add('dutch','NL');await due();
