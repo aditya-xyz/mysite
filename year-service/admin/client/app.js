@@ -584,7 +584,25 @@ async function viewInvitationLink(id){
   showModal(`<p class="kicker">Invitation link</p><h2>Restore your original link</h2><p>Older invitation tokens were stored as hashes, so we can’t recreate them. Paste the original link once to store an encrypted copy and reopen its QR whenever you need. This keeps the same invitation and sessions.</p><form id="restore-link-form"><label class="field"><span>Original invitation link</span><input id="original-invitation-url" type="url" required autocomplete="off"></label><button class="button">Restore link & QR</button><p class="error" id="modal-error" role="alert"></p></form>`);
   byId('restore-link-form').onsubmit=async event=>{event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;try{const result=await api(`invitations/${id}/link`,{url:byId('original-invitation-url').value});await refreshPeople();await showInvitation(result.name,result.url);}catch(error){byId('modal-error').textContent=error.message;button.disabled=false;}};
 }
-async function showInvitation(name,url){const qr=await QRCode.toDataURL(url,{width:700,margin:4,color:{dark:'#202529',light:'#f4eddf'}});inviteData={name,url,qr};showModal(`<p class="kicker">Just for ${esc(name)}</p><h2>A little invitation.</h2><img class="qr" src="${qr}" alt="Personalized invitation QR code"><label class="field"><span>Invitation link</span><input class="invitation-url" value="${esc(url)}" readonly></label><p class="hint">Reopen this link and QR from Sharing at any time. Your invitation token is stored encrypted.</p><div class="actions"><button class="button" id="copy-invite">Copy link</button><a class="secondary" href="${qr}" download="invitation.png">Save QR</a><button class="secondary" id="save-invite">Save link</button></div>`);byId('copy-invite').onclick=async()=>{try{await navigator.clipboard.writeText(url);toast('Invitation link copied.');}catch{modal.querySelector('input').select();toast('Select and copy the invitation link.');}};byId('save-invite').onclick=()=>download(new Blob([url+'\n'],{type:'text/plain'}),'invitation.txt');}
+async function showInvitation(name,url){
+  const qr=await QRCode.toDataURL(url,{width:700,margin:4,color:{dark:'#202529',light:'#f4eddf'}});
+  inviteData={name,url,qr};
+  showModal(`<p class="kicker">Just for ${esc(name)}</p><h2>A little invitation.</h2><img class="qr" src="${qr}" alt="Personalized invitation QR code"><label class="field"><span>Invitation link</span><input class="invitation-url" value="${esc(url)}" readonly></label><p class="hint">Reopen this link and QR from Sharing at any time. Your invitation token is stored encrypted.</p><div class="actions"><button class="button" id="copy-invite">Copy link</button><a class="secondary" href="${qr}" download="invitation.png">Save QR</a><button class="secondary" id="save-invite">Save link</button><span class="hint" id="copy-invite-status" role="status"></span></div>`);
+  const status=byId('copy-invite-status'),link=modalContent.querySelector('.invitation-url');
+  byId('copy-invite').onclick=async()=>{
+    status.textContent='';
+    try{
+      await navigator.clipboard.writeText(url);
+      status.textContent='Link copied.';
+    }catch{
+      if(!link.isConnected||!modal.open)return;
+      link.focus();
+      link.select();
+      status.textContent='Copy the selected link.';
+    }
+  };
+  byId('save-invite').onclick=()=>download(new Blob([url+'\n'],{type:'text/plain'}),'invitation.txt');
+}
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 function resetPaperlessPreference(id){
   const invite=state.people.find(i=>i.id===id);
