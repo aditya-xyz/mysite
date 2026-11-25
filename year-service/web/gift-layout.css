@@ -21,6 +21,26 @@
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
 }
+.ks-digital-confirm .ks-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 16px 24px 12px;
+}
+.ks-digital-confirm .ks-top h2 {
+  text-align: start;
+}
+.ks-digital-confirm .ks-top p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+@media (max-width: 600px) {
+  .ks-digital-confirm .ks-top {
+    padding: 12px 16px;
+  }
+}
 :root .ks-digital-confirm .ks-digital-confirm-body {
   flex: none;
   gap: 16px;

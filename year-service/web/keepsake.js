@@ -26,7 +26,7 @@ export function mountKeepsake(journal,section){
   let frame=journal.keepsake.digitalFrame||defaultKeepsakeFrame,ordered=journal.keepsake.order||null,digitalOnly=journal.keepsake.digitalOnly===true;
   const fixed=journal.keepsake.mode==='default',defaultSrc=()=>ordered?ordered.artworkSrc:(journal.keepsake.defaultFrames?.[frame]||journal.keepsake.defaultSrc+frame);
   const entry=document.createElement('div');entry.className='pb-keepsake-content';section.classList.add('ks-entry');
-  entry.innerHTML=`<figure class="pb-keepsake-art pb-present-art"><img src="${esc(defaultSrc())}" width="1200" height="1500" loading="lazy" decoding="async" alt="A postcard from our little pack to yours"></figure><div class="pb-present-copy"><h3 id="pb-keepsake-title">for your fridge.</h3><p>${fixed?'a little piece of our year, from our pack to yours.<br>pick a border. i handled the rest.':'three favorite photos, made for your fridge.'}<br>one free postcard.</p><button class="button" type="button">make a little postcard</button></div>`;
+  entry.innerHTML=`<figure class="pb-keepsake-art pb-present-art"><img src="${esc(defaultSrc())}" width="1200" height="1500" loading="lazy" decoding="async" alt="A postcard from our little pack to yours"></figure><div class="pb-present-copy"><h3 id="pb-keepsake-title">for your fridge.</h3><p>${fixed?'a little piece of our year, from our pack to yours.<br>pick a border. i handled the rest.':'three favorite photos, made for your fridge.'}<br>one free postcard.</p><button class="button" type="button">make a postcard</button></div>`;
   section.append(entry);
   const launch=entry.querySelector('button'),modal=document.createElement('dialog');
   modal.id='keepsake';modal.setAttribute('aria-labelledby','ks-title');document.body.append(modal);
