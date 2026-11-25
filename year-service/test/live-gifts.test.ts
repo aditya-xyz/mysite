@@ -2,7 +2,7 @@ import {test,mock} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
-import {liveGiftAllowed,liveGiftIntentStatement,resetPostcardIntentStatement} from '../src/live-gifts.ts';
+import {liveGiftAllowed,liveGiftIntentStatement,requireLiveGift,resetPostcardIntentStatement} from '../src/live-gifts.ts';
 import {checkedMugDraft,tickLiveMugFulfillment,liveMugSource} from '../src/live-mug-fulfillment.ts';
 import {resetMugAllowance,resetPrintAllowance} from '../admin/src/simulated-order-reset.ts';
 import {tickPrintFulfillment} from '../src/handwrytten-fulfillment.ts';
@@ -23,6 +23,8 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
  const beforeMigration=await db.prepare("SELECT * FROM live_gift_orders WHERE order_id='mug-migrated'").first<Record<string,unknown>>();
  await db.batch((await readFile('migrations/0044_live_mug_allowance_reset.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
  assert.deepEqual(await db.prepare("SELECT * FROM live_gift_orders WHERE order_id='mug-migrated'").first(),{...beforeMigration,allowance_reset_at:null});
+ await db.batch((await readFile('migrations/0045_invitation_live_mugs.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+ assert.deepEqual(await db.prepare("SELECT * FROM live_gift_orders WHERE order_id='mug-migrated'").first(),{...beforeMigration,allowance_reset_at:null,mug_person_id:'owner',mug_member_ids:'["owner","partner"]',postcard_grant_id:null});
  await db.prepare("DELETE FROM live_gift_orders WHERE order_id='mug-migrated'").run();
  const env={DB:db as any,MEDIA:media as any,LIVE_GIFT_ORDERING:'true',PRINT_ORDER_MODE:'handwrytten_live',PRINTFUL_ENABLED:'true',PRINTFUL_API_TOKEN:'synthetic',PRINTFUL_STORE_ID:'123',SOCIAL_JOURNAL_ORIGIN:'https://live.test',HANDWRYTTEN_API_KEY:'synthetic',HANDWRYTTEN_PREVIEWS_ENABLED:'true'};
  const address={line1:'1 Synthetic Lane',line2:'',city:'Testville',state:'CA',postalCode:'90001',country:'US'};
@@ -99,9 +101,28 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
  }
  const liveState=async(id:string)=>(await db.prepare('SELECT state FROM live_gift_orders WHERE order_id=?1').bind(id).first<any>())?.state;
  try{
-  await t.test('only exact current household with a live grant is allowed',async()=>{
-   assert.equal(await liveGiftAllowed(env,'home',2026,'mug'),true);assert.equal(await liveGiftAllowed(env,'other',2026,'mug'),false);assert.equal(await liveGiftAllowed({...env,LIVE_GIFT_ORDERING:'false'},'home',2026,'mug'),false);
-   await db.prepare("UPDATE invites SET member_ids='[\"owner\",\"other\"]' WHERE id='home'").run();assert.equal(await liveGiftAllowed(env,'home',2026,'mug'),false);await db.prepare("UPDATE invites SET member_ids='[\"owner\",\"partner\"]' WHERE id='home'").run();
+  await t.test('the invitation flag enables live mugs without a grant; postcards still require one',async()=>{
+   await reset();
+   await db.exec("UPDATE editions SET allow_mug_orders=0; UPDATE invites SET allow_mug=0 WHERE id='other';");
+   try{
+    assert.equal(await liveGiftAllowed(env,'home',2026,'mug'),true);
+    assert.equal(await liveGiftAllowed(env,'other',2026,'mug'),false);
+    assert.equal(await liveGiftAllowed({...env,LIVE_GIFT_ORDERING:'false'},'home',2026,'mug'),false);
+    await db.prepare("UPDATE invites SET allow_mug=1 WHERE id='other'").run();
+    assert.equal(await liveGiftAllowed(env,'other',2026,'mug'),true);
+    assert.equal(await liveGiftAllowed(env,'other',2026,'postcard'),false);
+    assert.equal(await liveGiftAllowed(env,'home',2026,'postcard'),true);
+    await db.prepare("INSERT INTO mug_orders VALUES('mug-new','other',2026,'simulated','{}','Synthetic',NULL,NULL,4,NULL,unixepoch())").run();
+    await liveGiftIntentStatement(env,'mug-new','mug','other',2026).run();
+    assert.equal((await requireLiveGift(env,'mug-new','mug')).max_cents,2500);
+    await db.prepare("UPDATE invites SET allow_mug=0 WHERE id='other'").run();
+    await assert.rejects(()=>requireLiveGift(env,'mug-new','mug'),/not enabled/);
+    await db.prepare("UPDATE invites SET allow_mug=1,member_ids='[\"friend\",\"other\"]' WHERE id='other'").run();
+    assert.equal(await liveGiftAllowed(env,'other',2026,'mug'),true);
+    await assert.rejects(()=>requireLiveGift(env,'mug-new','mug'),/not enabled/);
+   }finally{
+    await db.exec(`UPDATE editions SET allow_mug_orders=1; UPDATE invites SET allow_mug=1,member_ids='["friend"]' WHERE id='other';`);
+   }
   });
   await t.test('mug submits one exact print file once under concurrent workers',async()=>{await reset();await seedMug();await Promise.all([tickLiveMugFulfillment(env),tickLiveMugFulfillment(env)]);await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'submitted');assert.equal(calls.filter(c=>c==='POST /orders/123/confirm').length,1);const url=new URL(mugPayload.items[0].files[0].url);assert.match(url.pathname,/^\/api\/gift\/order-source\/[a-f0-9]{64}$/);const capability=url.pathname.split('/').pop()!;assert.deepEqual(new Uint8Array(await (await liveMugSource(env,capability)).arrayBuffer()),new Uint8Array([1,2,3]));await db.prepare("UPDATE editions SET taken_offline_at=unixepoch() WHERE year=2026").run();try{await assert.rejects(()=>liveMugSource(env,capability),/not found/);}finally{await db.prepare("UPDATE editions SET taken_offline_at=NULL WHERE year=2026").run();}await assert.rejects(()=>liveMugSource(env,'0'.repeat(64)),/not found/);});
   await t.test('verified layout versions 5 and 6 submit once through the real fulfillment path',async()=>{

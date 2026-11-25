@@ -1,5 +1,6 @@
 import {printfulApi,printfulCatalog,printfulEnabled} from './printful.ts';
 import {mugAllowed} from './mug-orders.ts';
+import {liveMugsConfigured} from './live-gifts.ts';
 import {publishedMugs,type Published} from './edition.ts';
 import {PrintProblem,type PrintEnv} from './printing.ts';
 import {now} from './security.ts';
@@ -30,7 +31,7 @@ async function bytes(request:Request|Response){
 export async function mugMockupSource(env:PrintEnv,id:string){
  // A short-lived, unguessable capability exposes only this rendered print file
  // to Printful. Gallery originals and R2 remain private; no session is shared.
- const row=await env.DB.prepare(`SELECT m.source_key FROM mug_mockups m JOIN invites i ON i.id=m.invitation_id JOIN editions e ON e.year=m.year WHERE m.id=?1 AND m.source_expires_at>?2 AND m.status IN ('preparing','pending') AND i.revoked_at IS NULL AND i.expires_at>?2 AND i.allow_mug=1 AND e.is_active=1 AND e.allow_mug_orders=1`).bind(id,now()).first<{source_key:string}>();
+ const row=await env.DB.prepare(`SELECT m.source_key FROM mug_mockups m JOIN invites i ON i.id=m.invitation_id JOIN editions e ON e.year=m.year WHERE m.id=?1 AND m.source_expires_at>?2 AND m.status IN ('preparing','pending') AND i.revoked_at IS NULL AND i.expires_at>?2 AND i.allow_mug=1 AND e.is_active=1 AND (?3=1 OR e.allow_mug_orders=1)`).bind(id,now(),Number(liveMugsConfigured(env))).first<{source_key:string}>();
  const file=row&&await env.MEDIA.get(row.source_key);if(!file)throw new PrintProblem(404,'Preview artwork not found.');return new Response(file.body,{headers:{'Content-Type':'image/png'}});
 }
 export async function mugMockupResult(request:Request,env:PrintEnv,invite:InvitationAudience,id:string,image=false){

@@ -829,20 +829,16 @@ verified addresses are saved to the invitation verification contact in People.
 
 ## Mug permission gates
 
-Migration `0016_mug_permissions.sql` adds two independent, default-off flags:
-`editions.allow_mug_orders` and `invites.allow_mug`. All existing invitations and
-scrapbooks are opted out on migration; new records also default off. Enable
-**Allow mug orders** on Mugs or Invitations, then **Allow complimentary mug** on
-eligible invitation rows (also offered in create/edit invitation). These settings
-apply immediately without content publication. At least four published mugshots
-are still required. Delivery remains US-only; do not enable invitations that need
-unsupported international delivery. No country is inferred from phone numbers.
+In production, **Allow complimentary mug** in Create or Edit invitation enables
+live Printful checkout up to $25. New invitations default off. The flag takes
+effect immediately, including in recipient previews. At least four published
+mugshots are required. Delivery eligibility depends on the selected mug and
+verified address in the US, India, or the Netherlands.
 
-Both gates hide the guest gift section/catalog and are rechecked on the order
-endpoint and atomic reservation, so a previously opened picker cannot bypass a
-revocation. Disabling either flag preserves any existing order, allowance count,
-and frozen proof. Admin generic design previews remain available for editing;
-invitation-specific previews respect the flags. Orders remain simulated.
+Turning the flag off blocks new checkout and is rechecked before fulfillment.
+Existing orders, allowance counts, and frozen proofs are preserved. Development
+deployments with live gifts disabled can still use the edition-level simulation
+setting. Postcard permissions and live grants are separate.
 
 
 Bulk deletion results group photos by their blocking reason instead of repeating

@@ -1,4 +1,4 @@
-import {liveGiftAllowed} from './live-gifts.ts';
+import {liveGiftAllowed,liveMugsConfigured} from './live-gifts.ts';
 import {giftWindow} from './gift-deadline.ts';
 import {simulatedOrders,type PrintEnv} from './printing.ts';
 import {publishedMugs,type Published} from './edition.ts';
@@ -7,7 +7,7 @@ import type {InvitationAudience} from './invitations.ts';
 export async function mugAllowed(env:PrintEnv,invite:InvitationAudience,knownWindow?:Awaited<ReturnType<typeof giftWindow>>){
  if((knownWindow||await giftWindow(env.DB,invite)).closed)return false;
  const row=await env.DB.prepare('SELECT i.allow_mug,e.allow_mug_orders FROM invites i JOIN editions e ON e.year=i.edition_year WHERE i.id=?1 AND i.edition_year=?2').bind(invite.id,invite.edition_year).first<{allow_mug:number;allow_mug_orders:number}>();
- return row?.allow_mug===1&&row.allow_mug_orders===1;
+ return row?.allow_mug===1&&(liveMugsConfigured(env)||row.allow_mug_orders===1);
 }
 
 export async function mugOrderEligible(request:Request,env:PrintEnv,invite:InvitationAudience,knownWindow?:Awaited<ReturnType<typeof giftWindow>>,knownEdition?:{published_json?:string|null;is_active?:number}|null){

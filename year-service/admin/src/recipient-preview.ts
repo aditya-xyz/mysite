@@ -1,3 +1,4 @@
+import {liveMugsConfigured} from '../../src/live-gifts.ts';
 import {giftWindow} from '../../src/gift-deadline.ts';
 import {addressMode,verifyGoogle,type AddressEnv} from './address-verification.ts';
 import {addressVerificationCurrent} from '../../src/address-state.ts';
@@ -21,6 +22,7 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
  const base=`/api/editions/${year}/recipient-preview/`,query=url.search;
  const defaults=await keepsakeDefault(env,year);
  const window=invite?await giftWindow(env.DB,invite):{closed:false,closesAt:null,runAt:null};
+ const canMug=!window.closed&&!!invite?.allow_mug&&(liveMugsConfigured(env)||!!edition?.allow_mug_orders);
  const canPrint=!window.closed&&!!(invite?.allow_print&&edition?.allow_print_orders&&defaults);
  const savedDigital=canPrint&&invite&&['journal','print/status'].includes(action)?await digitalPostcard(env.DB,invite):null;
  if(request.method==='GET'){
@@ -29,7 +31,7 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
   if(digital&&invite)return digitalImage(env,invite,digital[2]);
   if(action==='journal'){
    const data=await journal(invite?.id);data.adminPreview=true;data.giftWindow=window;data.shareSocials=!!invite?.share_socials;data.householdSize=invite?invitationMembers(invite).length:1;
-   if(window.closed||!invite?.allow_mug||!edition?.allow_mug_orders){data.gift.enabled=false;data.gift.designs=[];}
+   if(!canMug){data.gift.enabled=false;data.gift.designs=[];}
    Object.assign(data.gift,{mode:'preview',orderingEnabled:false,livePricing:true,hasOrder:false,claim:null});
    data.keepsake=canPrint?{enabled:true,allowPaperless:invite?.allow_paperless!==0,mode:data.photos.filter((p:any)=>p.personal).length>=3?'personal':'default',cardCount:1,format:'folded',defaultRevision:defaults!.revision,defaultSrc:base+`default/${defaults!.revision}/`}: {enabled:false};
    if(savedDigital)Object.assign(data.keepsake,{digitalOnly:true,digitalFrame:savedDigital.frame,digitalArtworkSrc:base+'print/digital/image'+query,mode:savedDigital.personalized&&data.photos.filter((p:any)=>p.personal).length>=3?'personal':'default',defaultRevision:savedDigital.default_revision,defaultSrc:base+'print/digital/default/'});
@@ -37,7 +39,7 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
    return Response.json({...data,previewContext:query});
   }
   if(action==='gift/deadline')return Response.json(window);
-  if(action==='gift/status')return Response.json({eligible:!window.closed&&!!(invite?.allow_mug&&edition?.allow_mug_orders),claim:null,livePricing:true,mode:'preview'});
+  if(action==='gift/status')return Response.json({eligible:canMug,claim:null,livePricing:true,mode:'preview'});
   if(action==='gift/catalog'){
    const catalog=await preparedMugCatalog(env,year,true,true);if(!catalog)throw new PrintProblem(409,'Prepare mug previews in admin first.');
    return Response.json({...catalog,previews:(catalog.previews||[]).map((p:any)=>({...p,src:base+'mug-image/'+p.id+query}))});

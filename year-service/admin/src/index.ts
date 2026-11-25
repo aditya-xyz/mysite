@@ -1,3 +1,4 @@
+import {liveMugsConfigured} from '../../src/live-gifts.ts';
 import {resetPaperless} from './paperless.ts';
 import {householdMembers} from '../../src/digital-postcards.ts';
 import {translationsRoute,translationPublication} from './translations.ts';
@@ -142,7 +143,7 @@ async function previewJournal(env:Env,year:number,url:URL){
     data.shareSocials=!!invite?.share_socials;
     Object.assign(data,{mediaCacheScope:await digest(JSON.stringify(["preview",year,invite?.id||id,row.draft_version,row.publication_revision])),mediaCacheExpiresAt:now()+900});
     Object.assign(data,{themeAssets:await themeAssetManifest(env.MEDIA,year,`/api/editions/${year}/theme`)});
-    if(invite&&(!invite.allow_mug||!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders)){data.gift.enabled=false;data.gift.designs=[];}
+    if(invite&&(!invite.allow_mug||(!liveMugsConfigured(env)&&!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders))){data.gift.enabled=false;data.gift.designs=[];}
     data.photos = data.photos.map(p => ({...p,src:`/api/editions/${year}/media/${p.id}/preview`,viewerSrc:`/api/editions/${year}/media/${p.id}/viewer`}));
     localizeJournal(data,await translationPayload(env.DB,year,invite?.language,true));
     data.gift.designs=data.gift.designs.map(d=>{const printSrc=`/api/editions/${year}/media/${d.id}/cutout/${published.mugDesigns?.find(m=>m.id===d.id)?.cutoutVersion}`;return {...d,src:printSrc+'/display',printSrc};});
@@ -252,7 +253,7 @@ async function route(request: Request, env: Env, actor: string) {
     const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,language,share_socials,allow_mug,allow_print,allow_paperless,print_address_key,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
     const paperless=await env.DB.prepare('SELECT id,invitation_id,member_ids FROM digital_postcards WHERE year=?1').bind(year).all<{id:string;invitation_id:string;member_ids:string}>();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
-    return json({actor,year,allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,allowMugOrders:!!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders,printMode:simulatedOrders(request,env)?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string),paperlessId:paperless.results.find(d=>d.invitation_id===p.id||JSON.parse(d.member_ids).some((member:string)=>householdMembers(p as unknown as InvitationAudience).includes(member)))?.id||null})),media:media.results});
+    return json({actor,year,liveMugs:liveMugsConfigured(env),allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,allowMugOrders:!!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders,printMode:simulatedOrders(request,env)?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string),paperlessId:paperless.results.find(d=>d.invitation_id===p.id||JSON.parse(d.member_ids).some((member:string)=>householdMembers(p as unknown as InvitationAudience).includes(member)))?.id||null})),media:media.results});
   }
   if (path === "/api/draft" && request.method === "POST") {
     const data = await body(request), draft = await validDraft(data.draft,env,year);
