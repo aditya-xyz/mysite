@@ -134,7 +134,7 @@ export function mountKeepsake(journal,section){
     revision++;file=null;busy=step!=='pick';printFlow.prepare();
     const picking=step==='pick';
     const back=`<button type="button" class="ks-icon" data-back aria-label="${fixed||ordered?'Back to scrapbook':'Back'}">${giftBackContent}</button>`;
-    const top=`<div class="ks-top ks-top--centered"><h2 id="ks-title" tabindex="-1">${picking?'make a little postcard':'Your postcard'}</h2><button type="button" class="ks-icon" data-close aria-label="Close postcard">${cross}</button></div>`;
+    const top=`<div class="ks-top ks-top--centered"><h2 id="ks-title" tabindex="-1">${picking?'make a postcard':'Your postcard'}</h2><button type="button" class="ks-icon" data-close aria-label="Close postcard">${cross}</button></div>`;
     const frames=!ordered&&(fixed||step==='preview')?frameMarkup():'';
     const footer=`<div class="ks-bottom${picking?'':' ks-bottom--editor'}">${frames}${picking?'':back}${actions()}</div>`;
     modal.innerHTML=`<div class="ks-shell">${top}<div class="ks-body ${picking?'ks-select-body':'ks-edit-body'}">${picking?pickMarkup():editorMarkup()}<p class="ks-status" role="status" aria-live="polite"></p></div>${footer}</div>`;
