@@ -1,4 +1,4 @@
-import {requireLiveGift} from './live-gifts.ts';
+import {livePostcardsConfigured,requireLiveGift} from './live-gifts.ts';
 import type {PrintEnv} from './printing.ts';
 import {imageDimensions} from './image-dimensions.ts';
 import {PrintProblem} from './printing.ts';
@@ -19,7 +19,9 @@ async function api(env:HandwryttenEnv,path:string,body?:Record<string,unknown>|F
 export async function handwryttenStatus(env:HandwryttenEnv){
  if(!env.HANDWRYTTEN_API_KEY)return {connected:false,testMode:false,ordering:'simulation',submissionEnabled:false};
  const auth=await api(env,'/checkauth/auth'),formats=await api(env,'/design/dimensions');
- return {connected:true,testMode:Number(auth.test_mode)===1,ordering:env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':'simulation',submissionEnabled:env.PRINT_ORDER_MODE==='handwrytten_test'&&Number(auth.test_mode)===1,formats:(formats.dimensions||[]).map((d:any)=>({id:d.id,orientation:d.orientation,width:d.open_width,height:d.open_height,format:d.format}))};
+ const testMode=Number(auth.test_mode)===1;
+ const ordering=livePostcardsConfigured(env)?'handwrytten_live':env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':'simulation';
+ return {connected:true,testMode,ordering,submissionEnabled:ordering==='handwrytten_live'?!testMode:ordering==='handwrytten_test'&&testMode,formats:(formats.dimensions||[]).map((d:any)=>({id:d.id,orientation:d.orientation,width:d.open_width,height:d.open_height,format:d.format}))};
 }
 // This creates a reusable card design only. Call only with explicitly approved artwork.
 export async function prepareHandwryttenCard(env:HandwryttenEnv,artwork:File,name:string){

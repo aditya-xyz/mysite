@@ -1,3 +1,4 @@
+import {livePostcardsConfigured} from './live-gifts.ts';
 import {PrintProblem,printedGreeting,type PrintEnv} from './printing.ts';
 import {keepsakeDefault,keepsakeAccess} from './keepsake-defaults.ts';
 import {giftWindow,giftReservationOpenSQL} from './gift-deadline.ts';
@@ -54,8 +55,8 @@ export async function claimDigitalPostcard(request:Request,env:PrintEnv,i:Invita
  try{
   const inserted=await env.DB.prepare(`INSERT INTO digital_postcards(id,year,invitation_id,member_ids,personalized,frame,note,authors,frames_json,default_revision,artwork_key,recipe_json)
    SELECT ?1,i.edition_year,i.id,?2,?3,?4,?5,?6,?7,?8,?9,?10 FROM invites i JOIN editions e ON e.year=i.edition_year
-   WHERE i.id=?11 AND i.version=?12 AND i.allow_print=1 AND i.allow_paperless=1 AND i.revoked_at IS NULL AND i.expires_at>?13 AND e.is_active=1 AND e.allow_print_orders=1 AND e.published_version=?14 AND ${giftReservationOpenSQL}
-   AND EXISTS(SELECT 1 FROM keepsake_defaults k WHERE k.year=e.year AND k.revision=?8) RETURNING id`).bind(id,JSON.stringify(householdMembers(i)),Number(c.personalized),recipe.frame,c.note,c.p.authors,JSON.stringify(c.defaults.frames),c.defaults.revision,key,JSON.stringify(recipe),i.id,(i as any).version,now(),c.edition.published_version).first();
+   WHERE i.id=?11 AND i.version=?12 AND i.allow_print=1 AND i.allow_paperless=1 AND i.revoked_at IS NULL AND i.expires_at>?13 AND e.is_active=1 AND (?15=1 OR e.allow_print_orders=1) AND e.published_version=?14 AND ${giftReservationOpenSQL}
+   AND EXISTS(SELECT 1 FROM keepsake_defaults k WHERE k.year=e.year AND k.revision=?8) RETURNING id`).bind(id,JSON.stringify(householdMembers(i)),Number(c.personalized),recipe.frame,c.note,c.p.authors,JSON.stringify(c.defaults.frames),c.defaults.revision,key,JSON.stringify(recipe),i.id,(i as any).version,now(),c.edition.published_version,Number(livePostcardsConfigured(env))).first();
   if(!inserted)throw new Error('Reservation changed');
  }catch{
   await env.MEDIA.delete(key);if(await digitalPostcard(env.DB,i))return {...await digitalStatus(env,i),reused:true};throw new PrintProblem(409,'Your postcard choice changed. Reopen the postcard and try again.');

@@ -1,4 +1,4 @@
-import {liveMugsConfigured} from '../../src/live-gifts.ts';
+import {liveMugsConfigured,livePostcardsConfigured} from '../../src/live-gifts.ts';
 import {giftWindow} from '../../src/gift-deadline.ts';
 import {addressMode,verifyGoogle,type AddressEnv} from './address-verification.ts';
 import {addressVerificationCurrent} from '../../src/address-state.ts';
@@ -23,7 +23,7 @@ export async function recipientPreviewRoute(request:Request,env:AddressEnv,year:
  const defaults=await keepsakeDefault(env,year);
  const window=invite?await giftWindow(env.DB,invite):{closed:false,closesAt:null,runAt:null};
  const canMug=!window.closed&&!!invite?.allow_mug&&(liveMugsConfigured(env)||!!edition?.allow_mug_orders);
- const canPrint=!window.closed&&!!(invite?.allow_print&&edition?.allow_print_orders&&defaults);
+ const canPrint=!window.closed&&!!(invite?.allow_print&&(livePostcardsConfigured(env)||edition?.allow_print_orders)&&defaults);
  const savedDigital=canPrint&&invite&&['journal','print/status'].includes(action)?await digitalPostcard(env.DB,invite):null;
  if(request.method==='GET'){
   if(action==='print/digital'&&invite){const data=await digitalStatus(env,invite);return Response.json({...data,defaultSrc:base+'print/digital/default/',defaultFrames:Object.fromEntries(['starry-night','evergreen','winterlight'].map(frame=>[frame,base+'print/digital/default/'+frame+query])),artworkSrc:data.artworkSrc?base+'print/digital/image'+query:null});}

@@ -55,7 +55,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await db.batch((await readFile('migrations/0038_paperless_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0039_allow_paperless.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
-  await db.batch((await readFile('migrations/0041_scoped_live_gifts.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  for(const file of ['0041_scoped_live_gifts.sql','0044_live_mug_allowance_reset.sql','0045_invitation_live_mugs.sql','0046_invitation_live_postcards.sql'])await db.batch((await readFile('migrations/'+file,'utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   const expires=Math.floor(Date.now()/1000)+86400,session='c'.repeat(64);
   await db.prepare("INSERT INTO people(id,name,phone) VALUES('contact','Test Recipient','+15555550100'),('partner','Test Partner',NULL)").run();
   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('invite','contact',?1,'Test Recipient','+15555550100',?2,?3)").bind(await digest('a'.repeat(64)),expires,JSON.stringify(['contact','partner'])).run();
@@ -239,6 +239,36 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
    const again=await createPrintOrder(req(),env,invite);assert.equal(again.reused,true);assert.equal(again.order.id,first.order.id);
    assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment').first<any>()).n,1);assert.equal(vendorCalls.length,before,'Guest confirmation saves first; fulfillment runs separately');
    await reset();await guest('print/orders',await order());assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment').first<any>()).n,0,'Old local simulations are never automatically backfilled');
+  });
+  await t.test('a flagged invitation reserves a real postcard without a grant or edition switch',async()=>{
+   await reset();
+   const env={DB:db as any,MEDIA:bucket as any,ORDER_MODE:'simulation',PRINT_ORDER_MODE:'handwrytten_live',LIVE_GIFT_ORDERING:'true'};
+   const readInvite=()=>db.prepare("SELECT * FROM invites WHERE id='invite'").first<any>();
+   async function request(){
+    await db.prepare('UPDATE editions SET allow_print_orders=1 WHERE year=2026').run();
+    const form=await order();
+    await db.prepare('UPDATE editions SET allow_print_orders=0 WHERE year=2026').run();
+    const encoded=new Request('http://guest.test/api/print/orders',{method:'POST',body:form}),bytes=await encoded.arrayBuffer();
+    return new Request(encoded.url,{method:'POST',headers:{'Content-Type':encoded.headers.get('Content-Type')!,'Content-Length':String(bytes.byteLength)},body:bytes});
+   }
+   try{
+    const pending=await request();
+    const changedMedia={get:bucket.get.bind(bucket),delete:bucket.delete.bind(bucket),async put(...args:Parameters<typeof bucket.put>){
+     await db.prepare("UPDATE invites SET version=version+1 WHERE id='invite'").run();return bucket.put(...args);
+    }};
+    const readInviteResult=await readInvite();
+    await assert.rejects(()=>createPrintOrder(pending,{...env,MEDIA:changedMedia as any},readInviteResult),/invitation changed/i);
+    assert.equal((await db.prepare('SELECT count(*) n FROM print_fulfillment').first<any>()).n,0);
+    assert.equal((await db.prepare('SELECT count(*) n FROM live_gift_orders').first<any>()).n,0);
+    const response=await createPrintOrder(await request(),env,await readInvite());
+    assert.equal(response.order.live,true);assert.equal(response.order.fulfillment,'pending');
+    const saved=await db.prepare('SELECT max_cents,postcard_person_id FROM live_gift_orders WHERE order_id=?1').bind(response.order.id).first();
+    assert.deepEqual(saved,{max_cents:1000,postcard_person_id:'contact'});
+    assert.equal((await db.prepare('SELECT count(*) n FROM live_gift_permissions').first<any>()).n,0);
+   }finally{
+    await db.prepare('DELETE FROM live_gift_orders').run();
+    await reset();
+   }
   });
   await t.test('only folded cards can be created and every surface is frozen with one physical card',async()=>{
    await reset();const invalid=await order(),recipe=JSON.parse(invalid.get('recipe') as string);recipe.format='flat';invalid.set('recipe',JSON.stringify(recipe));

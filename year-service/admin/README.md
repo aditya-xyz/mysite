@@ -838,7 +838,8 @@ verified address in the US, India, or the Netherlands.
 Turning the flag off blocks new checkout and is rechecked before fulfillment.
 Existing orders, allowance counts, and frozen proofs are preserved. Development
 deployments with live gifts disabled can still use the edition-level simulation
-setting. Postcard permissions and live grants are separate.
+setting. **Allow complimentary print** independently enables Handwrytten
+checkout up to $10. Handwrytten must be out of Test Mode to mail real cards.
 
 
 Bulk deletion results group photos by their blocking reason instead of repeating

@@ -1,4 +1,4 @@
-import {liveGiftAllowed,liveGiftIntentStatement,liveGiftState} from './live-gifts.ts';
+import {liveGiftAllowed,liveGiftIntentStatement,liveGiftState,livePostcardsConfigured} from './live-gifts.ts';
 import {giftWindow,giftReservationOpenSQL} from './gift-deadline.ts';
 import {handwryttenPrintFont,handwryttenMessage} from './handwrytten.ts';
 import {keepsakeDefault} from './keepsake-defaults.ts';
@@ -47,19 +47,20 @@ export async function printContext(request:Request,env:PrintEnv,invite:Invitatio
  const person=await env.DB.prepare('SELECT id,name,version,mailing_address,address_verified,address_verified_at,address_verified_until,address_verifier,address_verification_key FROM people WHERE id=?1').bind(i.person_id).first<AddressState&{id:string;name:string;version:number;mailing_address:string|null;address_verified:number;address_verifier:string|null;address_verification_key:string|null}>();
  const published:Published|null=edition?.published_json?JSON.parse(edition.published_json):null;
  const photos=published?visiblePhotos(published,i.id,await invitationAudience(env.DB,i)).filter(p=>p.recipients.length):[];
- const defaults=edition?.is_active&&edition.allow_print_orders&&i.allow_print?await keepsakeDefault(env,i.edition_year):null;
+ const printEnabled=livePostcardsConfigured(env)||edition?.allow_print_orders;
+ const defaults=edition?.is_active&&printEnabled&&i.allow_print?await keepsakeDefault(env,i.edition_year):null;
  const existing=await env.DB.prepare("SELECT id,status,created_at,card_count,format,back_text,note,authors,handwrytten_preview_id,recipe_json,provider_id,(SELECT state FROM print_fulfillment f WHERE f.order_id=print_orders.id) AS fulfillment_state FROM print_orders WHERE invitation_id=?1 AND year=?2 AND allowance_reset_at IS NULL AND status IN ('preparing','simulated','submitted','unknown') ORDER BY created_at DESC LIMIT 1").bind(i.id,i.edition_year).first<PrintOrderProof>();
  const window=await giftWindow(env.DB,i);
  const digital=await digitalPostcard(env.DB,i);
  if(existing)existing.live=existing.provider_id?.startsWith('handwrytten-live-')||(!existing.provider_id?.startsWith('handwrytten-test-')&&!!await liveGiftState(env,existing.id));
  const live=await liveGiftAllowed(env,i.id,i.edition_year,'postcard');
- const mode=live&&env.PRINT_ORDER_MODE==='handwrytten_live'?'handwrytten_live':env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':simulatedOrders(request,env)?'local_mock':'disabled';
+ const mode=live?'handwrytten_live':env.PRINT_ORDER_MODE==='handwrytten_test'?'handwrytten_test':simulatedOrders(request,env)?'local_mock':'disabled';
  let reason='';
  if(existing)reason='Your complimentary print has already been ordered.';
  else if(digital)reason='Your household permanently chose a digital postcard.';
  else if(window.closed)reason='The gift deadline has passed.';
  else if(!edition?.is_active)reason='This scrapbook is no longer active.';
- else if(!edition.allow_print_orders)reason='Print orders are turned off for this scrapbook.';
+ else if(!printEnabled)reason='Print orders are turned off for this scrapbook.';
  else if(!(photos.length>=3?published?.printNote:published?.defaultPrintNote?.trim()||published?.printNote)?.trim())reason='The folded card note is not published yet.';
  else if(!i.allow_print)reason='Printing is not enabled for this invitation.';
  else if(!defaults)reason='The default postcard is being prepared.';
@@ -114,10 +115,10 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
  const inserted=await env.DB.prepare(`INSERT INTO print_orders(id,invitation_id,year,request_key,status,address_json,recipient_name,note,authors,recipe_json,artwork_key,published_version,default_artwork_key,default_revision,card_count,default_note,format,back_text,handwrytten_preview_id)
  SELECT ?1,i.id,e.year,?2,'preparing',p.mailing_address,?17,?16||CASE WHEN ?13=1 THEN coalesce(nullif(trim(json_extract(e.published_json,'$.defaultPrintNote')),''),json_extract(e.published_json,'$.printNote')) ELSE json_extract(e.published_json,'$.printNote') END,json_extract(e.published_json,'$.authors'),?3,?4,e.published_version,?11,?12,?13,?16||coalesce(nullif(trim(json_extract(e.published_json,'$.defaultPrintNote')),''),json_extract(e.published_json,'$.printNote')),'folded',?14,?15
  FROM invites i JOIN editions e ON e.year=i.edition_year JOIN people p ON p.id=i.person_id
- WHERE i.id=?5 AND i.print_order_count=0 AND i.version=?6 AND i.revoked_at IS NULL AND i.expires_at>?7 AND e.is_active=1 AND e.allow_print_orders=1 AND e.published_version=?8
+ WHERE i.id=?5 AND i.print_order_count=0 AND i.version=?6 AND i.revoked_at IS NULL AND i.expires_at>?7 AND e.is_active=1 AND e.published_version=?8
  AND p.id=?9 AND p.version=?10 AND p.address_verified=1 AND (p.address_verifier IN ('local_mock','google') OR (p.address_verifier='admin' AND json_extract(p.mailing_address,'$.country')='IN')) AND (p.address_verifier!='google' OR p.address_verified_until>?7)
  AND unixepoch()<?18 AND ${giftReservationOpenSQL}
- ${c.mode==='handwrytten_live'?"AND NOT EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.invitation_id=i.id AND l.year=e.year AND l.kind='postcard')":''}
+ ${c.mode==='handwrytten_live'?"AND NOT EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.invitation_id=i.id AND l.year=e.year AND l.kind='postcard')":'AND e.allow_print_orders=1'}
  AND i.allow_print=1 AND i.print_address_key=p.address_verification_key AND ${digitalMailingAllowedSQL}
  AND EXISTS(SELECT 1 FROM keepsake_defaults k WHERE k.year=e.year AND k.revision=?12)
  AND NOT EXISTS(SELECT 1 FROM card_fallback_jobs j JOIN print_orders fo ON fo.id=j.order_id JOIN invites fi ON fi.id=j.invitation_id WHERE j.year=e.year AND fo.status IN ('preparing','simulated','submitted','unknown') AND (fi.id=i.id OR fi.person_id=i.person_id OR EXISTS(SELECT 1 FROM json_each(fi.member_ids) a JOIN json_each(i.member_ids) b ON a.value=b.value)))
@@ -128,29 +129,34 @@ export async function createPrintOrder(request:Request,env:PrintEnv,invite:Invit
   await env.MEDIA.put(key,frontBytes,{httpMetadata:{contentType:'image/jpeg'}});
   // Legacy column/key name: folded orders store the chosen inside-left image here.
   if(insideBytes)await env.MEDIA.put(defaultKey,insideBytes,{httpMetadata:{contentType:'image/jpeg'}});
-  await finishSavedPrintOrder(env,id,c.i.edition_year,c.mode==='handwrytten_live'?c.i.id:undefined);
- }catch{
+  await finishSavedPrintOrder(env,id,c.i.edition_year,c.mode==='handwrytten_live'?c.i:undefined);
+ }catch(error){
   // No provider submission happened, so this is a definite failure and releases the allowance.
   const failed=await env.DB.prepare("UPDATE print_orders SET status='failed',updated_at=unixepoch() WHERE id=?1 AND status='preparing' RETURNING id").bind(id).first();
   // An acknowledged-late commit may already have queued this exact order. Keep its artwork.
-  if(failed)await env.MEDIA.delete([key,defaultKey]).catch(()=>{});throw new PrintProblem(503,'The local order could not be saved. Retry with a new request.');
+  if(failed){
+   await env.MEDIA.delete([key,defaultKey]).catch(()=>{});
+   if(error instanceof PrintProblem)throw error;
+  }
+  throw new PrintProblem(503,'The local order could not be saved. Retry with a new request.');
  }
  return {order:printOrderView({id,status:'simulated',created_at:now(),card_count:personalized?2:1,recipe_json:JSON.stringify(recipe),format:'folded',back_text:foldedBackText(c.i.edition_year),live:c.mode==='handwrytten_live',fulfillment_state:['handwrytten_test','handwrytten_live'].includes(env.PRINT_ORDER_MODE||'')?'pending':undefined,note:(personalized?c.published!.printNote:c.published!.defaultPrintNote?.trim()||c.published!.printNote)||'',authors:c.published!.authors}),reused:false};
 }
 
 // Both paths freeze the same payload; only explicit guest checkout may add a live intent.
-export async function finishSavedPrintOrder(env:PrintEnv,id:string,year:number,liveInvitationId?:string){
+export async function finishSavedPrintOrder(env:PrintEnv,id:string,year:number,liveInvitation?:Pick<InvitationAudience,'id'>&{version:number}){
  const snapshot=await env.DB.prepare('SELECT note,recipient_name,address_json FROM print_orders WHERE id=?1 AND year=?2').bind(id,year).first<{note:string;recipient_name:string;address_json:string}>();
  if(!snapshot)throw new PrintProblem(404,'Saved card order not found.');
  const address=JSON.parse(snapshot.address_json) as MailingAddress,name=snapshot.recipient_name.trim().split(/\s+/);
  const payload={card_id:null,...handwryttenPrintFont,addresses:[{to_first_name:name[0],to_last_name:name.slice(1).join(' '),to_address1:address.line1,to_address2:address.line2,to_city:address.city,to_state:address.state,to_zip:address.postalCode,to_country:({US:'United States',IN:'India',NL:'Netherlands'})[address.country],message:handwryttenMessage(snapshot.note)}],check_quantity:true,delivery_confirmation:0,client_metadata:id};
- if(liveInvitationId&&!await liveGiftAllowed(env,liveInvitationId,year,'postcard'))throw new PrintProblem(403,'Live postcard ordering is not enabled for this household.');
+ const requiresIntent=liveInvitation?"AND EXISTS(SELECT 1 FROM live_gift_orders l WHERE l.order_id=?1 AND l.kind='postcard')":'';
  const statements=[env.DB.prepare("UPDATE print_orders SET handwrytten_order_json=?1 WHERE id=?2 AND year=?3 AND status='preparing'").bind(JSON.stringify(payload),id,year)];
- if(liveInvitationId)statements.push(liveGiftIntentStatement(env,id,'postcard',liveInvitationId,year));
- if(env.PRINT_ORDER_MODE==='handwrytten_test'||liveInvitationId)statements.push(env.DB.prepare("INSERT INTO print_fulfillment(order_id,state) SELECT id,'pending' FROM print_orders WHERE id=?1 AND year=?2 AND status='preparing' ON CONFLICT(order_id) DO NOTHING").bind(id,year));
+ if(liveInvitation)statements.push(liveGiftIntentStatement(env,id,'postcard',liveInvitation.id,year,liveInvitation.version));
+ if(env.PRINT_ORDER_MODE==='handwrytten_test'||liveInvitation)statements.push(env.DB.prepare(`INSERT INTO print_fulfillment(order_id,state) SELECT id,'pending' FROM print_orders WHERE id=?1 AND year=?2 AND status='preparing' ${requiresIntent} ON CONFLICT(order_id) DO NOTHING`).bind(id,year));
  // Commit the queue, optional live intent and ready state together. A stale preparer cannot reset a vendor payload.
- statements.push(env.DB.prepare("UPDATE print_orders SET status='simulated',provider_id=?1,updated_at=unixepoch() WHERE id=?2 AND year=?3 AND status='preparing'").bind('local-'+id,id,year));
- await env.DB.batch(statements);
+ statements.push(env.DB.prepare(`UPDATE print_orders SET status='simulated',provider_id='local-'||id,updated_at=unixepoch() WHERE id=?1 AND year=?2 AND status='preparing' ${requiresIntent} RETURNING id`).bind(id,year));
+ const results=await env.DB.batch(statements);
+ if(liveInvitation&&!results.at(-1)?.results.length)throw new PrintProblem(409,'The invitation changed. Reopen the order confirmation.');
 }
 
 export function printOrderView(order:PrintOrderProof){

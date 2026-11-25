@@ -1,12 +1,11 @@
 # Household-scoped live gift ordering
 
-With live fulfillment deployed, **Allow complimentary mug** on an active
-invitation enables live mug checkout immediately. Checkout creates a
-`live_gift_orders` row with the invitation's verification contact and exact
-household membership. Fulfillment checks the flag and that identity again
-before contacting Printful. Live postcards still require an unexpired
-`live_gift_permissions` grant. The authenticated admin recipient preview
-cannot check out.
+With live fulfillment deployed, **Allow complimentary mug** and **Allow
+complimentary print** enable checkout for their respective gifts on an active
+invitation. Checkout creates a \`live_gift_orders\` row with the invitation's
+verification contact and household membership. Fulfillment rechecks the flag
+and identity before contacting the supplier. Admin recipient previews cannot
+check out.
 
 Limits are fixed in code and constrained in SQLite: one postcard up to $10 and
 one mug up to $25 per eligible invitation and edition. Existing admin test-budget
@@ -37,15 +36,14 @@ method; readiness checks do not create real purchases.
 
 ## Operations
 
-Apply `0045_invitation_live_mugs.sql` before deploying this change. It preserves
-existing orders and snapshots their mug household identity from the original
-grants. Existing simulated orders stay simulated. Continue to manage postcard
-grants separately and keep recipient identifiers in private operational files.
+Apply \`0046_invitation_live_postcards.sql\` before deploying invitation-controlled
+postcards. It preserves existing orders and copies the household identity from
+legacy postcard grants into their orders. Existing simulated orders stay
+simulated.
 
-To pause a household's future mug submissions, turn off **Allow complimentary
-mug**. For postcards, set the grant's `enabled=0`. To pause both live suppliers
-at deployment level, disable `LIVE_GIFT_ORDERING` and redeploy. These controls
-apply before supplier acceptance. Check `live_gift_orders.state`, `provider_id`, `error` and `quote_json`
+Turn off the invitation's gift flag to pause future submissions for that gift.
+To pause both live suppliers at deployment level, disable \`LIVE_GIFT_ORDERING\`
+and redeploy. These controls apply before supplier acceptance. Check `live_gift_orders.state`, `provider_id`, `error` and `quote_json`
 for fulfillment state; postcards also retain their existing `print_fulfillment`
 audit trail. Cron progresses explicitly queued orders; it does not create them.
 

@@ -1,4 +1,4 @@
-import {liveGiftState} from './live-gifts.ts';
+import {liveGiftState,livePostcardsConfigured} from './live-gifts.ts';
 import {giftWindow} from './gift-deadline.ts';
 import {PrintProblem,printOrderView,type PrintOrderProof,type PrintEnv} from './printing.ts';
 import type {InvitationAudience} from './invitations.ts';
@@ -10,7 +10,7 @@ export async function keepsakeDefault(env:PrintEnv,year:number):Promise<Keepsake
 }
 export async function keepsakeAccess(env:PrintEnv,invite:InvitationAudience){
  const row=await env.DB.prepare('SELECT i.allow_print,e.allow_print_orders,e.is_active FROM invites i JOIN editions e ON e.year=i.edition_year WHERE i.id=?1 AND i.edition_year=?2').bind(invite.id,invite.edition_year).first<{allow_print:number;allow_print_orders:number;is_active:number}>();
- return !!(row?.allow_print&&row.allow_print_orders&&row.is_active);
+ return !!(row?.allow_print&&row.is_active&&(livePostcardsConfigured(env)||row.allow_print_orders));
 }
 export async function keepsakeManifest(env:PrintEnv,invite:InvitationAudience,personalCount:number,knownWindow?:Awaited<ReturnType<typeof giftWindow>>){
  const [window,access]=await Promise.all([knownWindow||giftWindow(env.DB,invite),keepsakeAccess(env,invite)]);
