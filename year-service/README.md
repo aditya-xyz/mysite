@@ -999,12 +999,10 @@ errors retry three times and can be retried through the authenticated preparatio
 Vendor submission uncertainty is handled by the existing fulfillment review flow
 and is never automatically re-submitted.
 
-Preparation requires `ORDER_MODE=simulation` and
-`PRINT_ORDER_MODE=handwrytten_test`. It queues the same test-only fulfillment
-worker as recipient orders; totals above $10 still require manual approval of
-the exact quote. This feature does not enable live mailing. Future production
-mailing needs a separate live adapter; upgrading a vendor account alone does
-not turn these simulations into physical shipments.
+Production automatic orders use the same $7 checkout cap as guest postcard
+claims. These orders wait while Handwrytten is in Test Mode. The separate
+`handwrytten_test` environment keeps its $10 test threshold and exact-quote
+approval flow.
 
 Both card and mug claims enforce the cutoff in the server reservation. The gift
 section disappears at cutoff, including open pages and pages restored from a

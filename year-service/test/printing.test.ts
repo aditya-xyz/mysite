@@ -263,7 +263,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
     const response=await createPrintOrder(await request(),env,await readInvite());
     assert.equal(response.order.live,true);assert.equal(response.order.fulfillment,'pending');
     const saved=await db.prepare('SELECT max_cents,postcard_person_id FROM live_gift_orders WHERE order_id=?1').bind(response.order.id).first();
-    assert.deepEqual(saved,{max_cents:1000,postcard_person_id:'contact'});
+    assert.deepEqual(saved,{max_cents:700,postcard_person_id:'contact'});
     assert.equal((await db.prepare('SELECT count(*) n FROM live_gift_permissions').first<any>()).n,0);
    }finally{
     await db.prepare('DELETE FROM live_gift_orders').run();

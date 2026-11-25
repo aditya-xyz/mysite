@@ -1,3 +1,4 @@
+import {livePostcardLimitLabel} from '../../src/live-gift-limits.ts';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=value=>new Date(value*1000).toLocaleString('en-US',{timeZone:'America/Los_Angeles',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
 export function lastChoiceDate(cutoff){
@@ -13,9 +14,9 @@ export function mountCardFallback({panel,year,api,toast}){
   status.textContent='Loading saved cutoff dates…';
   try{
    const data=await api('card-fallback/schedule');if(!section.isConnected)return;
-   section.querySelector('[data-fallback-mode]').textContent=({live:'Live mailing · $10 cap',test:'Test mode · nothing mailed',disabled:'Automatic mailing disabled'})[data.mode];
+   section.querySelector('[data-fallback-mode]').textContent=({live:`Live mailing · ${livePostcardLimitLabel} cap`,test:'Test mode · nothing mailed',disabled:'Automatic mailing disabled'})[data.mode];
    section.querySelector('[data-fallback-rules]').textContent=data.mode==='live'?
-    'A complete saved address and postcard permission are required. Paperless households and households with an existing postcard order are skipped. Cards above $10 are held without mailing.':
+    `A complete saved address and postcard permission are required. Paperless households and households with an existing postcard order are skipped. Cards above ${livePostcardLimitLabel} are held without mailing.`:
     'A complete saved address and postcard permission are required. Test orders above $10 require approval.';
    if(!data.policy){policy.innerHTML='<p class="hint">No automatic card schedule is configured for this edition.</p>';status.textContent='Nothing will be ordered automatically.';return;}
    const values={internationalLastDay:lastChoiceDate(data.policy.international_cutoff),usLastDay:lastChoiceDate(data.policy.us_cutoff)};

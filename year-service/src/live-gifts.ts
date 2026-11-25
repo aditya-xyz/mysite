@@ -1,7 +1,8 @@
+import {livePostcardLimitCents,liveMugLimitCents,previousLivePostcardLimitCents} from './live-gift-limits.ts';
 import {digitalMailingAllowedSQL} from './digital-postcards.ts';
 import {PrintProblem,type PrintEnv} from './printing.ts';
 export type LiveGiftKind='postcard'|'mug';
-export const liveGiftLimit=(kind:LiveGiftKind)=>kind==='postcard'?1000:2500;
+export const liveGiftLimit=(kind:LiveGiftKind)=>kind==='postcard'?livePostcardLimitCents:liveMugLimitCents;
 export const liveMugsConfigured=(env:PrintEnv)=>env.LIVE_GIFT_ORDERING==='true';
 export const livePostcardsConfigured=(env:Pick<PrintEnv,'LIVE_GIFT_ORDERING'|'PRINT_ORDER_MODE'>)=>env.LIVE_GIFT_ORDERING==='true'&&env.PRINT_ORDER_MODE==='handwrytten_live';
 const giftInvitationSQL=(kind:LiveGiftKind)=>`i.allow_${kind==='mug'?'mug':'print'}=1 AND i.person_id IS NOT NULL
@@ -22,7 +23,8 @@ export async function requireLiveGift(env:PrintEnv,orderId:string,kind:LiveGiftK
   WHERE l.order_id=?1 AND l.kind=?2 AND o.allowance_reset_at IS NULL AND o.status IN ('simulated','submitted')
   AND i.person_id=l.${kind}_person_id AND i.member_ids=l.${kind}_member_ids AND ${giftInvitationSQL(kind)}
   ${kind==='postcard'&&isAutomaticPostcard(orderId)?'AND '+digitalMailingAllowedSQL:''}`).bind(orderId,kind).first<any>();
- if(!intent||intent.max_cents!==liveGiftLimit(kind))throw new PrintProblem(403,'This household is not enabled for live ordering.');
+ const legacyPostcard=kind==='postcard'&&intent?.max_cents===previousLivePostcardLimitCents;
+ if(!intent||(intent.max_cents!==liveGiftLimit(kind)&&!legacyPostcard))throw new PrintProblem(403,'This household is not enabled for live ordering.');
  return intent;
 }
 export function liveGiftIntentStatement(env:PrintEnv,orderId:string,kind:LiveGiftKind,invitationId:string,year:number,checkout?:{invitationVersion:number;artworkKey?:string}){

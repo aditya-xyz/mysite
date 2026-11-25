@@ -1,3 +1,4 @@
+import {livePostcardLimitCents} from './live-gift-limits.ts';
 import {automaticPostcardPrefix,liveGiftIntentStatement,livePostcardsConfigured} from './live-gifts.ts';
 import {countryDeadline,type CardFallbackPolicy} from './gift-deadline.ts';
 import {mailingAddress,printedGreeting,foldedBackText,finishSavedPrintOrder,type PrintEnv,type MailingAddress} from './printing.ts';
@@ -67,7 +68,7 @@ export async function cardFallbackPreview(env:PrintEnv,year:number,at=now()){
  if(plan.defaultKey)artworkAvailable=!!await env.MEDIA.head(plan.defaultKey);
  const rows=plan.rows.map(({invitation,job,...row})=>!artworkAvailable&&['scheduled','due'].includes(row.decision)?{...row,decision:'skipped',reason:'Approved Starry Night artwork is missing from storage.'}:row);
  const mode=automaticCardMode(env);
- return {year,asOf:at,policy:plan.policy,policyEditable:!!plan.policy&&at<Math.min(plan.policy.international_cutoff,plan.policy.us_cutoff)&&!plan.rows.some(row=>row.job),frame:'starry-night',mode,testMode:mode==='test',submissionEnabled:mode!=='disabled',automaticLimitCents:printOrderLimitCents,artworkAvailable,rows,summary:rows.reduce<Record<string,number>>((counts,row)=>({...counts,[row.decision]:(counts[row.decision]||0)+1}),{})};
+ return {year,asOf:at,policy:plan.policy,policyEditable:!!plan.policy&&at<Math.min(plan.policy.international_cutoff,plan.policy.us_cutoff)&&!plan.rows.some(row=>row.job),frame:'starry-night',mode,testMode:mode==='test',submissionEnabled:mode!=='disabled',automaticLimitCents:mode==='live'?livePostcardLimitCents:printOrderLimitCents,artworkAvailable,rows,summary:rows.reduce<Record<string,number>>((counts,row)=>({...counts,[row.decision]:(counts[row.decision]||0)+1}),{})};
 }
 
 export async function tickCardFallback(env:PrintEnv,at=now()){

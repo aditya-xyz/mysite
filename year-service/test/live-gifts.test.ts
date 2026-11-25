@@ -77,7 +77,7 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
   }
   if(path.endsWith('/basket/remove')){basket=[];return Response.json({status:'ok'});}
   if(path.endsWith('/basket/send')){
-   assert.equal(body.test_mode,mode);assert.ok(body.price_structure.money<=10);assert.equal(basket.length,1);
+   assert.equal(body.test_mode,mode);assert.ok(body.price_structure.money<=7);assert.equal(basket.length,1);
    const active=vendorOrders.get(basket[0].id);if(active)active.status=postcardDetailsStatus??(mode===1?'test':'paid');
    postcardAccepted=true;basket=[];return Response.json({status:'ok'});
   }
@@ -136,7 +136,7 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
     assert.equal(await liveGiftAllowed(env,'other',2026,'postcard'),true);
     assert.equal(await liveGiftAllowed({...env,PRINT_ORDER_MODE:'handwrytten_test'},'other',2026,'postcard'),false);
     await seedPrint(true,'postcard-new','other');
-    assert.equal((await requireLiveGift(env,'postcard-new','postcard')).max_cents,1000);
+    assert.equal((await requireLiveGift(env,'postcard-new','postcard')).max_cents,700);
     await db.prepare("UPDATE invites SET allow_print=0 WHERE id='other'").run();
     await assert.rejects(()=>requireLiveGift(env,'postcard-new','postcard'),/not enabled/);
     await db.prepare(`UPDATE invites SET allow_print=1,member_ids='["friend","other"]' WHERE id='other'`).run();
@@ -158,12 +158,12 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
    assert.equal(await liveState(id),'submitted');
    assert.equal(calls.filter(call=>call==='POST /v2/basket/send').length,1);
   });
-  await t.test('automatic fulfillment rechecks overlapping paperless preferences and the $10 cap',async()=>{
+  await t.test('automatic fulfillment rechecks overlapping paperless preferences and the $7 cap',async()=>{
    await reset();const id='print-fallback-protected';await seedPrint(true,id);
    await db.prepare(`INSERT INTO digital_postcards VALUES('opt-out',2026,'other','["partner"]')`).run();
    await tickPrintFulfillment(env);
    assert.equal(await liveState(id),'review');assert.equal(calls.length,0);
-   await reset();await seedPrint(true,id);basketTotal=10.01;
+   await reset();await seedPrint(true,id);basketTotal=7.01;
    await tickPrintFulfillment(env);
    assert.equal(await liveState(id),'review');
    assert.ok(calls.includes('POST /v2/basket/remove'));assert.ok(!calls.includes('POST /v2/basket/send'));
@@ -208,20 +208,20 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
   await t.test('old simulated postcard without explicit intent never reaches provider',async()=>{await reset();await seedPrint(false);await tickPrintFulfillment(env);assert.equal(calls.length,0);});
   await t.test('postcard previews without ordering then submits exactly once',async()=>{await reset();await seedPrint();await Promise.all([tickPrintFulfillment(env),tickPrintFulfillment(env)]);await tickPrintFulfillment(env);assert.equal(await liveState('print-live'),'submitted');assert.ok(calls.indexOf('POST /v2/outbound/process')<calls.indexOf('POST /v2/orders/placeBasket'));assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1);});
   await t.test('international postcards verify the final basket before payment without a domestic preview',async()=>{
-   for(const total of [10.01,9.99]){
+   for(const total of [7.01,7.00]){
     await reset();await seedPrint();basketTotal=total;
     const destination={...address,country:'IN',state:'Maharashtra',city:'Mumbai',postalCode:'400001'};
     await db.prepare("UPDATE print_orders SET address_json=?1,handwrytten_order_json=json_set(handwrytten_order_json,'$.addresses[0].to_country','India','$.addresses[0].to_city',?2,'$.addresses[0].to_state',?3,'$.addresses[0].to_zip',?4) WHERE id='print-live'").bind(JSON.stringify(destination),destination.city,destination.state,destination.postalCode).run();
     await tickPrintFulfillment(env);
     assert.equal(calls.includes('POST /v2/outbound/process'),false);
     assert.ok(calls.includes('POST /v2/orders/placeBasket'));
-    assert.equal(calls.includes('POST /v2/basket/send'),total<10);
-    assert.equal(await liveState('print-live'),total<10?'submitted':'review');
+    assert.equal(calls.includes('POST /v2/basket/send'),total<=7);
+    assert.equal(await liveState('print-live'),total<=7?'submitted':'review');
     assert.equal(basket.length,0);
    }
   });
-  await t.test('postcard preview over $10 never enters basket, even with old admin override',async()=>{await reset();await seedPrint();previewTotal=10.01;await tickPrintFulfillment(env);assert.equal(await liveState('print-live'),'review');assert.equal(calls.some(c=>c.includes('placeBasket')||c.includes('basket/send')),false);});
-  await t.test('postcard final checkout over $10 is removed without payment',async()=>{await reset();await seedPrint();basketTotal=10.01;await tickPrintFulfillment(env);assert.equal(await liveState('print-live'),'review');assert.equal(calls.some(c=>c.includes('basket/send')),false);assert.equal(basket.length,0);});
+  await t.test('postcard preview over $7 never enters basket, even with old admin override',async()=>{await reset();await seedPrint();previewTotal=7.01;await tickPrintFulfillment(env);assert.equal(await liveState('print-live'),'review');assert.equal(calls.some(c=>c.includes('placeBasket')||c.includes('basket/send')),false);});
+  await t.test('postcard final checkout over $7 is removed without payment',async()=>{await reset();await seedPrint();await db.prepare("UPDATE live_gift_orders SET max_cents=1000 WHERE order_id='print-live'").run();basketTotal=7.01;await tickPrintFulfillment(env);assert.equal(await liveState('print-live'),'review');assert.equal(calls.some(c=>c.includes('basket/send')),false);assert.equal(basket.length,0);});
   await t.test('household postcard follows supplier Test Mode without changing Pixelbook configuration',async()=>{await reset();await seedPrint();mode=1;await tickPrintFulfillment(env);assert.equal(await liveState('print-live'),'submitted');const saved=await db.prepare("SELECT provider_id,handwrytten_quote_json FROM print_orders WHERE id='print-live'").first<any>();assert.equal(saved.provider_id,'handwrytten-test-100');assert.equal(JSON.parse(saved.handwrytten_quote_json).testMode,true);assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1);});
   await t.test('explicit admin reset releases a completed postcard intent while preserving its order history',async()=>{
    await reset();await seedPrint();mode=1;await tickPrintFulfillment(env);
@@ -236,7 +236,7 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
   });
   await t.test('fallback review releases a verified unsubmitted live intent, while an attempted send stays reserved',async()=>{
    for(const attempted of [true,false]){
-    await reset();await seedPrint(true,'print-fallback-abc');previewTotal=10.01;await tickPrintFulfillment(env);
+    await reset();await seedPrint(true,'print-fallback-abc');previewTotal=7.01;await tickPrintFulfillment(env);
     assert.equal(await liveState('print-fallback-abc'),'review');
     if(attempted)await db.prepare("UPDATE print_orders SET handwrytten_quote_json='{\"submitAttempted\":true}' WHERE id='print-fallback-abc'").run();
     const resetOrder=()=>resetPrintAllowance(env,2026,'home',{confirm:true,orderId:'print-fallback-abc'});
@@ -385,7 +385,7 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
    assert.equal((await db.prepare('SELECT blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).blocked,1);
    assert.equal(await liveState('print-live-2'),'pending');
 
-   vendorOrders.set(100,{id:100,client_metadata:'print-live',status:'paid',test_mode:0,quantity:1,payed:4.86});
+   vendorOrders.set(100,{id:100,client_metadata:'print-live',status:'paid',test_mode:0,quantity:1,payed:8.40});
    await tickPrintFulfillment(env);
    assert.deepEqual(placeMetadata,['print-live-2'],'Never replays placeBasket for the pre-patch stuck order');
    assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1,'Sends basket only for print-live-2');
@@ -443,7 +443,7 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
   });
   await t.test('legacy unknown/unknown blocked order with saved vendor ID and checkout mode reconciles without resending',async()=>{
    await reset();await seedPrint();await seedSecondLivePrint();
-   const legacyQuote={currency:'USD',quantity:1,amounts:{card:375,postage:82,shipping:0,inserts:0,bundles:0,tax:29,subtotal:457,total:486},testMode:false,submitted:false,maxCents:1000,withinBudget:true};
+   const legacyQuote={currency:'USD',quantity:1,amounts:{card:375,postage:436,shipping:0,inserts:0,bundles:0,tax:29,subtotal:811,total:840},testMode:false,submitted:false,maxCents:1000,withinBudget:true};
    await db.prepare("UPDATE print_orders SET status='unknown',provider_id=NULL,handwrytten_quote_json=?1 WHERE id='print-live'").bind(JSON.stringify(legacyQuote)).run();
    await db.prepare("UPDATE print_fulfillment SET state='unknown',vendor_order_id=100,basket_item_id=200,error='Handwrytten needs review.' WHERE order_id='print-live'").run();
    await db.prepare("UPDATE live_gift_orders SET state='unknown',provider_id=NULL,error='Handwrytten needs review.' WHERE order_id='print-live'").run();
@@ -467,7 +467,7 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
    assert.equal((await db.prepare('SELECT blocked FROM print_fulfillment_lock WHERE id=1').first<any>()).blocked,1);
    assert.equal(await liveState('print-live-2'),'pending');
 
-   vendorOrders.set(100,{id:100,client_metadata:'print-live',status:'paid',test_mode:0,quantity:1,payed:4.86});
+   vendorOrders.set(100,{id:100,client_metadata:'print-live',status:'paid',test_mode:0,quantity:1,payed:8.40});
    await tickPrintFulfillment(env);
    assert.deepEqual(placeMetadata,['print-live-2'],'Never replays placeBasket for the legacy unknown/unknown order');
    assert.equal(calls.filter(c=>c==='POST /v2/basket/send').length,1,'Sends basket only for print-live-2');

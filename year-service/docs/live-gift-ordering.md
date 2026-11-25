@@ -7,7 +7,7 @@ verification contact and household membership. Fulfillment rechecks the flag
 and identity before contacting the supplier. Admin recipient previews cannot
 check out.
 
-Limits are fixed in code and constrained in SQLite: one postcard up to $10 and
+Limits are enforced at checkout: one postcard up to $7 and
 one mug up to $25 per eligible invitation and edition. Existing admin test-budget
 approvals cannot raise live limits. Old simulated orders never acquire a live
 intent. Resetting an allowance does not authorize a second paid gift.
@@ -20,7 +20,7 @@ intent. Resetting an allowance does not authorize a second paid gift.
   stage only that order in an empty basket. Verify exact identities, quantity,
   destination, full total and funding again before `/basket/send`. Shared basket
   access is serialized and fenced. Automatic cards use the same checkout and
-  $10 cap. At 6 a.m. Pacific following their cutoff, eligible households with
+  $7 cap. At 6 a.m. Pacific following their cutoff, eligible households with
   postcard permission and a complete saved address may receive a default
   Starry Night card. Existing postcard claims and paperless households are
   excluded. Automatic orders wait while the supplier is in Test Mode.

@@ -103,7 +103,7 @@ test('fallback cards preserve eligibility, household uniqueness, frozen content 
     VALUES('claimed-card','claimed',2026,'prior','submitted','{}','Guest','Note','Pixel','{}','already.jpg',1,'folded')`).run();
    await tickCardFallback(liveEnv,at+299);assert.equal(await count('live_gift_orders'),0);
    await Promise.all([tickCardFallback(liveEnv,at+300),tickCardFallback(liveEnv,at+300)]);
-   assert.deepEqual(await db.prepare('SELECT invitation_id,max_cents,postcard_person_id FROM live_gift_orders').first(),{invitation_id:'india',max_cents:1000,postcard_person_id:'india'});
+   assert.deepEqual(await db.prepare('SELECT invitation_id,max_cents,postcard_person_id FROM live_gift_orders').first(),{invitation_id:'india',max_cents:700,postcard_person_id:'india'});
    assert.equal(await count('print_orders'),2);assert.equal(await count('print_fulfillment'),1);
    assert.equal(await count('mug_orders'),0);
    await tickCardFallback(liveEnv,at+500);

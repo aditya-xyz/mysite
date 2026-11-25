@@ -1,3 +1,4 @@
+import {livePostcardLimitCents,livePostcardLimitLabel,previousLivePostcardLimitCents} from './live-gift-limits.ts';
 import {isAutomaticPostcard,livePostcardsConfigured} from './live-gifts.ts';
 import {PrintProblem,type PrintEnv} from './printing.ts';
 import {prepareSavedOrderProof} from './handwrytten-previews.ts';
@@ -93,7 +94,9 @@ async function reconcileBlockedLock(env:PrintEnv,live:boolean):Promise<'clear'|'
  const takeover=await env.DB.prepare('UPDATE print_fulfillment_lock SET owner=?1,lease_until=?2 WHERE id=1 AND owner=?3 AND blocked=1 AND lease_until<=?4 RETURNING owner').bind(recoveryOwner,now()+300,lock.owner,now()).first();
  if(!takeover)return 'blocked';
  try{
-  const approvedLimit=live?printOrderLimitCents:Math.max(printOrderLimitCents,Number(blocked.budget_approved_cents)||0);
+  // Reconciliation is read-only and honors the verified limit at submission.
+  const submittedLimit=quote?.maxCents===previousLivePostcardLimitCents?previousLivePostcardLimitCents:livePostcardLimitCents;
+  const approvedLimit=live?submittedLimit:Math.max(printOrderLimitCents,Number(blocked.budget_approved_cents)||0);
   const accepted=await handwryttenTestOrder(env,vendorId);
   if(!verifyAcceptedOrder(accepted,{orderId,vendorId,testMode:inferredTestMode,approvedLimit})){
    const observed=accepted?.status?`observed status "${String(accepted.status)}"`:'order details could not be confirmed';
@@ -148,8 +151,8 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
   // For other destinations the validated, unsent basket supplies the capped quote.
   if(live&&['US','CA'].includes(address.country)){
    const preview=await handwryttenCheckoutQuote(env,{cardId:payload.card_id,message:payload.addresses[0].message,orderId:job.order_id,country:country.name});
-   await env.DB.prepare('UPDATE print_orders SET handwrytten_quote_json=?1,budget_review_required=?2 WHERE id=?3').bind(JSON.stringify({...preview,testMode,maxCents:1000}),Number(preview.amounts.total>1000),job.order_id).run();
-   if(preview.amounts.total>1000){await update('review','The postcard preview exceeds $10. No order was submitted.');return;}
+   await env.DB.prepare('UPDATE print_orders SET handwrytten_quote_json=?1,budget_review_required=?2 WHERE id=?3').bind(JSON.stringify({...preview,testMode,maxCents:livePostcardLimitCents}),Number(preview.amounts.total>livePostcardLimitCents),job.order_id).run();
+   if(preview.amounts.total>livePostcardLimitCents){await update('review',`The postcard preview exceeds ${livePostcardLimitLabel}. No order was submitted.`);return;}
   }
   if(!mutated){
    if(itemsOf(await handwryttenBasket(env)).length)throw new PrintProblem(409,'The Handwrytten basket has another unsent order.');
@@ -160,15 +163,16 @@ export async function tickPrintFulfillment(env:PrintEnv,preferredId?:string){
    mutated=true;canRelease=false;
    await mutation('/orders/placeBasket',{...payload,return_address_id:sender.id,shipping_method_id:1,addresses:payload.addresses.map((a:any)=>({...a,return_address_id:sender.id,to_country_id:country.id}))});
   }
-  const approvedLimit=live?printOrderLimitCents:Math.max(printOrderLimitCents,Number(saved.budget_approved_cents)||0);
+  const baseLimit=live?livePostcardLimitCents:printOrderLimitCents;
+  const approvedLimit=live?baseLimit:Math.max(baseLimit,Number(saved.budget_approved_cents)||0);
   const basket=await handwryttenBasket(env),checked=checkedBasket(basket,{orderId:job.order_id,cardId:payload.card_id,vendorId:job.vendor_order_id||undefined,country:country.name,testMode,...(live?{address:payload.addresses[0]}:{})});
   stagedVendorId=checked.vendorId;
-  const quote={currency:'USD',quantity:1,amounts:checked.amounts,quotedAt:now(),sender,destination:country.name,source:testMode?'handwrytten-test-basket':'handwrytten-live-basket',submitted:false,testMode,quoteOnly:!!job.quote_only,maxCents:printOrderLimitCents,withinBudget:checked.amounts.total<=printOrderLimitCents,approvedMaxCents:saved.budget_approved_cents||null};
+  const quote={currency:'USD',quantity:1,amounts:checked.amounts,quotedAt:now(),sender,destination:country.name,source:testMode?'handwrytten-test-basket':'handwrytten-live-basket',submitted:false,testMode,quoteOnly:!!job.quote_only,maxCents:baseLimit,withinBudget:checked.amounts.total<=baseLimit,approvedMaxCents:live?null:saved.budget_approved_cents||null};
   await env.DB.batch([env.DB.prepare("UPDATE print_fulfillment SET state='staged',vendor_order_id=?1,basket_item_id=?2,updated_at=?3 WHERE order_id=?4").bind(checked.vendorId,checked.basketId,now(),job.order_id),env.DB.prepare('UPDATE print_orders SET handwrytten_quote_json=?1,budget_review_required=?3 WHERE id=?2').bind(JSON.stringify(quote),job.order_id,Number(!job.quote_only&&checked.amounts.total>approvedLimit))]);
   if(job.quote_only||checked.amounts.total>approvedLimit){
    await mutation('/basket/remove',{id:checked.basketId});
    if(itemsOf(await handwryttenBasket(env)).some(i=>Number(i.id)===checked.vendorId))throw new PrintProblem(502,'The unsent draft could not be removed.');
-   canRelease=true;await env.DB.prepare('UPDATE print_fulfillment SET basket_item_id=NULL WHERE order_id=?1').bind(job.order_id).run();await update('review',job.quote_only?null:live?'The postcard exceeds the $10 limit. No order was submitted.':`Checkout exceeds the ${saved.budget_approved_cents?'approved':'automatic'} $${(approvedLimit/100).toFixed(2)} limit. Admin approval is required. No order was submitted.`);return;
+   canRelease=true;await env.DB.prepare('UPDATE print_fulfillment SET basket_item_id=NULL WHERE order_id=?1').bind(job.order_id).run();await update('review',job.quote_only?null:live?`The postcard exceeds the ${livePostcardLimitLabel} limit. No order was submitted.`:`Checkout exceeds the ${saved.budget_approved_cents?'approved':'automatic'} $${(approvedLimit/100).toFixed(2)} limit. Admin approval is required. No order was submitted.`);return;
   }
   // Re-read exact basket identities, total and funding immediately before submission.
   const final=checkedBasket(await handwryttenBasket(env),{orderId:job.order_id,cardId:payload.card_id,vendorId:checked.vendorId,country:country.name,testMode,...(live?{address:payload.addresses[0]}:{})});

@@ -839,7 +839,7 @@ Turning the flag off blocks new checkout and is rechecked before fulfillment.
 Existing orders, allowance counts, and frozen proofs are preserved. Development
 deployments with live gifts disabled can still use the edition-level simulation
 setting. **Allow complimentary print** independently enables Handwrytten
-checkout up to $10. Handwrytten must be out of Test Mode to mail real cards.
+checkout up to $7. Handwrytten must be out of Test Mode to mail real cards.
 
 
 Bulk deletion results group photos by their blocking reason instead of repeating
@@ -1339,7 +1339,7 @@ With live postcard fulfillment enabled, the scheduler queues automatic cards
 for households with postcard permission and a complete saved address. It
 skips existing claims and paperless households, including overlapping
 invitations. Queued cards wait while Handwrytten is in Test Mode and are mailed
-only if the final total is at or below $10. Live automatic cards have no
+only if the final total is at or below $7. Live automatic cards have no
 over-budget approval.
 
 ### Recipient languages and review
