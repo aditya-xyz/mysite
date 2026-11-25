@@ -89,9 +89,7 @@ async function start() {
 }
 function showCode(invite) {
   app.innerHTML = codeEntryMarkup(invite);
-  let remaining = 60;
   const resend = document.querySelector('#resend');
-  const timer = setInterval(() => { if (!resend.isConnected) {clearInterval(timer); return;} remaining--; resend.textContent = remaining > 0 ? `Resend available in ${remaining} seconds` : 'Text me a new code'; if (remaining <= 0) {resend.disabled=false; clearInterval(timer);} },1000);
   resend.onclick = async () => {resend.disabled=true; try {await api('send',{}); showCode(invite);} catch(error) {if(error.code==='SCRAPBOOK_OFFLINE'){showOffline();return;}document.querySelector('#error').textContent=error.message;resend.disabled=false;} };
   const form=app.querySelector('form'),input=form.querySelector('#code'),button=form.querySelector('[type=submit]');
   input.focus();

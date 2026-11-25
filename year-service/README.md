@@ -55,8 +55,8 @@ browser removes the fragment, posts the token to the same origin, and receives
 an HttpOnly Secure SameSite=Strict invitation cookie. Sending codes never accepts
 a destination from the browser; it uses the approved phone stored in D1.
 
-An atomic 60-second resend lease and five sends/hour per invitation bound SMS
-usage. Code checking allows five attempts/challenge and fifteen/hour; all POSTs
+SMS usage is limited to five send requests per hour per invitation. A lock
+serializes Twilio operations for the same recipient while a request is in flight. Code checking allows five attempts/challenge and fifteen/hour; all POSTs
 also have a hashed-IP limit. Successful checks consume a challenge once and
 create a separate opaque session, hashed in D1, lasting at most seven days.
 Expired or revoked invitations invalidate sessions on every journal/media fetch.
@@ -69,8 +69,7 @@ these defaults; zero pauses new sends and invalid values fail closed. Apply
 checks both limits before any Twilio send call, including concurrent requests.
 Upstream failures and timeouts retain their reservation because delivery/cost
 can be uncertain. A cap rejection returns HTTP 429 with `Retry-After`, leaves
-previously issued codes usable, and does not contact Twilio. The normal resend
-and code-check limits still apply. Quota resets use UTC day/month boundaries;
+previously issued codes usable, and does not contact Twilio. The per-invitation send and code-check limits still apply. Quota resets use UTC day/month boundaries;
 usage persists across deployments. These are app-level send-attempt caps, not a
 Twilio account-wide dollar cap or a count of carrier segments or provider retries.
 
@@ -489,7 +488,7 @@ No Lob account exists yet. No plans were upgraded or payment methods added.
 | Service | Proposed controls | What is currently in this app |
 | --- | --- | --- |
 | Google Maps | 50 validations/day, 1,000/month; 1,000 combined autocomplete/details calls/day, 2,000/month; low per-minute provider quotas and a $1 budget alert | Admin Worker atomic request guards; server-only key; $1 monthly budget alert |
-| Twilio Verify | $5/$10 monthly usage alerts; Fraud Guard on; geo-permissions only for actual guest countries (US/India/Netherlands discussed) | Global 200 send attempts/day and 500/month in UTC; per-invitation 5 sends/hour, 60sec resend lease, 5 checks/challenge, 15 checks/hour, hashed-IP limits |
+| Twilio Verify | $5/$10 monthly usage alerts; Fraud Guard on; geo-permissions only for actual guest countries (US/India/Netherlands discussed) | Global 200 send attempts/day and 500/month in UTC; per-invitation 5 sends/hour, one in-flight operation per recipient, 5 checks/challenge, 15 checks/hour, hashed-IP limits |
 | Cloudflare Workers/D1/R2 | Usage alerts at $5/$10; consider a1,000ms CPU request cap after checking large-upload CPU; watch R2 storage at5GB/8GB | Private/authenticated media, bounded uploads and per-photo downloads; no overall dollar hard cap or configured CPU override; $5/$10 alerts saved |
 | Lob | Keep print orders off; later pilot:5 cards/day,20/month and a separate approved postal budget | Live mailing not connected; scrapbook defaultoff and one active allowance/invitation with owner reset |
 | Netlify | Keep the present plan, disable credit auto-recharge if available; usage notifications at50/80/100% | Static portfolio. Free Legacy plan; no credit auto-recharge or saved card; custom percentage alerts unavailable |

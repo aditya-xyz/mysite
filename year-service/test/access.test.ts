@@ -6,7 +6,7 @@ import { digest } from "../src/security.ts";
 
 test("invitation, SMS verification, and private media boundaries", async t => {
   const sent: URLSearchParams[] = [];
-  let sendFailure=false;
+  let sendFailure=false,onSend:(()=>Promise<void>)|undefined;
   const mf = new Miniflare(convertV4MiniflareOptions({
     modules: true, scriptPath: ".wrangler/test-bundle/index.js", compatibilityDate: "2026-08-06",
     d1Databases: ["DB"], r2Buckets: ["MEDIA"],
@@ -16,7 +16,10 @@ test("invitation, SMS verification, and private media boundaries", async t => {
       assert.equal(new URL(request.url).hostname, "verify.twilio.com");
       const params = new URLSearchParams(await request.text()); sent.push(params);
       assert.ok(['+15555550101','+15555550102'].includes(params.get('To')||''));
-      if(sendFailure&&request.url.endsWith('Verifications'))return Response.json({status:'failed'},{status:503});
+      if(request.url.endsWith('Verifications')){
+        if(onSend)await onSend();
+        if(sendFailure)return Response.json({status:'failed'},{status:503});
+      }
       return Response.json({ status: request.url.endsWith("VerificationCheck") ? (params.get("Code") === "123456" ? "approved" : "pending") : "pending" });
     }
   }));
@@ -74,21 +77,31 @@ test("invitation, SMS verification, and private media boundaries", async t => {
     });
     await t.test("a code cannot be checked before sending; only one simultaneous send is allowed", async () => {
       assert.equal((await req("verify",{code:"123456"})).status,429);
-      const results=await Promise.all([req("send",{}),req("send",{})]);
-      assert.deepEqual(results.map(r=>r.status).sort(),[200,429]);
+      let markStarted!:()=>void,release!:()=>void;
+      const started=new Promise<void>(resolve=>{markStarted=resolve;});
+      const released=new Promise<void>(resolve=>{release=resolve;});
+      onSend=async()=>{markStarted();await released;};
+      const first=req("send",{});
+      try{
+        await started;
+        assert.equal((await req("send",{})).status,429);
+        assert.equal((await req("verify",{code:"123456"})).status,429);
+      }finally{
+        onSend=undefined;release();
+      }
+      assert.equal((await first).status,200);
       assert.equal(sent.length,1);
       assert.equal(sent[0].get("Channel"),"sms");
       assert.equal((await db.prepare('SELECT sum(attempts) n FROM sms_send_usage').first<{n:number}>())?.n,1);
     });
     await t.test("global exhaustion blocks Twilio calls and preserves a previously sent code",async()=>{
-      const before=await db.prepare("SELECT challenge_expires_at,attempts FROM invites WHERE id='angela'").first();
-      await db.prepare("UPDATE invites SET last_sent_at=0 WHERE id='angela'").run();
+      const before=await db.prepare("SELECT last_sent_at,challenge_expires_at,attempts FROM invites WHERE id='angela'").first();
       await db.prepare('UPDATE sms_send_usage SET attempts=50').run();
       const response=await req('send',{});
       assert.equal(response.status,429);assert.ok(Number(response.headers.get('Retry-After'))>0);
       assert.equal((await response.json() as any).code,'sms_limit_reached');
       assert.equal(sent.length,1,'Exhausted global quota must never contact Twilio');
-      assert.deepEqual(await db.prepare("SELECT challenge_expires_at,attempts FROM invites WHERE id='angela'").first(),before);
+      assert.deepEqual(await db.prepare("SELECT last_sent_at,challenge_expires_at,attempts FROM invites WHERE id='angela'").first(),before);
       await db.prepare('UPDATE sms_send_usage SET attempts=1').run();
     });
     await t.test("wrong code fails; approved code creates session and cannot be replayed", async () => {
@@ -99,6 +112,25 @@ test("invitation, SMS verification, and private media boundaries", async t => {
       const checked=await req("verify",{code:"123456"});assert.equal(checked.status,200);
       cookies += "; " + checked.headers.get("Set-Cookie")!.split(";")[0];
       assert.equal((await req("verify",{code:"123456"})).status,429);
+    });
+    await t.test("a second phone can sign in immediately with its own text and session", async () => {
+      const firstPhone=cookies;
+      try{
+        const opened=await req("open",{token:"a".repeat(64)});
+        cookies=opened.headers.get("Set-Cookie")!.split(";")[0];
+        const requested=await req("send",{});
+        assert.equal(requested.status,200);
+        assert.equal((await requested.json() as {retryAfter:number}).retryAfter,0);
+        const verified=await req("verify",{code:"123456"});
+        assert.equal(verified.status,200);
+        const secondSession=verified.headers.get("Set-Cookie")!.split(";")[0];
+        assert.ok(!firstPhone.includes(secondSession));
+        cookies+= "; "+secondSession;
+        assert.equal((await req("journal")).status,200);
+      }finally{
+        cookies=firstPhone;
+      }
+      assert.equal((await req("journal")).status,200);
     });
     await t.test("recipient sees only shared and own photos", async () => {
       const response=await req("journal");assert.equal(response.status,200);
@@ -126,7 +158,6 @@ test("invitation, SMS verification, and private media boundaries", async t => {
     });
     await t.test("provider failures retain their global send reservation",async()=>{
       await db.prepare('DELETE FROM sms_send_usage').run();
-      await db.prepare("UPDATE invites SET last_sent_at=0 WHERE id='angela'").run();
       sendFailure=true;
       const before=sent.length;
       assert.equal((await req('send',{})).status,503);
@@ -137,7 +168,6 @@ test("invitation, SMS verification, and private media boundaries", async t => {
     await t.test("different invitations race for the last shared daily send",async()=>{
       const other=await req('open',{token:'b'.repeat(64)});
       const otherCookie=other.headers.get('Set-Cookie')!.split(';')[0];
-      await db.prepare("UPDATE invites SET last_sent_at=0 WHERE id IN ('angela','other')").run();
       await db.prepare('UPDATE sms_send_usage SET attempts=49').run();
       const before=sent.length;
       const results=await Promise.all([cookies,otherCookie].map(Cookie=>mf.dispatchFetch('https://pilot.test/api/send',{

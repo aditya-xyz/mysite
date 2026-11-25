@@ -129,6 +129,19 @@ async function twilio(env: Env, resource: string, params: Record<string, string>
   return data;
 }
 
+// Hold the recipient lock only while Twilio is sending or checking a code.
+async function withSmsOperation<T>(env:Env,phone:string,work:()=>Promise<T>):Promise<T>{
+  const key='sms-in-flight:'+await digest(phone),stamp=now(),expiresAt=stamp+30;
+  const lease=await env.DB.prepare(`INSERT INTO rate_limits(key,count,expires_at) VALUES(?1,1,?2)
+    ON CONFLICT(key) DO UPDATE SET expires_at=?2 WHERE expires_at<=?3 RETURNING key`)
+    .bind(key,expiresAt,stamp).first();
+  if(!lease)throw new Failure(429,"A code request is already in progress. Please try again in a moment.");
+  try{return await work();}
+  finally{
+    await env.DB.prepare('DELETE FROM rate_limits WHERE key=?1 AND expires_at=?2').bind(key,expiresAt).run().catch(()=>{});
+  }
+}
+
 async function route(request: Request, env: Env, ctx:ExecutionContext, timings:string[]) {
   async function measured<T>(name:string,work:()=>Promise<T>):Promise<T>{
     const start=performance.now();try{return await work();}finally{timings.push(`${name};dur=${(performance.now()-start).toFixed(1)}`);}
@@ -192,43 +205,44 @@ async function route(request: Request, env: Env, ctx:ExecutionContext, timings:s
     const i = await invitation(request, env);
     if (i.edition_year !== 2026 && !await publishedEdition(env.DB,i.edition_year)) throw new Failure(409,"This scrapbook hasn’t been published yet. Please check back later.");
     if (env.SMS_ENABLED !== "true") throw new Failure(503, "Your invitation is ready. Text verification will be enabled soon.");
-    await limited(env, `send:${i.id}`, 5, 3600);
-    const stamp = now();
-    const reserved = await env.DB.prepare(`UPDATE invites SET last_sent_at=?1
-      WHERE id=?2 AND last_sent_at<=?3 AND revoked_at IS NULL AND expires_at>?1 AND version=?4 RETURNING id`)
-      .bind(stamp, i.id, stamp - 60,i.version).first();
-    if (!reserved) throw new Failure(429, "Please wait a minute before requesting another code.");
-    await reserveSmsSend(env);
-    // A budget rejection preserves any code the guest already received.
-    const challenge=await env.DB.prepare(`UPDATE invites SET challenge_expires_at=0,attempts=0
-      WHERE id=?1 AND last_sent_at=?2 AND version=?3 AND revoked_at IS NULL AND expires_at>?2 RETURNING id`)
-      .bind(i.id,stamp,i.version).first();
-    if(!challenge)throw new Failure(401,"This invitation changed. Please reopen your invitation.");
-    const result = await twilio(env, "Verifications", { To: i.phone, Channel: "sms" });
-    if (result.status !== "pending") throw new Failure(503, "The text could not be sent. Please try again later.");
-    await env.DB.prepare("UPDATE invites SET challenge_expires_at=?1 WHERE id=?2 AND last_sent_at=?3 AND version=?4")
-      .bind(stamp + 600, i.id, stamp,i.version).run();
-    return json({ sent: true, retryAfter: 60 });
+    return withSmsOperation(env,i.phone,async()=>{
+      await limited(env, `send:${i.id}`, 5, 3600);
+      // A budget rejection preserves any code the guest already received.
+      await reserveSmsSend(env);
+      const stamp=now();
+      const challenge=await env.DB.prepare(`UPDATE invites SET last_sent_at=max(last_sent_at+1,?1),challenge_expires_at=0,attempts=0
+        WHERE id=?2 AND version=?3 AND revoked_at IS NULL AND expires_at>?1 RETURNING last_sent_at`)
+        .bind(stamp,i.id,i.version).first<{last_sent_at:number}>();
+      if(!challenge)throw new Failure(401,"This invitation changed. Please reopen your invitation.");
+      const result = await twilio(env, "Verifications", { To: i.phone, Channel: "sms" });
+      if (result.status !== "pending") throw new Failure(503, "The text could not be sent. Please try again later.");
+      const sent=await env.DB.prepare(`UPDATE invites SET challenge_expires_at=?1
+        WHERE id=?2 AND last_sent_at=?3 AND version=?4 AND revoked_at IS NULL AND expires_at>?5 RETURNING id`)
+        .bind(stamp+600,i.id,challenge.last_sent_at,i.version,now()).first();
+      if(!sent)throw new Failure(401,"This invitation changed. Please reopen your invitation.");
+      return json({sent:true,retryAfter:0});
+    });
   }
   if (path === "/api/verify" && request.method === "POST") {
-    const i = await invitation(request, env), data = await body(request);
-    if (!validCode(data.code)) throw new Failure(400, "Enter the six-digit code from your text.");
-    await limited(env, `check:${i.id}`, 15, 3600);
-    const claim = await env.DB.prepare(`UPDATE invites SET attempts=attempts+1 WHERE id=?1 AND attempts<5
-      AND challenge_expires_at>?2 AND revoked_at IS NULL AND expires_at>?2 AND version=?3 RETURNING last_sent_at`)
-      .bind(i.id, now(),i.version).first<{ last_sent_at: number }>();
-    if (!claim) throw new Failure(429, "Please request a fresh code before trying again.");
-    const result = await twilio(env, "VerificationCheck", { To: i.phone, Code: data.code });
-    if (result.status !== "approved") throw new Failure(400, "That code didn’t match. Please try again.");
-    // Only one successful request may consume this challenge, including concurrent checks.
-    const consumed = await env.DB.prepare(`UPDATE invites SET challenge_expires_at=0
-      WHERE id=?1 AND last_sent_at=?2 AND challenge_expires_at>?3 AND revoked_at IS NULL AND expires_at>?3 AND version=?4 RETURNING id`)
-      .bind(i.id, claim.last_sent_at, now(),i.version).first();
-    if (!consumed) throw new Failure(400, "This code has already been used or expired. Request a new code.");
-    const raw = token(), expiry = Math.min(now() + 7 * 86400, i.expires_at);
-    await env.DB.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?1,?2,?3)")
-      .bind(await digest(raw), i.id, expiry).run();
-    return json({ verified: true }, 200, { "Set-Cookie": sessionCookie(SESSION, raw, expiry - now()) });
+    const i = await invitation(request, env), {code} = await body(request);
+    if (!validCode(code)) throw new Failure(400, "Enter the six-digit code from your text.");
+    return withSmsOperation(env,i.phone,async()=>{
+      await limited(env, `check:${i.id}`, 15, 3600);
+      const claim = await env.DB.prepare(`UPDATE invites SET attempts=attempts+1 WHERE id=?1 AND attempts<5
+        AND challenge_expires_at>?2 AND revoked_at IS NULL AND expires_at>?2 AND version=?3 RETURNING last_sent_at`)
+        .bind(i.id, now(),i.version).first<{ last_sent_at: number }>();
+      if (!claim) throw new Failure(429, "Please request a fresh code before trying again.");
+      const result = await twilio(env, "VerificationCheck", { To: i.phone, Code: code });
+      if (result.status !== "approved") throw new Failure(400, "That code didn’t match. Please try again.");
+      const consumed = await env.DB.prepare(`UPDATE invites SET challenge_expires_at=0
+        WHERE id=?1 AND last_sent_at=?2 AND challenge_expires_at>?3 AND revoked_at IS NULL AND expires_at>?3 AND version=?4 RETURNING id`)
+        .bind(i.id, claim.last_sent_at, now(),i.version).first();
+      if (!consumed) throw new Failure(400, "This code has already been used or expired. Request a new code.");
+      const raw = token(), expiry = Math.min(now() + 7 * 86400, i.expires_at);
+      await env.DB.prepare("INSERT INTO sessions(token_hash,invite_id,expires_at) VALUES(?1,?2,?3)")
+        .bind(await digest(raw), i.id, expiry).run();
+      return json({ verified: true }, 200, { "Set-Cookie": sessionCookie(SESSION, raw, expiry - now()) });
+    });
   }
   if (path === "/api/logout" && request.method === "POST") {
     const raw = cookie(request, SESSION);
