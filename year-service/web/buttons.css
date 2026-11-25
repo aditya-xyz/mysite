@@ -66,6 +66,10 @@
  border:1px solid var(--line);border-radius:12px;corner-shape:superellipse(1.25);
  background:color-mix(in srgb,var(--surface) 55%,var(--paper));
 }
+:root :is(body,#keepsake,#photo) .pb-segments:has(>button:nth-child(2):last-child){
+ --pb-segment-count:2;
+ display:grid;grid-template-columns:repeat(2,minmax(max-content,1fr));
+}
 :root :is(body,#keepsake,#photo) .pb-segments:has(>button:nth-child(2)[aria-pressed=true]){--pb-segment-index:1}
 :root :is(body,#keepsake,#photo) .pb-segments:has(>button:nth-child(3)[aria-pressed=true]){--pb-segment-index:2}
 :root :is(body,#keepsake,#photo) .pb-segments::before{
@@ -82,7 +86,7 @@
  transition:color 180ms ease;white-space:nowrap;
 }
 :root :is(body,#keepsake,#photo) .pb-segments>button[aria-pressed=true]{color:var(--pb-action-ink)}
-:root :is(body,#keepsake,#photo) .pb-mockup-views.pb-segments{--pb-segment-count:2;width:min(100%,240px);align-self:center;margin-inline:auto}
+:root :is(body,#keepsake,#photo) .pb-mockup-views.pb-segments{width:min(100%,240px);align-self:center;margin-inline:auto}
 .pb-mug-preview{position:relative}
 .pb-mockup-crossfade{position:absolute;display:block;pointer-events:none;margin:0;border:0}
 @media(max-width:700px){
@@ -173,7 +177,6 @@
 :root[data-palette=night] :is(.pb-code-photo,.pb-code-mobile-pointer){background:var(--pb-sheet)}
 :root[data-palette=night] footer .pb-closing-photo{border-color:var(--pb-sheet)}
 /* Give white and black mugs an equally readable, softly lit display surface. */
-:root[data-palette=night] .pb-mug-preview:has(.pb-printful-mockup){background:radial-gradient(ellipse at 50% 40%,#70846d90 0%,#536a5338 48%,transparent 72%)}
 
 /* The highlight moves with a quick lift, and both mouse and touch get a press. */
 :root :is(body,#keepsake,#photo) :is(.button,.text-button,.ks-primary,.ks-gift,.ks-secondary,.ks-icon,.ks-frame,.pb-close,.pb-select-trigger,.pb-mockup-view,.fc-views button,.theme-toggle,.photo-control,.pb-design,.ks-pick,.pb-mugshot-stack,.pb-select-list button){
@@ -212,13 +215,4 @@
 }
 @media (prefers-reduced-motion:no-preference){
  :root .grid .card[data-button-pressed]{translate:0 1px}
-}
-
-/* Keep customization discoverable beside the main checkout action. */
-:root :is(body,#keepsake,#photo) :is(.pb-gift-dialog,.pb-mug-customizer) :is([data-customize-mug],[data-restore-style]){
- --pb-control-fill:linear-gradient(180deg,color-mix(in srgb,var(--button) 26%,var(--paper)),color-mix(in srgb,var(--button) 18%,var(--paper)));
- border-color:color-mix(in srgb,var(--button) 78%,var(--line));
- color:var(--ink);
- font-weight:650;
- box-shadow:inset 0 1px 0 #ffffff35,0 1px 3px #00000018;
 }

@@ -2,7 +2,6 @@
 :root[data-palette=moss] {
   --pb-light-page: #f8f4ed;
   --pb-light-postcard: #edf2e8;
-  --pb-light-mug: #fff0e6;
   --pb-light-heading: #9e4533;
   --pb-light-button: #285a46;
   --pb-light-body: #403d37;
@@ -29,9 +28,9 @@
   --pb-gift-doodle: #518269;
 }
 :root[data-palette=moss] :is(#pb-gift, .pb-gift-dialog, .pb-mug-customizer) {
-  --pb-gift-surface: var(--pb-light-mug);
-  --pb-gift-edge: #f1cbb0;
-  --pb-gift-edge-hover: #dda27d;
+  --pb-gift-surface: var(--pb-light-postcard);
+  --pb-gift-edge: #b9cbb0;
+  --pb-gift-edge-hover: #87a77d;
   --pb-gift-doodle: #e9a17d;
   --pb-blush: #e5c9b3;
 }

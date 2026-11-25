@@ -32,7 +32,7 @@ main{max-width:1320px;margin:0 auto;padding:0 var(--pb-content-gutter)}
 .pb-letter-copy{max-width:660px}.pb-letter h2{font-size:clamp(36px,4.3vw,54px);line-height:1.15;margin:0 0 24px;letter-spacing:-.055em}.pb-letter h2 em{font-style:normal;font-weight:inherit;letter-spacing:inherit;color:var(--ink)}.pb-letter p:not(.pb-eyebrow):not(.signoff){font-size:14px;line-height:1.85}.pb-letter .signoff{margin:18px 0 0;font-size:34px}
 .pb-letter-photo{display:block;width:100%;height:320px;object-fit:cover;border:9px solid var(--pb-sheet);border-bottom-width:28px;box-shadow:0 3px 12px #283f2810;transform:rotate(5deg)}
 .pb-section-heading{display:flex;align-items:center;gap:22px;border-top:1px solid var(--line);padding-top:26px;margin:0 0 30px}.pb-section-number{font-size:12px;font-weight:600;color:var(--accent);align-self:flex-start;padding-top:9px}.pb-section-heading h2{font-size:32px;letter-spacing:-.045em;margin:0 0 7px}.pb-section-heading p{font-size:12px;color:var(--muted);margin:0}.pb-section-flower{font-size:43px;color:var(--accent);margin-left:auto}
-.personal-photos,.shared-photos{margin:0 0 62px}.shared-photos .pb-section-heading h2{margin:0 0 7px}.grid{column-gap:28px;row-gap:24px}.grid .card span{font-size:12px;font-weight:400}.grid .card{padding:9px 9px 14px}.ks-entry{margin-top:32px}
+.personal-photos,.shared-photos{margin:0 0 62px}.shared-photos .pb-section-heading h2{margin:0 0 7px}.grid{column-gap:28px;row-gap:24px}.grid .card span{font-size:12px;font-weight:400}.ks-entry{margin-top:32px}
 #app :is(.personal-photos, .shared-photos) > .grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -42,12 +42,23 @@ main{max-width:1320px;margin:0 auto;padding:0 var(--pb-content-gutter)}
     gap: 10px;
   }
 }
+#app .grid .card {
+  align-self: start;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
+}
+#app .grid .card img { box-shadow: var(--pb-picker-shadow); }
+:root[data-palette=night] #app .grid .card img {
+  box-shadow: 0 -1px 1px rgb(235 245 238 / 20%), var(--pb-picker-shadow);
+}
+#app .grid .card span { color: inherit; margin-top: 10px; }
 .grid .card .pb-photo-short-label{display:none}
 @media(max-width:640px){
-  #app :is(.personal-photos,.shared-photos)>.grid{grid-auto-rows:auto;align-items:stretch;gap:9px}
-  #app .grid .card{padding:4px 4px 8px;min-width:0}
+  #app :is(.personal-photos,.shared-photos)>.grid{grid-auto-rows:auto;align-items:start;gap:16px 9px}
   #app .grid .card img{aspect-ratio:1;object-fit:cover;height:auto}
-  #app .grid .card :is(.pb-photo-caption,.pb-photo-short-label){display:block;overflow-wrap:anywhere;font-size:11px;margin-top:6px}
+  #app .grid .card :is(.pb-photo-caption,.pb-photo-short-label){display:block;overflow-wrap:anywhere;font-size:14px;line-height:1.35;margin-top:8px}
   #app .grid .card:has(.pb-photo-short-label) .pb-photo-caption{display:none}
   .pb-mug-review .pb-dialog-bottom .button,#keepsake .ks-paper-tabs .ks-frame{white-space:normal;overflow-wrap:anywhere}
 }
@@ -258,7 +269,8 @@ header .theme-toggle{min-width:44px;min-height:44px}
 .pb-dialog-bottom .pb-secondary-button[data-customize-mug]:hover{border-color:var(--button);box-shadow:0 3px 0 #20392f24}
 .pb-mug-customizer{width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 32px)}.pb-mug-customizer::backdrop{background:#14251b70;backdrop-filter:blur(4px)}.pb-customizer-body{padding:24px 28px 8px}.pb-customizer-body>.pb-mug-preview{max-width:300px;margin:auto}.pb-customizer-actions{gap:12px;padding:18px 28px}.pb-customizer-actions .button{min-width:0}.pb-custom-select{position:relative;min-width:0;font-size:14px}.pb-custom-select>span{display:block;margin-bottom:8px}.pb-select-trigger{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;min-height:48px;padding:12px 14px;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:8px;font:inherit;text-align:left;cursor:pointer}.pb-select-trigger svg{flex:none;transition:transform 150ms}.pb-select-trigger[aria-expanded=true] svg{transform:rotate(180deg)}.pb-select-list{position:absolute;left:0;right:0;top:100%;z-index:5;margin-top:5px;padding:5px;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #142b1926;max-height:190px;overflow-y:auto}.pb-select-list[hidden]{display:none}.pb-select-list [role=option]{display:flex;justify-content:space-between;gap:12px;align-items:center;min-height:44px;width:100%;padding:10px;border:0;border-radius:5px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}.pb-select-list [aria-selected=true],.pb-select-list [role=option]:hover,.pb-select-list [role=option]:focus-visible{background:var(--surface)}
 @media(max-width:600px){.pb-customizer-body{padding:20px 20px 8px}.pb-customizer-actions{padding:14px 20px}.pb-dialog-bottom:has([data-customize-mug]){gap:8px;flex-wrap:wrap}.pb-dialog-bottom [data-customize-mug]{min-width:0;padding-inline:14px}.pb-dialog-bottom [data-gift-next]{min-width:0}}
-.pb-custom-select:nth-child(n+3) .pb-select-list{top:auto;bottom:calc(100% - 20px);margin:0 0 5px}
+.pb-mug-customizer .pb-select-list{max-height:min(190px,35dvh);overscroll-behavior:contain}
+.pb-mug-customizer .pb-select-list:popover-open{position:fixed;inset:auto;margin:0;left:var(--menu-left);top:var(--menu-top);width:var(--menu-width);max-height:min(190px,var(--menu-room));color:var(--ink)}
 .pb-printful-mockup{display:block;width:min(100%,360px);height:280px;object-fit:contain;margin:0 auto}.pb-mockup-status{display:block;margin-top:8px;font-size:.78rem;line-height:1.4;color:var(--muted)}
 .pb-live-preview .pb-mockup-wait{height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--muted);font-size:.85rem;text-align:center}
 .pb-mug-care{grid-column:1/-1;color:var(--muted);font-size:14px;line-height:1.5;margin:4px 0}
@@ -457,7 +469,7 @@ html[data-input-modality=pointer] .pb-present-card:focus{outline:none}
  .pb-mug-customizer .pb-custom-select>span{margin-bottom:4px}
  .pb-mug-customizer .pb-select-trigger{min-height:44px;padding:10px 12px}
  /* Opening over the preview keeps menus inside the sheet and the footer still. */
- .pb-mug-customizer .pb-custom-select .pb-select-list{top:auto;bottom:calc(100% - 22px);margin:0 0 4px;max-height:min(190px,35dvh)}
+ .pb-mug-customizer .pb-customizer-body{overflow-y:auto}
 }
 
 /* Give Pixel’s editor portrait a little more presence beside the note. */

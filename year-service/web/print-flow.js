@@ -83,7 +83,7 @@ export function createPrintFlow({getData,onChange,householdName='',householdSize
   function bindPictures(region){bindFoldedCard(region,{onSwap:swapPictures,onView:view=>activeView=view});}
   function cardMarkup(){
    const swapped=data.personalized&&data.recipe.frontDesign==='default';
-   return foldedCardMarkup({frontSrc:swapped?data.defaultSrc:proofUrl,insideSrc:data.personalized?(swapped?proofUrl:data.defaultSrc):null,preview:snapshot.preview,frontDesign:data.recipe.frontDesign,canSwap:data.personalized&&!submitting,activeView});
+   return foldedCardMarkup({frontSrc:swapped?data.defaultSrc:proofUrl,insideSrc:data.personalized?(swapped?proofUrl:data.defaultSrc):null,preview:snapshot.preview,frontDesign:data.recipe.frontDesign,canSwap:data.personalized&&!submitting,showBack:false,activeView});
   }
   function renderCard(){const region=sheet.querySelector('[data-print-pictures]'),swap=region.querySelector('[data-swap-card]'),restore=swap&&document.activeElement===swap;region.innerHTML=cardMarkup();bindPictures(region);renderAddress();if(restore)region.querySelector('[data-swap-card]')?.focus({preventScroll:true});}
   function swapPictures(){

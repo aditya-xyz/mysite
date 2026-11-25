@@ -1,3 +1,4 @@
+import {arrow,giftBackContent} from './buttons.js';
 import {fitPostcardPicker} from './postcard-picker-fit.js';
 import {slideStep} from './step-motion.js';
 import {openDialog,closeDialog} from './dialog-motion.js';
@@ -13,7 +14,6 @@ import {createPrintFlow} from './print-flow.js';
 import {createDigitalFlow} from './digital-postcard-flow.js';
 import {CARD_WIDTH,CARD_HEIGHT,cardSlots,coverCrop,personalPhotos} from './keepsake-layout.js';
 const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const arrow='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6M8 12h12"/></svg>';
 const cross='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
 function drawPhoto(ctx,image,slot,crop){const s=coverCrop(image.width,image.height,slot.width,slot.height,crop);ctx.drawImage(image,s.x,s.y,s.width,s.height,slot.x,slot.y,slot.width,slot.height);}
 function fittedText(ctx,text,x,y,maxWidth,size,font){
@@ -133,15 +133,15 @@ export function mountKeepsake(journal,section){
     pickerCleanup?.();pickerCleanup=null;editorCleanup?.();editorCleanup=null;cancelAnimationFrame(previewFrame);previewFrame=0;cardImages=[];
     revision++;file=null;busy=step!=='pick';printFlow.prepare();
     const picking=step==='pick';
-    const back=`<button type="button" class="ks-icon" data-back aria-label="${picking||fixed||ordered?'Close postcard':'Back'}">${arrow}</button>`;
-    const top=`<div class="ks-top${picking?'':' ks-top--centered'}">${picking?back:''}<h2 id="ks-title" tabindex="-1">${picking?'make a little postcard':'Your postcard'}</h2><button type="button" class="ks-icon" data-close aria-label="Close postcard">${cross}</button></div>`;
+    const back=`<button type="button" class="ks-icon" data-back aria-label="${fixed||ordered?'Back to scrapbook':'Back'}">${giftBackContent}</button>`;
+    const top=`<div class="ks-top ks-top--centered"><h2 id="ks-title" tabindex="-1">${picking?'make a little postcard':'Your postcard'}</h2><button type="button" class="ks-icon" data-close aria-label="Close postcard">${cross}</button></div>`;
     const frames=!ordered&&(fixed||step==='preview')?frameMarkup():'';
     const footer=`<div class="ks-bottom${picking?'':' ks-bottom--editor'}">${frames}${picking?'':back}${actions()}</div>`;
     modal.innerHTML=`<div class="ks-shell">${top}<div class="ks-body ${picking?'ks-select-body':'ks-edit-body'}">${picking?pickMarkup():editorMarkup()}<p class="ks-status" role="status" aria-live="polite"></p></div>${footer}</div>`;
     sessionImages.bind(modal);
     if(step==='pick')pickerCleanup=fitPostcardPicker(modal);
     const closeButton=modal.querySelector('[data-close]');if(closeButton)closeButton.onclick=close;
-    modal.querySelector('[data-back]').onclick=()=>{if(step==='pick'||fixed||ordered)close();else{step=step==='preview'?'edit':'pick';render();modal.querySelector('h2').focus();}};
+    modal.querySelector('[data-back]')?.addEventListener('click',()=>{if(fixed||ordered)close();else{step=step==='preview'?'edit':'pick';render();modal.querySelector('h2').focus();}});
     modal.querySelectorAll('[data-pick]').forEach(button=>button.onclick=()=>{
       const id=button.dataset.pick,index=chosen.indexOf(id);
       if(index>=0)chosen.splice(index,1);else if(chosen.length<3){chosen.push(id);if(!crops.has(id))crops.set(id,{x:.5,y:.5,zoom:1});}else{setStatus('Three’s the sweet spot. Deselect one to choose another.');return;}

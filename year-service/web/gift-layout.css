@@ -296,3 +296,116 @@
   .pb-address-full{display:none}
   .pb-address-short{display:inline}
 }
+
+/* Shadows lift the picker images. Badges carry selection and outlines carry focus. */
+:root[data-palette=moss] { --pb-picker-shadow: 0 2px 3px #25372829, 0 5px 10px #25372833; }
+:root[data-palette=night] { --pb-picker-shadow: 0 2px 3px #0007, 0 5px 10px #0006; }
+:root[data-palette] #keepsake .ks-select-body .ks-picks[data-photo-count] .ks-pick,
+:root[data-palette] .pb-gift-dialog .pb-design-image {
+  border: 0;
+  box-shadow: var(--pb-picker-shadow);
+}
+:root[data-palette] #keepsake .ks-select-body .ks-picks[data-photo-count] .ks-pick {
+  background: transparent;
+}
+#keepsake .ks-pick[aria-pressed=true]::after { content: none; }
+.pb-gift-dialog .pb-design[aria-pressed=true] .pb-design-image { outline: none; }
+
+:root :is(body,#keepsake) .ks-print-dialog :is(.fc-views [data-card-view],.ks-bottom > button) {
+  min-height: 46px;
+  padding: 9px 14px;
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+/* The extra hit area extends beyond the compact visible segment. */
+.ks-print-dialog .fc-views { align-items: center; }
+:root :is(body,#keepsake) .ks-print-dialog .fc-views [data-card-view] {
+  min-height: 32px;
+  padding-block: 3px;
+}
+:root :is(body,#keepsake) .ks-print-dialog .fc-views [data-card-view]::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+:root[data-palette=night] :is(body,#keepsake) .ks-print-dialog .fc-views button[aria-pressed=false] {
+  color: #fff8eb;
+}
+
+:root[data-palette=night] :is(body,#keepsake) .ks-print-dialog .ks-bottom .ks-primary:disabled {
+  background: #36423b;
+  border: 2px dashed #aab8aa;
+  color: #e2e6df;
+}
+
+/* Gift actions share their visual role across the separately mounted dialogs. */
+:root[data-palette=moss] {
+  --pb-secondary-fill: #e0e8db;
+  --pb-secondary-edge: #677e68;
+  --pb-secondary-ink: #283d2e;
+  --pb-nav-edge: #788975;
+}
+:root[data-palette=night] {
+  --pb-secondary-fill: #203d2f;
+  --pb-secondary-edge: #b3ccef;
+  --pb-secondary-ink: #e1edff;
+  --pb-secondary-shadow: none;
+  --pb-nav-edge: #a0b5a6;
+}
+:root[data-palette] :is(#keepsake,.ks-print-dialog,.ks-digital-confirm,.pb-gift-dialog)
+  :is(.ks-secondary,.delivery-secondary,[data-customize-mug],[data-restore-style],[data-address-reload],.fc-swap):enabled {
+  background: var(--pb-secondary-fill);
+  color: var(--pb-secondary-ink);
+  border: 2px solid var(--pb-secondary-edge);
+  box-shadow: var(--pb-secondary-shadow, 0 2px 4px #0004);
+  font-weight: 650;
+  min-height: 44px;
+}
+:root[data-palette] :is(#keepsake,.ks-print-dialog,.ks-digital-confirm,.pb-gift-dialog)
+  :is(.ks-icon,.pb-close,[data-gift-back],[data-close-gift]) {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--pb-nav-edge);
+  border-radius: 999px;
+  box-shadow: none;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+:root[data-palette] :is(#keepsake,.pb-gift-dialog) :is([data-back],[data-gift-back]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35em;
+  width: auto;
+  flex: 0 0 auto;
+  padding-inline: 12px;
+}
+@media (max-width:700px) {
+  :root[data-palette] :is(#keepsake,.pb-gift-dialog) :is([data-back],[data-gift-back]) {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    corner-shape: round;
+    padding: 0;
+  }
+}
+
+/* Compact mailing-review and mug customization actions with a 44px minimum hit area. */
+:root[data-palette] :is(body,#keepsake) .ks-print-dialog:not(.ks-address-step)
+  :is(.fc-swap,[data-address-edit],[data-cancel-print],[data-submit-print]),
+:root[data-palette] :is(body,#keepsake) .pb-gift-dialog :is([data-customize-mug],[data-restore-style]) {
+  align-self: center;
+  position: relative;
+  min-height: 36px;
+  padding-block: 4px;
+}
+:root[data-palette] :is(body,#keepsake) .ks-print-dialog:not(.ks-address-step)
+  :is(.fc-swap,[data-address-edit],[data-cancel-print],[data-submit-print])::after,
+:root[data-palette] :is(body,#keepsake) .pb-gift-dialog :is([data-customize-mug],[data-restore-style])::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+  border-radius: inherit;
+}

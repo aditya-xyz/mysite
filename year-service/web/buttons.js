@@ -1,3 +1,6 @@
+export const arrow='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6M8 12h12"/></svg>';
+export const giftBackContent=`${arrow}<span class="pb-gift-back-label">back</span>`;
+
 // Touch browsers can defer :active until after a tap has finished.
 export function installButtonPressFeedback() {
   const minimumPressMs = 100;

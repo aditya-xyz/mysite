@@ -1,9 +1,10 @@
-/* Midnight forest: shared night tokens, with paper and aubergine gift surfaces. */
+/* The gifts use the original footer green and the footer uses the postcard green. */
 :root[data-palette=night] {
   --pb-night-page: #0b1412;
-  --pb-night-postcard: #10231f;
-  --pb-night-mug: #211c29;
-  --pb-night-cutout: #332a38;
+  --pb-night-footer: #10231f;
+  --pb-night-gift: #294b39;
+  --pb-night-gift-heading: #ffb496;
+  --pb-night-cutout: #344856;
   --pb-night-heading: #f5e5d7;
   --pb-night-body: #e7ddd5;
   --pb-night-accent: #e8af91;
@@ -38,24 +39,27 @@
 }
 
 /* Carry each gift's surface into its editor, customization, and confirmation. */
-:root[data-palette=night] :is(.pb-presents .keepsake-section, #keepsake,
-  .ks-print-dialog, .ks-digital-confirm) {
-  --pb-gift-surface: var(--pb-night-postcard);
-  --pb-gift-edge: #70b89c40;
-  --pb-gift-edge-hover: #8ed0b470;
-  --pb-gift-glow: #a9d49f0a;
-}
-:root[data-palette=night] #keepsake {
-  --pb-gift-glow: #bacfc321;
-}
-:root[data-palette=night] :is(#pb-gift, .pb-gift-dialog, .pb-mug-customizer) {
-  --pb-gift-surface: var(--pb-night-mug);
-  --pb-gift-edge: #c4a5d140;
-  --pb-gift-edge-hover: #d8bce57a;
-  --pb-gift-glow: #d6b3d20c;
+:root[data-palette=night] footer {
+  background-color: var(--pb-night-footer);
 }
 :root[data-palette=night] :is(.pb-presents .pb-present-card, .pb-gift-dialog,
   .pb-mug-customizer, #keepsake, .ks-print-dialog, .ks-digital-confirm) {
+  --pb-gift-surface: var(--pb-night-gift);
+  --pb-night-heading: var(--pb-night-gift-heading);
+  --button: #29477e;
+  --button-ink: #fff;
+  --pb-night-button-ink: var(--button-ink);
+  --pb-night-action-fill: linear-gradient(180deg, #365991, var(--button) 55%, #233c6b);
+  --pb-action-fill: var(--pb-night-action-fill);
+  --pb-action-ink: var(--button-ink);
+  --pb-action-border: transparent;
+  --pb-action-shadow: inset 0 1px 0 #ffffff25, 0 2px 3px #07150f99, 0 5px 9px #07150f70;
+  --pb-secondary-fill: #142c24;
+  --pb-secondary-ink: #fff;
+  --pb-secondary-edge: transparent;
+  --pb-secondary-shadow: inset 0 1px 0 #ffffff18, 0 2px 3px #07150f99, 0 5px 9px #07150f70;
+  --pb-gift-edge: #70b89c40;
+  --pb-gift-edge-hover: #8ed0b470;
   --paper: var(--pb-gift-surface);
   --surface: color-mix(in srgb, var(--pb-gift-surface) 88%, var(--pb-night-body));
   --pb-sheet: #d2c4cd;
@@ -64,7 +68,7 @@
   --line: var(--pb-gift-edge);
   --pb-readable-line: color-mix(in srgb, var(--pb-night-body) 45%, var(--pb-gift-surface));
   --pb-soft-fill: linear-gradient(180deg, var(--surface), var(--paper));
-  background: radial-gradient(ellipse at 35% 12%, var(--pb-gift-glow), transparent 72%), var(--paper);
+  background: var(--paper);
   border-color: var(--pb-gift-edge);
   box-shadow: 0 10px 28px #00000020;
 }
@@ -74,8 +78,9 @@
 :root[data-palette=night] .pb-gift #pb-gift-title em {
   color: var(--pb-night-heading);
 }
+:root[data-palette=night] .pb-presents-budget {color: var(--pb-night-gift-heading)}
 :root[data-palette=night] .pb-presents-heading h2 {
-  color: var(--pb-night-heading);
+  color: var(--pb-night-gift-heading);
   position: relative;
   width: fit-content;
 }
@@ -100,15 +105,18 @@
 }
 :root[data-palette=night] .ks-gift {
   --pb-action-fill: var(--pb-night-action-fill);
-  --pb-action-border: #c2dfb94d;
+  --pb-action-border: inherit;
   --pb-action-ink: var(--pb-night-button-ink);
-  --pb-action-shadow: inset 0 1px 0 #ffffff70, 0 2px 5px #0003;
+  --pb-action-shadow: inherit;
 }
 :root[data-palette=night] .ks-gift :is(svg, small) {
   color: inherit;
 }
 
-/* Keep the cutout chooser's backing dark without changing other paper borders. */
+/* Carry the mugshot backing from the stack to the chooser. */
+:root[data-palette=night] #pb-gift .pb-mugshot-stack {
+  --pb-blush: var(--pb-night-cutout);
+}
 :root[data-palette=night] .pb-gift-dialog .pb-design-image {
   background: var(--pb-night-cutout);
   border-color: var(--pb-night-cutout);
@@ -203,4 +211,49 @@
   :root[data-palette=night] #photo .photo-control:not(.close) {
     background-color: #202723;
   }
+}
+
+:root[data-palette=night] :is(.pb-gift-dialog, #keepsake, .ks-print-dialog, .ks-digital-confirm)::backdrop {
+  background-color: rgb(0 0 0 / 88%);
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-palette=night] :is(.pb-gift-dialog, #keepsake, .ks-print-dialog, .ks-digital-confirm)::backdrop {
+    background-color: #000;
+  }
+}
+
+/* Recess the gift selectors so the active choice stands out. */
+:root[data-palette=night] :is(body,#keepsake) :is(.ks-paper-tabs,.pb-mockup-views,.fc-views > .pb-segments).pb-segments {
+  background: #162922;
+  border-color: #91aa9a;
+  box-shadow: inset 0 2px 4px #0005, 0 1px 0 #ffffff12;
+}
+:root[data-palette=night] :is(body,#keepsake) :is(.ks-paper-tabs,.pb-mockup-views,.fc-views > .pb-segments).pb-segments > button[aria-pressed=false] {
+  color: #dde8e0;
+}
+
+:root[data-palette=night] .pb-order-steps li > span {
+  border-color: var(--pb-nav-edge);
+}
+:root[data-palette=night] .pb-order-steps [aria-current=step] > span {
+  border-color: #abc8f3;
+}
+
+:root[data-palette=night] :is(body,#keepsake) .pb-mug-customizer :is(.pb-select-trigger,.pb-select-list) {
+  background: #162922;
+  border-color: #9bb5a5;
+  color: #f1f6ef;
+}
+:root[data-palette=night] :is(body,#keepsake) .pb-mug-customizer .pb-select-trigger {
+  min-height: 44px;
+  box-shadow: inset 0 2px 3px #0004;
+}
+:root[data-palette=night] .pb-mug-customizer .pb-select-trigger svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.2;
+  color: #c6dbca;
+}
+:root[data-palette=night] :is(body,#keepsake) .pb-mug-customizer .pb-select-trigger[aria-expanded=true] {
+  border-color: #d6e8de;
 }
