@@ -7,13 +7,10 @@ export function peoplePickerMarkup(photoId,label,{hint="Select multiple people. 
   return `<div class="recipient-picker" data-picker="${escape(photoId)}"><span class="picker-label" id="${id}-label">${escape(label)}</span><div class="picker-control"><div class="picker-chips"></div><input type="text" class="picker-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}-list" aria-labelledby="${id}-label" aria-describedby="${id}-hint" placeholder="Search people…" autocomplete="off"></div><div class="picker-menu" hidden><div role="listbox" aria-multiselectable="true" id="${id}-list" aria-labelledby="${id}-label" class="picker-options"></div><button type="button" class="picker-add" ${allowAdd?'':'hidden'}>+ Add a new person…</button></div><p class="hint picker-hint" id="${id}-hint">${escape(hint)}</p><span class="sr-only picker-announcement" role="status" aria-live="polite"></span></div>`;
 }
 
-let openPicker;
-if(typeof document!=='undefined')document.addEventListener('pointerdown',event=>{if(openPicker&&!openPicker.root.contains(event.target))openPicker.close();});
-
 export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
   const input=root.querySelector('.picker-input'),menu=root.querySelector('.picker-menu'),options=root.querySelector('.picker-options'),chips=root.querySelector('.picker-chips'),addButton=root.querySelector('.picker-add'),summary=root.querySelector('.picker-summary');
   let active=-1,matches=[],selectedOnly=false;
-  function close(restoreFocus=false){if(summary)input.value='';menu.hidden=true;input.setAttribute('aria-expanded','false');summary?.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');active=-1;if(openPicker?.root===root)openPicker=null;if(restoreFocus)summary?.focus({preventScroll:true});}
+  function close(restoreFocus=false){if(summary)input.value='';menu.hidden=true;input.setAttribute('aria-expanded','false');summary?.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');active=-1;if(restoreFocus)summary?.focus({preventScroll:true});}
   function renderChips(){
     if(summary){
       const ids=selected(),names=ids.map(id=>people().find(p=>p.id===id)?.name||'Unknown person');
@@ -39,15 +36,16 @@ export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
     options.innerHTML=matches.map((person,i)=>`<div role="option" id="${options.id}-${i}" aria-selected="${selected().includes(person.id)}" class="picker-option ${i===active?'highlighted':''}" data-option="${i}"><span><strong>${escape(person.name)}</strong><small>${person.phone?'•••• '+escape(person.phone.slice(-4)):'No phone needed'}${status(person.id)?' · '+escape(status(person.id)):''}</small></span><span aria-hidden="true">${selected().includes(person.id)?'✓':'+'}</span></div>`).join('')||`<p class="picker-no-results">${selectedOnly&&!selected().length?'No people selected yet.':selectedOnly?'No selected people match your search.':'No matching people.'}</p>`;
     options.querySelectorAll('[data-option]').forEach(option=>{
       option.onpointerdown=event=>event.preventDefault();
-      option.onclick=()=>choose(Number(option.dataset.option));
+      option.onclick=()=>choose(Number(option.dataset.option),!summary);
     });
     addButton.textContent=query?`+ Add “${input.value.trim()}” as a new person…`:'+ Add a new person…';
     if(active>=0&&!menu.hidden)input.setAttribute('aria-activedescendant',`${options.id}-${active}`);else input.removeAttribute('aria-activedescendant');
   }
-  function open(){if(summary){if(openPicker?.root!==root)openPicker?.close();openPicker={root,close};summary.setAttribute('aria-expanded','true');}menu.hidden=false;input.setAttribute('aria-expanded','true');paint();}
-  function choose(index){
+  function open(){summary?.setAttribute('aria-expanded','true');menu.hidden=false;input.setAttribute('aria-expanded','true');paint();}
+  function choose(index,focusSearch=true){
     const person=matches[index];if(!person)return;
-    const removing=selected().includes(person.id);toggle(person.id);input.value='';active=-1;renderChips();paint();input.focus({preventScroll:true});
+    const removing=selected().includes(person.id);toggle(person.id);input.value='';active=-1;renderChips();paint();
+    if(focusSearch)input.focus({preventScroll:true});
     root.querySelector('.picker-announcement').textContent=person.name+(removing?' removed.':' selected.');
   }
   input.onfocus=open;input.onclick=open;input.oninput=()=>{active=-1;open();};
@@ -66,9 +64,10 @@ export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
   root.onkeydown=event=>{if(event.key==='Escape'&&!menu.hidden){event.preventDefault();event.stopPropagation();if(!summary)input.focus();close(!!summary);}};
   if(summary){
     const inspector=root.closest('.photo-inspector');
-    summary.onclick=()=>{
+    summary.onclick=event=>{
       if(!menu.hidden){close();return;}
-      open();input.focus({preventScroll:true});
+      open();
+      if(event.detail===0)input.focus({preventScroll:true});
       if(inspector&&getComputedStyle(inspector).overflowY==='auto'){
         const panel=menu.getBoundingClientRect(),viewport=inspector.getBoundingClientRect();
         inspector.scrollTop+=Math.max(0,Math.min(panel.bottom-viewport.bottom+12,panel.top-viewport.top));
@@ -83,11 +82,8 @@ export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
       filters.forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
       paint();options.scrollTop=0;button.focus({preventScroll:true});
     });
+  }else{
+    root.onfocusout=()=>setTimeout(()=>{if(!root.contains(document.activeElement))close();},0);
   }
-  root.onfocusout=event=>{
-    if(summary){
-      if(event.relatedTarget&&!root.contains(event.relatedTarget))close();
-    }else setTimeout(()=>{if(!root.contains(document.activeElement))close();},0);
-  };
   renderChips();paint();
 }
