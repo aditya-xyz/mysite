@@ -9,6 +9,17 @@ export function mugOrderStatusLabel(order){
  if(order?.live)return order.live_state?`Live · ${order.live_state}`:'Live';
  return order?.status||'';
 }
+function mugOrderProofMarkup(order,year){
+ const base=`/api/editions/${year}/mug-orders/${order.id}`;
+ const figure=(path,label)=>`<figure class="mug-proof-view"><img src="${esc(base+'/'+path)}" alt="${esc(label+' of the saved mug design')}"><figcaption>${esc(label)}</figcaption></figure>`;
+ const angles=[];
+ if(order.has_handle_left)angles.push(figure('handle-left','Handle left'));
+ if(order.has_handle_right)angles.push(figure('handle-right','Handle right'));
+ const preview=angles.length?`<div class="mug-proof-angles${angles.length===2?' has-both-angles':''}">${angles.join('')}</div>`
+  :mugPreview({src:base+'/artwork',caption:order.caption,alt:order.alt,mockupSrc:order.mockup_key?base+'/mockup':undefined},JSON.parse(order.configuration_json||'null'));
+ const wrap=angles.length<2&&order.has_print_artwork?figure('print-artwork','Full print wrap'):'';
+ return `<p class="kicker">Mug order · ${esc(mugOrderStatusLabel(order))}</p><h2>${esc(order.recipient_name)}</h2><div class="mug-proof-gallery">${preview}${wrap}</div>`;
+}
 export function mugAllowanceMarkup(count){
  const ordered=count?.count||0,used=Boolean(count?.used),live=Boolean(count?.live);
  const status=used?(live?`${mugOrderStatusLabel(count)} · Allowance used`:'Allowance used'):'Allowance available';
@@ -41,7 +52,10 @@ export function mountMugOrders({view,state,api,showModal,toast}){
     try{const result=await api(`mug-orders/${button.dataset.mugQuote}/quote`,{});if(!region.isConnected)return;region.innerHTML=estimateMarkup(JSON.stringify(result.quote));button.textContent='Refresh shipping estimate';await load();}
     catch(error){if(region.isConnected)region.textContent=error.message;}finally{if(button.isConnected)button.disabled=false;}
    });
-   panel.querySelectorAll('[data-mug-proof]').forEach(b=>b.onclick=()=>{const o=latest.orders.find(o=>o.id===b.dataset.mugProof);showModal(`<p class="kicker">Mug order · ${esc(mugOrderStatusLabel(o))}</p><h2>${esc(o.recipient_name)}</h2>${mugPreview({src:`/api/editions/${state.year}/mug-orders/${o.id}/artwork`,caption:o.caption,alt:o.alt,...(o.mockup_key?{mockupSrc:`/api/editions/${state.year}/mug-orders/${o.id}/mockup`}:{})},JSON.parse(o.configuration_json||'null'))}<p class="hint">Saved artwork and caption from this order.</p>`);});
+   panel.querySelectorAll('[data-mug-proof]').forEach(button=>button.onclick=()=>{
+    const order=latest.orders.find(order=>order.id===button.dataset.mugProof);
+    if(order)showModal(mugOrderProofMarkup(order,state.year));
+   });
    for(const row of app.querySelectorAll('[data-print-invitation]')){
     let box=row.querySelector('[data-mug-allowance]');if(!box){box=document.createElement('div');box.className='mug-allowance allowance-row';box.dataset.mugAllowance='';row.querySelector('.invitation-options').append(box);}
     const count=latest.counts.find(c=>c.invitation_id===row.dataset.printInvitation);

@@ -398,5 +398,38 @@ test('configured mugs follow draft publication, minimum count, access and deleti
    await publish();
    const journal:any=await (await guest('journal')).json();assert.deepEqual(journal.gift.designs.map((d:any)=>d.id),reduced.mugDesigns.map(d=>d.id));
   });
+  await t.test('Studio serves both frozen mug angles and the wrap for historical orders',async()=>{
+   const source="INSERT INTO mug_preview_sources(id,year,design_id,cutout_version,caption,font,ink,artwork_key) VALUES(?1,2026,'mug-0',?2,'Frozen caption','clean','dark','proof-source.png')";
+   await db.batch(['order-source','other-source'].map(id=>db.prepare(source).bind(id,cutoutVersion)));
+   const proof="INSERT INTO mug_preview_images(id,year,source_id,design_id,cutout_version,caption,font,style,size,color,variant_id,image_key,view) VALUES(?1,2026,?2,'mug-0',?3,'Frozen caption','clean','classic','11oz','white',?4,?5,?6)";
+   const left=Buffer.concat([rgbaPNG,Buffer.from('left')]),right=Buffer.concat([rgbaPNG,Buffer.from('right')]);
+   await Promise.all([
+    bucket.put('proof-left.png',left),bucket.put('proof-right.png',right),bucket.put('proof-wrap.png',rgbaPNG),
+   ]);
+   await db.batch([
+    db.prepare(proof).bind('proof-left','order-source',cutoutVersion,1320,'proof-left.png','handle-left'),
+    db.prepare(proof).bind('unrelated-right','other-source',cutoutVersion,1320,'unrelated.png','handle-right'),
+    db.prepare(proof).bind('other-variant','order-source',cutoutVersion,1321,'unrelated.png','handle-right'),
+    db.prepare(`INSERT INTO mug_orders(id,invitation_id,year,request_key,status,design_id,caption,alt,artwork_key,address_json,recipient_name,save_address,published_version,allowance_reset_at,prepared_preview_id,print_artwork_key)
+      VALUES('mug-proof','mug-invite',2026,'proof-test','submitted','mug-0','Frozen caption','Frozen photo','proof-left.png','{}','Recipient',0,1,unixepoch(),'proof-left','proof-wrap.png')`),
+   ]);
+   const readOrder=async()=>{
+    const response=await admin('mug-orders');assert.equal(response.status,200);
+    return (await response.json() as any).orders.find((order:any)=>order.id==='mug-proof');
+   };
+   const order=await readOrder();
+   assert.deepEqual([order.has_handle_left,order.has_handle_right,order.has_print_artwork],[1,0,1]);
+   assert.equal((await admin('mug-orders/mug-proof/handle-right')).status,404);
+   assert.deepEqual(Buffer.from(await (await admin('mug-orders/mug-proof/print-artwork')).arrayBuffer()),rgbaPNG);
+   await db.prepare(proof).bind('proof-right','order-source',cutoutVersion,1320,'proof-right.png','handle-right').run();
+   assert.equal((await readOrder()).has_handle_right,1);
+   for(const [path,bytes] of [['handle-left',left],['handle-right',right],['mockup',left]] as const){
+    const response=await admin('mug-orders/mug-proof/'+path);assert.equal(response.status,200);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()),bytes);
+   }
+   assert.equal((await admin('mug-orders/mug-proof/handle-left',undefined,'')).status,401);
+   const wrongEdition=await mf.dispatchFetch('https://admin.test/api/editions/2099/mug-orders/mug-proof/handle-left',{headers:{'Cf-Access-Jwt-Assertion':jwt}});
+   assert.equal(wrongEdition.status,404);
+  });
  }finally{await mf.dispose();}
 });
