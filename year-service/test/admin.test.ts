@@ -46,6 +46,7 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
   await db.batch((await readFile('migrations/0038_paperless_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0039_allow_paperless.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
+    await db.exec(await readFile('migrations/0047_invitation_link_sent.sql','utf8'));
     const expires=Math.floor(Date.now()/1000)+86400;
     await db.prepare("INSERT INTO invites(id,token_hash,name,phone,expires_at) VALUES('angela',?1,'Angela','+15555550101',?2)").bind(await digest("a".repeat(64)),expires).run();
     let assertion=await signed();
@@ -235,7 +236,25 @@ test("private admin authentication, drafts, publishing, uploads, and recipient i
       assert.equal((await req(`/api/editions/2026/invitations/${invite.id}/link`,{url:"https://journal.test/#"+"f".repeat(64)})).status,400);
       assert.equal((await req(`/api/editions/2026/invitations/${invite.id}/link`,{url:cloudflareUrl})).status,200);
       assert.equal((await (await link()).json() as {url:string}).url,cloudflareUrl);
+      const sentPath=`/api/editions/2026/invitations/${invite.id}/sent`;
+      const readInvitation=async()=>{
+        const {people}=await (await req("/api/state")).json() as {people:{id:string;version:number;link_sent:number}[]};
+        return people.find(person=>person.id===invite.id)!;
+      };
+      const {version:linkVersion,link_sent}=await readInvitation();
+      assert.equal(link_sent,0);
+      assert.equal((await req(sentPath,{sent:"yes",version:linkVersion})).status,400);
+      for(const sent of [true,false,true]){
+        const result=await req(sentPath,{sent,version:linkVersion});
+        assert.equal(result.status,200);
+        assert.deepEqual(await result.json(),{sent});
+        assert.equal((await readInvitation()).link_sent,Number(sent));
+      }
+      assert.equal((await (await link()).json() as {url:string}).url,cloudflareUrl);
+      assert.equal((await guestReq("journal",session)).status,200);
       const rotated=await req(`/api/people/${invite.id}/invite`,{});assert.equal(rotated.status,200);const rotatedUrl=(await rotated.json() as {url:string}).url;assert.notEqual(rotatedUrl,cloudflareUrl);assert.equal((await (await link()).json() as {url:string}).url,rotatedUrl);
+      assert.equal((await req(sentPath,{sent:true,version:linkVersion})).status,409);
+      assert.equal((await readInvitation()).link_sent,0);
       assert.equal((await guestReq("journal",session)).status,401);
       assert.equal((await req(`/api/people/${invite.id}/revoke`,{})).status,200);assert.equal((await link()).status,409);
     });

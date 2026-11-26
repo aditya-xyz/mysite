@@ -66,6 +66,7 @@ test('persistent people, migration compatibility, and explicit scrapbook invitat
   await db.batch((await readFile('migrations/0038_paperless_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0039_allow_paperless.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
+    await migrate('0047_invitation_link_sent.sql');
     let oldPerson='',newPerson='',version=1,inviteId='',newRaw='';
     await t.test('migration links existing invitations without changing tokens, sessions, or manifests',async()=>{
       const contacts=await (await req('contacts')).json() as {people:{id:string;name:string;version:number}[]};

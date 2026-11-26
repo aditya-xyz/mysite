@@ -42,6 +42,7 @@ test('separate photo renditions and persistent original-download limits',async t
   await db.batch((await readFile('migrations/0038_paperless_resets.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
   await db.batch((await readFile('migrations/0039_allow_paperless.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
+    await db.exec(await readFile('migrations/0047_invitation_link_sent.sql','utf8'));
     const expiry=Math.floor(Date.now()/1000)+86400;
     const contact=async(name:string,phone?:string)=>(await (await req('contacts',{name,phone})).json() as {person:{id:string}}).person.id;
     const ben=await contact('Ben','+15555550110'),jerry=await contact('Jerry');

@@ -56,6 +56,7 @@ test('local print ordering is gated, atomic, private, and preserves submitted sn
   await db.batch((await readFile('migrations/0039_allow_paperless.sql','utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
     await db.exec((await readFile('migrations/0036_invitation_languages.sql','utf8')).replace(/^--.*$/gm,'').replace(/\n/g,' '));
   for(const file of ['0041_scoped_live_gifts.sql','0044_live_mug_allowance_reset.sql','0045_invitation_live_mugs.sql','0046_invitation_live_postcards.sql'])await db.batch((await readFile('migrations/'+file,'utf8')).split('--> statement-breakpoint').map(sql=>db.prepare(sql)));
+  await db.exec(await readFile('migrations/0047_invitation_link_sent.sql','utf8'));
   const expires=Math.floor(Date.now()/1000)+86400,session='c'.repeat(64);
   await db.prepare("INSERT INTO people(id,name,phone) VALUES('contact','Test Recipient','+15555550100'),('partner','Test Partner',NULL)").run();
   await db.prepare("INSERT INTO invites(id,person_id,token_hash,name,phone,expires_at,member_ids) VALUES('invite','contact',?1,'Test Recipient','+15555550100',?2,?3)").bind(await digest('a'.repeat(64)),expires,JSON.stringify(['contact','partner'])).run();

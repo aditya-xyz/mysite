@@ -54,5 +54,5 @@ export function mountMugOrders({view,state,api,showModal,toast}){
    }
   }catch(error){if(panel.isConnected)panel.querySelector('[data-mug-orders]').textContent=error.message;}
  }
- document.querySelector('#sharing-search')?.addEventListener('input',load);load();
+ document.querySelector('#sharing-list')?.addEventListener('invitation-rows-changed',load);load();
 }

@@ -6,3 +6,14 @@ test('invitation gift filters combine with household search without changing per
  const ids=(filters:object)=>filterInvitations(invitations,contacts,filters).map((i:any)=>i.id);
  assert.deepEqual(ids({}),['both','card','digital','none']);assert.deepEqual(ids({mugs:'on'}),['both','digital']);assert.deepEqual(ids({mugs:'off',postcards:'mail'}),['card']);assert.deepEqual(ids({postcards:'paperless'}),['digital']);assert.deepEqual(ids({postcards:'off'}),['none']);assert.deepEqual(ids({query:'  ALICE ',mugs:'on',postcards:'mail'}),['both']);assert.deepEqual(ids({query:'Alice',mugs:'off'}),[]);assert.equal(postcardPermission(invitations[2]),'paperless');assert.equal(JSON.stringify(invitations),before);
 });
+test('sent status combines with search and gift filters, including existing unmarked invitations',()=>{
+ const invitations=[
+  {id:'sent',addressedTo:'Alice',link_sent:1,allow_print:1},
+  {id:'unsent',addressedTo:'Alice and Ben',link_sent:0,allow_print:1},
+  {id:'existing',addressedTo:'Bee'},
+ ];
+ const ids=(filters:object)=>filterInvitations(invitations,[],filters).map((invite:{id:string})=>invite.id);
+ assert.deepEqual(ids({sent:'pending'}),['unsent','existing']);
+ assert.deepEqual(ids({sent:'sent'}),['sent']);
+ assert.deepEqual(ids({query:'Alice',postcards:'mail',sent:'pending'}),['unsent']);
+});

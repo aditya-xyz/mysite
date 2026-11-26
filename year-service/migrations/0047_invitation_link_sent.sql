@@ -1,0 +1,1 @@
+ALTER TABLE invites ADD COLUMN link_sent INTEGER NOT NULL DEFAULT 0 CHECK(link_sent IN (0,1));

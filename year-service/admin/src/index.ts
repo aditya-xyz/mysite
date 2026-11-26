@@ -250,7 +250,7 @@ async function route(request: Request, env: Env, actor: string) {
   }
   if (path === "/api/state" && request.method === "GET") {
     const row = await edition(env,year);
-    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,language,share_socials,allow_mug,allow_print,allow_paperless,print_address_key,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
+    const people = await env.DB.prepare("SELECT id,person_id,name,phone,expires_at,revoked_at,addressed_to,member_ids,version,language,share_socials,allow_mug,allow_print,allow_paperless,print_address_key,link_sent,token_encrypted IS NOT NULL AS has_link FROM invites WHERE edition_year=?1 ORDER BY name").bind(year).all();
     const paperless=await env.DB.prepare('SELECT id,invitation_id,member_ids FROM digital_postcards WHERE year=?1').bind(year).all<{id:string;invitation_id:string;member_ids:string}>();
     const media = await env.DB.prepare("SELECT id,filename,mime,bytes,created_at,deleting AS deletion_pending,original_key IS NOT NULL AS has_original,viewer_key IS NOT NULL AS has_viewer FROM media_objects WHERE year=?1 ORDER BY created_at DESC,id").bind(year).all();
     return json({actor,year,liveMugs:liveMugsConfigured(env),livePostcards:livePostcardsConfigured(env),allowPrintOrders:!!(row as EditionRow&{allow_print_orders:number}).allow_print_orders,allowMugOrders:!!(row as EditionRow&{allow_mug_orders:number}).allow_mug_orders,printMode:simulatedOrders(request,env)?'local_mock':'disabled',addressVerificationMode:addressMode(request,env),draft:await canonicalDraft(JSON.parse(row.draft_json),env.DB,year),version:row.draft_version,publishedVersion:row.published_version,publishedAt:row.published_at,isActive:!!row.is_active,takenOfflineAt:row.taken_offline_at,publicationRevision:row.publication_revision,people:people.results.map(p=>({...p,addressedTo:p.addressed_to||p.name,memberIds:JSON.parse(p.member_ids as string),paperlessId:paperless.results.find(d=>d.invitation_id===p.id||JSON.parse(d.member_ids).some((member:string)=>householdMembers(p as unknown as InvitationAudience).includes(member)))?.id||null})),media:media.results});
@@ -321,6 +321,15 @@ async function route(request: Request, env: Env, actor: string) {
   }
   const deleteInvitationRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/delete$/.exec(path);
   if(deleteInvitationRoute&&request.method==='POST'){const data=await body(request),result=await deleteInvitation(env.DB,deleteInvitationRoute[1],year,data.version);await audit(env,actor,'delete-invitation',deleteInvitationRoute[1]).run();return json(result);}
+  const sentRoute=/^\/api\/invitations\/([a-z0-9-]{1,100})\/sent$/.exec(path);
+  if(sentRoute&&request.method==="POST"){
+    const {sent,version}=await body(request);
+    if(typeof sent!=="boolean"||!Number.isInteger(version))return fail("Choose a sent status and provide the current invitation version.");
+    const saved=await env.DB.prepare("UPDATE invites SET link_sent=?1 WHERE id=?2 AND edition_year=?3 AND version=?4 RETURNING link_sent")
+      .bind(Number(sent),sentRoute[1],year,version as number).first<{link_sent:number}>();
+    if(!saved)throw new Problem(409,"This invitation changed. Refresh before updating its sent status.");
+    return json({sent:!!saved.link_sent});
+  }
   const mugPermission=/^\/api\/invitations\/([a-z0-9-]{1,100})\/mug-permission$/.exec(path);
   if(mugPermission&&request.method==='POST'){
     const data=await body(request);if(typeof data.allowMug!=='boolean'||!Number.isInteger(data.version))return fail('Choose the mug permission and current invitation version.');
@@ -422,7 +431,7 @@ async function route(request: Request, env: Env, actor: string) {
     const raw = token(), revoke = personRoute[2] === "revoke";
     await env.DB.batch([
       revoke ? env.DB.prepare("UPDATE invites SET version=version+1,revoked_at=?1,challenge_expires_at=0 WHERE id=?2").bind(now(),id) :
-        env.DB.prepare("UPDATE invites SET version=version+1,token_hash=?1,revoked_at=NULL,expires_at=?2,last_sent_at=0,challenge_expires_at=0,attempts=0,token_encrypted=?4 WHERE id=?3").bind(await digest(raw),now()+90*86400,id,await sealLink(raw,env.INVITATION_LINK_KEY,id,year)),
+        env.DB.prepare("UPDATE invites SET version=version+1,token_hash=?1,revoked_at=NULL,expires_at=?2,last_sent_at=0,challenge_expires_at=0,attempts=0,token_encrypted=?4,link_sent=0 WHERE id=?3").bind(await digest(raw),now()+90*86400,id,await sealLink(raw,env.INVITATION_LINK_KEY,id,year)),
       env.DB.prepare("DELETE FROM sessions WHERE invite_id=?1").bind(id), audit(env,actor,revoke?"revoke-invite":"rotate-invite",id)
     ]);
     return json(revoke ? {revoked:true} : {url:invitationUrl(env,raw)});

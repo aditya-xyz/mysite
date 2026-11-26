@@ -46,7 +46,7 @@ export function mountPrintAdmin({view,state,contacts,api,requestApi,mark,saveDra
   box.innerHTML='<div class="print-allowance allowance-row"><span class="hint" data-print-count>Prints ordered: 0 · Allowance available</span><button class="secondary allowance-reset" data-reset-print hidden>Reset print allowance</button></div>';
   row.querySelector('.invitation-options').append(box);
  });}
- rows();document.querySelector('#sharing-search')?.addEventListener('input',()=>{rows();loadOrders();});
+ rows();document.querySelector('#sharing-list')?.addEventListener('invitation-rows-changed',()=>{rows();loadOrders();});
  function showFoldedOrder(o){
   const savedFont=JSON.parse(o.handwrytten_order_json||'{}'),fontLabel=({hwDavid:'Casual David',hwMadeline:'Merry Madeline'})[savedFont.font]||savedFont.font,handwriting=fontLabel?`Handwriting: ${fontLabel} · ${savedFont.font_size} pt${savedFont.auto_font_size?', automatic fit':''}.`:'Handwriting settings were not recorded.';
   let quote=o.handwrytten_quote_json?JSON.parse(o.handwrytten_quote_json):null;

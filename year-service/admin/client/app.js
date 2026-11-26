@@ -26,7 +26,8 @@ import {createPreviewLoader} from './preview-loader.js';
 import {peoplePickerMarkup,bindPeoplePicker} from './people-picker.js';
 const app=document.querySelector('#app'),modal=document.querySelector('#modal'),modalContent=document.querySelector('#modal-content');
 let draftSelection=new Set(),librarySelection=new Set(),selectionYear=null;
-let invitationFilters={query:'',mugs:'all',postcards:'all'};
+let invitationFilters={query:'',mugs:'all',postcards:'all',sent:'all'};
+const savingInvitationSent=new Set();
 let selectedPhotoId='',photoFilter='all',photoPersonFilter='',photoEditorOpen=false;
 let reordering=null,reorderCleanup=null;
 let state,view=routeFromHash().view,editions=[],contacts=[],draftCache=new Map(),navigationGeneration=0,pendingRequests=0,dirty=false,busy=false,previewRecipient='',previewData=null,personalModes=new Set(),inviteData,editGeneration=0;
@@ -266,15 +267,15 @@ function directoryRows(query=''){
   return matches.map(p=>`<article class="person"><div class="person-identity"><span class="person-avatar">${esc(p.name.slice(0,1).toUpperCase())}</span><div><strong>${esc(p.name)}</strong><p>${esc(p.phone||'No phone number · Can join a shared invitation')}</p></div></div><div class="person-address">${mailingSummary(p)}</div><div class="person-actions"><button class="secondary" data-edit-contact="${esc(p.id)}">Edit details</button><button class="quiet" data-person-usage="${esc(p.id)}">Where used</button><button class="quiet danger" data-delete-contact="${esc(p.id)}" aria-label="Delete ${esc(p.name)}">Delete</button></div></article>`).join('')||'<div class="empty">No people found.<span>Add someone to your directory, or try a different search.</span></div>';
 }
 function directory(){return `${head()}<div class="notice">Adding a person never sends a message or grants scrapbook access. Invitations are managed separately in each scrapbook.</div><section class="panel people-panel"><div class="row-head"><h2>Your people <span class="badge">${contacts.length}</span></h2><label class="directory-search"><span class="sr-only">Search people</span><input id="directory-search" type="search" placeholder="Search people…" autocomplete="off"></label></div><div class="people-list" id="directory-list">${directoryRows()}</div></section>`;}
-function invitationStatus(invite){return invite.revoked_at?'Revoked':invite.expires_at<=Date.now()/1000?'Expired':'Invited';}
+function invitationStatus(invite){return invite.revoked_at?'Revoked':invite.expires_at<=Date.now()/1000?'Expired':'Active';}
 function sharingRows(){
   const invitations=filterInvitations(state.people,contacts,invitationFilters);
   return invitations.map(invite=>{
     const status=invitationStatus(invite),members=(invite.memberIds||[invite.person_id]).map(id=>contacts.find(p=>p.id===id)?.name||'Unknown person');
-    return `<details class="person invitation-row" name="invitations-${state.year}" data-print-invitation="${esc(invite.id)}"><summary class="invitation-summary"><span class="person-avatar">${icon('people')}</span><span class="invitation-heading"><strong>${esc(invite.addressedTo)}</strong><span>${members.length} ${members.length===1?'person':'people'} · Code to ${esc(invite.name)}</span><span class="invitation-gifts"><span class="badge ${invite.allow_mug?'active-badge':''}">Mug: ${invite.allow_mug?'enabled':'off'}</span><span class="badge ${postcardPermission(invite)==='mail'?'active-badge':''}">Postcard: ${postcardPermission(invite)==='mail'?'mail':postcardPermission(invite)==='paperless'?'paperless':'off'}</span></span></span><span class="badge ${status==='Invited'?'active-badge':''}">${status}</span><span class="invitation-expand"><span class="when-closed">More details</span><span class="when-open">Less details</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></span></summary><div class="invitation-options"><div class="invitation-meta"><p>Includes ${esc(members.join(' & '))}</p><p>Code to ${esc(invite.name)} · •••• ${esc(invite.phone.slice(-4))}</p><p>Language: ${esc(languages[invite.language||'en'])}</p>${invite.paperlessId?'<p>Postcard preference: Paperless</p>':''}<p>${invite.share_socials?'Instagram links shown':'Instagram links hidden'}</p></div><div class="actions">${invite.paperlessId?`<button class="quiet" data-reset-paperless="${esc(invite.id)}">Reset paperless preference</button>`:''}<button class="quiet" data-reset-downloads="${esc(invite.id)}">Reset download limits</button><button class="secondary" data-view-link="${esc(invite.id)}">${invite.has_link?'View link & QR':'Restore link & QR'}</button><button class="secondary" data-edit-invitation="${esc(invite.id)}">Edit invitation</button><button class="quiet" data-invite="${esc(invite.id)}">Create fresh link</button>${!invite.revoked_at?`<button class="quiet danger" data-revoke="${esc(invite.id)}">Revoke access</button>`:`<button class="quiet danger" data-delete-invitation="${esc(invite.id)}">Delete invitation</button>`}</div></div></details>`;
-  }).join('')||'<div class="empty">No invitations found.<span>Try a different search or gift filter.</span></div>';
+    return `<div class="invitation-entry"><details class="person invitation-row" name="invitations-${state.year}" data-print-invitation="${esc(invite.id)}"><summary class="invitation-summary"><span class="person-avatar">${icon('people')}</span><span class="invitation-heading"><strong>${esc(invite.addressedTo)}</strong><span>${members.length} ${members.length===1?'person':'people'} · Code to ${esc(invite.name)}</span><span class="invitation-gifts"><span class="badge ${invite.allow_mug?'active-badge':''}">Mug: ${invite.allow_mug?'enabled':'off'}</span><span class="badge ${postcardPermission(invite)==='mail'?'active-badge':''}">Postcard: ${postcardPermission(invite)==='mail'?'mail':postcardPermission(invite)==='paperless'?'paperless':'off'}</span></span></span><span class="badge ${status==='Active'?'active-badge':''}">${status}</span><span class="invitation-expand"><span class="when-closed">More details</span><span class="when-open">Less details</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></span></summary><div class="invitation-options"><div class="invitation-meta"><p>Includes ${esc(members.join(' & '))}</p><p>Code to ${esc(invite.name)} · •••• ${esc(invite.phone.slice(-4))}</p><p>Language: ${esc(languages[invite.language||'en'])}</p>${invite.paperlessId?'<p>Postcard preference: Paperless</p>':''}<p>${invite.share_socials?'Instagram links shown':'Instagram links hidden'}</p></div><div class="actions">${invite.paperlessId?`<button class="quiet" data-reset-paperless="${esc(invite.id)}">Reset paperless preference</button>`:''}<button class="quiet" data-reset-downloads="${esc(invite.id)}">Reset download limits</button><button class="secondary" data-view-link="${esc(invite.id)}">${invite.has_link?'View link & QR':'Restore link & QR'}</button><button class="secondary" data-edit-invitation="${esc(invite.id)}">Edit invitation</button><button class="quiet" data-invite="${esc(invite.id)}">Create fresh link</button>${!invite.revoked_at?`<button class="quiet danger" data-revoke="${esc(invite.id)}">Revoke access</button>`:`<button class="quiet danger" data-delete-invitation="${esc(invite.id)}">Delete invitation</button>`}</div></div></details><label class="invitation-sent"><input type="checkbox" data-invitation-sent="${esc(invite.id)}" aria-label="Invitation sent to ${esc(invite.addressedTo)}" ${invite.link_sent?'checked':''} ${savingInvitationSent.has(invite.id)?'disabled':''}> Sent</label></div>`;
+  }).join('')||'<div class="empty">No invitations found.<span>Try a different search or filter.</span></div>';
 }
-function sharing(){return `${head()}<div class="notice">One invitation, one QR code, one verification phone. Everyone included can view photos assigned to any person on that invitation. Creating or editing an invitation never sends a text.</div><section class="panel people-panel"><div class="row-head"><div><h2>Invitations <span class="badge">${state.people.length}</span></h2><a class="hint" href="#people" data-view="directory">Manage People directory</a> · <a class="hint" href="/sms-tests/">Test SMS delivery</a></div><button class="button" id="new-invitation">+ Create invitation</button></div>${giftBudgetMarkup(state.people)}<div class="invitation-filters"><label class="field invitation-search"><span>Search invitations</span><input id="sharing-search" type="search" value="${esc(invitationFilters.query)}" placeholder="Search invitations or people…" autocomplete="off"></label><label class="field"><span>Mugs</span><select id="sharing-mugs">${[['all','All mug settings'],['on','Mug enabled'],['off','Mug off']].map(([value,label])=>`<option value="${value}" ${invitationFilters.mugs===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="field"><span>Postcards</span><select id="sharing-postcards">${[['all','All postcard settings'],['mail','Mail enabled'],['paperless','Paperless chosen'],['off','Postcard off']].map(([value,label])=>`<option value="${value}" ${invitationFilters.postcards===value?'selected':''}>${label}</option>`).join('')}</select></label></div><p class="hint" id="sharing-result-count" role="status">${filterInvitations(state.people,contacts,invitationFilters).length} of ${state.people.length} invitations</p><div class="people-list" id="sharing-list">${sharingRows()}</div></section><p class="hint">Twilio trial verification contacts must still be verified in Twilio before receiving login codes. Invitation settings apply immediately; photo and postcard-note edits require publishing.</p>${continueFlow('preview',false)}`;}
+function sharing(){return `${head()}<div class="notice">One invitation, one QR code, one verification phone. Everyone included can view photos assigned to any person on that invitation. Creating or editing an invitation never sends a text.</div><section class="panel people-panel"><div class="row-head"><div><h2>Invitations <span class="badge">${state.people.length}</span></h2><a class="hint" href="#people" data-view="directory">Manage People directory</a> · <a class="hint" href="/sms-tests/">Test SMS delivery</a></div><button class="button" id="new-invitation">+ Create invitation</button></div>${giftBudgetMarkup(state.people)}<div class="invitation-filters"><label class="field invitation-search"><span>Search invitations</span><input id="sharing-search" type="search" value="${esc(invitationFilters.query)}" placeholder="Search invitations or people…" autocomplete="off"></label><label class="field"><span>Mugs</span><select id="sharing-mugs">${[['all','All mug settings'],['on','Mug enabled'],['off','Mug off']].map(([value,label])=>`<option value="${value}" ${invitationFilters.mugs===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="field"><span>Postcards</span><select id="sharing-postcards">${[['all','All postcard settings'],['mail','Mail enabled'],['paperless','Paperless chosen'],['off','Postcard off']].map(([value,label])=>`<option value="${value}" ${invitationFilters.postcards===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="field"><span>Link status</span><select id="sharing-sent">${[['all','All links'],['pending','Not yet sent'],['sent','Sent']].map(([value,label])=>`<option value="${value}" ${invitationFilters.sent===value?'selected':''}>${label}</option>`).join('')}</select></label></div><p class="hint" id="sharing-result-count" role="status">${filterInvitations(state.people,contacts,invitationFilters).length} of ${state.people.length} invitations</p><div class="people-list" id="sharing-list">${sharingRows()}</div></section><p class="hint">Twilio trial verification contacts must still be verified in Twilio before receiving login codes. Invitation settings apply immediately; photo and postcard-note edits require publishing.</p>${continueFlow('preview',false)}`;}
 function preview(){return head();}
 
 function server(){return `${head()}<div class="panel server-empty"><span class="server-illustration">${icon('server')}</span><span class="badge">Not connected</span><h2>Your home server, at a glance.</h2><p class="lede">A dedicated place for your services, storage, and backups.<br>There’s no server connected yet, so no health data is available.</p><div class="server-capabilities"><div>${icon('server')}<strong>Service health</strong><span>Availability and resource usage</span></div><div>${icon('photos')}<strong>Storage</strong><span>Disk capacity and usage</span></div><div>${icon('review')}<strong>Backups</strong><span>Last run and backup status</span></div></div><p class="hint">Monitoring can be connected here when your home server is ready.</p></div>`;}
@@ -438,9 +439,12 @@ function bind(){
   if(dropzone)bindPhotoDropzone(dropzone,{isBusy:()=>busy||pendingRequests>0||modal.open,onFiles:uploadFiles,onError:message=>{byId('upload-status').textContent=message;}});
   byId('add-contact')?.addEventListener('click',()=>addPerson());
   byId('directory-search')?.addEventListener('input',e=>{byId('directory-list').innerHTML=directoryRows(e.target.value);bindContactActions();});
-  const refreshInvitations=()=>{byId('sharing-list').innerHTML=sharingRows();byId('sharing-result-count').textContent=`${filterInvitations(state.people,contacts,invitationFilters).length} of ${state.people.length} invitations`;bindSharingActions();};
   byId('sharing-search')?.addEventListener('input',e=>{invitationFilters.query=e.target.value;refreshInvitations();});
-  for(const [id,key] of [['sharing-mugs','mugs'],['sharing-postcards','postcards']])byId(id)?.addEventListener('change',e=>{invitationFilters[key]=e.target.value;refreshInvitations();});
+  for(const [id,key] of [['sharing-mugs','mugs'],['sharing-postcards','postcards'],['sharing-sent','sent']])byId(id)?.addEventListener('change',e=>{invitationFilters[key]=e.target.value;refreshInvitations();});
+  byId('sharing-list')?.addEventListener('change',event=>{
+    if(event.target.matches('[data-invitation-sent]'))saveInvitationSent(event.target);
+  });
+  byId('new-invitation')?.addEventListener('click',()=>editInvitation());
   bindContactActions();bindSharingActions();
   byId('open-preview')?.addEventListener('click',openPreview);
 }
@@ -490,11 +494,54 @@ function confirmPublish(){
   byId('confirm-publish').onclick=async e=>{e.target.disabled=true;try{const result=await api('publish',{version:state.version,publicationRevision:state.publicationRevision});state.publishedVersion=result.publishedVersion;state.captionTranslations=null;state.isActive=true;state.takenOfflineAt=null;state.publicationRevision=result.publicationRevision;for(const e of editions)e.isActive=e.year===state.year;for(const cached of draftCache.values())cached.state.isActive=cached.state.year===state.year;state.publishedAt=Math.floor(Date.now()/1000);modal.close();render();updateEditionSummary();toast(`Your ${state.year} scrapbook is published.`);}catch(error){byId('modal-error').textContent=error.message;e.target.disabled=false;}};
 }
 function bindContactActions(){app.querySelectorAll('[data-person-usage]').forEach(button=>button.onclick=()=>showPersonUsage(button.dataset.personUsage));app.querySelectorAll('[data-edit-contact]').forEach(button=>button.onclick=()=>editPerson(button.dataset.editContact));app.querySelectorAll('[data-delete-contact]').forEach(button=>button.onclick=()=>deletePerson(button.dataset.deleteContact));}
+function refreshInvitations(){
+  const list=byId('sharing-list');
+  list.innerHTML=sharingRows();
+  updateInvitationCount();
+  bindSharingActions();
+  list.dispatchEvent(new Event('invitation-rows-changed'));
+}
+function updateInvitationCount(){
+  byId('sharing-result-count').textContent=`${filterInvitations(state.people,contacts,invitationFilters).length} of ${state.people.length} invitations`;
+}
+async function saveInvitationSent(input){
+  const {invitationSent:id}=input.dataset,year=state.year;
+  const invite=state.people.find(i=>i.id===id);
+  const {version}=invite,sent=input.checked;
+  const hadFocus=document.activeElement===input;
+  savingInvitationSent.add(id);
+  input.disabled=true;
+  try{
+    const saved=await api(`invitations/${id}/sent`,{sent,version});
+    const current=state.people.find(i=>i.id===id&&i.version===version);
+    if(state.year===year&&current)current.link_sent=Number(saved.sent);
+    toast(saved.sent?'Invitation marked sent.':'Invitation marked not yet sent.');
+  }catch(error){toast(error.message);}
+  finally{
+    savingInvitationSent.delete(id);
+    const list=byId('sharing-list');
+    const checkbox=list?.querySelector(`[data-invitation-sent="${CSS.escape(id)}"]`);
+    const current=state.people.find(i=>i.id===id);
+    if(state.year===year&&checkbox&&current){
+      checkbox.checked=!!current.link_sent;
+      checkbox.disabled=false;
+      if(!filterInvitations([current],contacts,invitationFilters).length){
+        const row=checkbox.closest('.invitation-entry');
+        const neighbor=(row.nextElementSibling||row.previousElementSibling)?.querySelector('[data-invitation-sent]:enabled');
+        row.remove();
+        if(!list.children.length)list.innerHTML=sharingRows();
+        updateInvitationCount();
+        if(hadFocus&&document.activeElement===document.body)(neighbor||byId('sharing-sent')).focus();
+      }else if(hadFocus&&document.activeElement===document.body){
+        checkbox.focus();
+      }
+    }
+  }
+}
 function bindSharingActions(){
   app.querySelectorAll('[data-delete-invitation]').forEach(button=>button.onclick=()=>confirmDeleteInvitation(button.dataset.deleteInvitation));
   app.querySelectorAll('.invitation-row').forEach(row=>row.ontoggle=()=>{if(row.open)app.querySelectorAll('.invitation-row[open]').forEach(other=>{if(other!==row)other.open=false;});});
   app.querySelectorAll('[data-view-link]').forEach(button=>button.onclick=()=>viewInvitationLink(button.dataset.viewLink));
-  byId('new-invitation')?.addEventListener('click',()=>editInvitation());
   app.querySelectorAll('[data-edit-invitation]').forEach(button=>button.onclick=()=>editInvitation(button.dataset.editInvitation));
   app.querySelectorAll('[data-invite]').forEach(button=>button.onclick=()=>confirmInvitation(button.dataset.invite));
   app.querySelectorAll('[data-reset-paperless]').forEach(button=>button.onclick=()=>resetPaperlessPreference(button.dataset.resetPaperless));
