@@ -186,7 +186,7 @@
 :root[data-palette=night] :is(.pb-select-list, .delivery-panel .address-autocomplete) {
   border-color: var(--pb-readable-line);
 }
-:root[data-palette=night] :is(.pb-select-list, .delivery-panel .address-autocomplete)
+:root[data-palette=night] .delivery-panel .address-autocomplete
   [role=option][aria-selected=true] {
   box-shadow: inset 3px 0 var(--button);
 }

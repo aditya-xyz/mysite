@@ -6,12 +6,10 @@ import {sessionImages} from './session-images.js';
 import {readResource} from './read-resource.js';
 import {openMugCustomizer} from './mug-customizer.js';
 import {createMugMockups} from './mug-mockups.js';
-import {pixelMugOptions,preferredMugOptions,mugStyles,mugOptionsLabel,mugFonts,activeMugCatalog} from './mug-options.js';
+import {pixelMugOptions,preferredMugOptions,selectableMugStyles,mugOptionsLabel,mugFonts,activeMugCatalog} from './mug-options.js';
 import {createDeliveryAddress} from './delivery-address.js';
 import {mugPreview,mugLoadingPreview} from './mug-preview.js';
 import {esc,assetPath,hasMugChoices,householdOrderNote} from './pixelbook.js';
-
-const householdGiftLine='seriously, one per household. couch surfing only pays so much.';
 
 // Provider-neutral UI. The server owns eligibility, address storage and the one-per-invite allowance.
 // The production journal must explicitly enable this capability before the UI is shown.
@@ -23,7 +21,7 @@ export function mountPixelGift(journal,root){
   const modal=document.createElement('dialog');modal.className='pb-gift-dialog';modal.setAttribute('aria-labelledby','pb-order-title');
   document.body.append(modal);
   let step='pick',selected=designs[0],configuration=pixelMugOptions(),customizer=null,receipt=journal.gift.claim||null,requestKey=crypto.randomUUID(),busy=false,controller=null,returnFocus;
-  let styles=mugStyles,livePricing=journal.gift.livePricing===true,receiptPreview=null;
+  let styles=selectableMugStyles(),livePricing=journal.gift.livePricing===true,receiptPreview=null;
   const mockups=createMugMockups();
   const local=journal.gift.mode==='preview',simulated=journal.gift.mode==='simulation',ordering=local||journal.gift.orderingEnabled===true;
   const closeIcon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
@@ -38,7 +36,7 @@ export function mountPixelGift(journal,root){
   const canConfirm=()=>delivery.ready&&!journal.adminPreview;
   const steps=()=>`<ol class="pb-order-steps" aria-label="Gift progress">${['your mugshot','the details','your address'].map((s,i)=>`<li ${['pick','review','address'].indexOf(step)===i?'aria-current="step"':''}><span>${i+1}</span>${s}</li>`).join('')}</ol>`;
   function pickMarkup(){
-    return `<p class="pb-dialog-intro">pick your favorite photo of me. i’ve made this very difficult.</p><div class="pb-designs" data-design-count="${designs.length}" role="group" aria-label="Choose a mug design">${designs.map(d=>`<button type="button" class="pb-design" data-design="${esc(d.id)}" aria-pressed="${selected?.id===d.id}"><span class="pb-design-image"><img data-session-src="${esc(assetPath(d.src))}" alt="${esc(d.alt)}" loading="eager" decoding="async"><span class="pb-design-check" aria-hidden="true">✓</span></span><span class="pb-design-caption">${esc(d.caption)}</span></button>`).join('')}</div><p class="pb-dialog-budget">${householdGiftLine}</p>`;
+    return `<p class="pb-dialog-intro">pick your favorite photo of me. i’ve made this very difficult.</p><div class="pb-designs" data-design-count="${designs.length}" role="group" aria-label="Choose a mug design">${designs.map(d=>`<button type="button" class="pb-design" data-design="${esc(d.id)}" aria-pressed="${selected?.id===d.id}"><span class="pb-design-image"><img data-session-src="${esc(assetPath(d.src))}" alt="${esc(d.alt)}" loading="eager" decoding="async"><span class="pb-design-check" aria-hidden="true">✓</span></span><span class="pb-design-caption">${esc(d.caption)}</span></button>`).join('')}</div>`;
   }
   function addressMarkup(){return delivery.markup();}
   function warmReceipt(){
@@ -160,7 +158,7 @@ export function mountPixelGift(journal,root){
   function warmCatalog(){if(!journal.gift.livePricing||!ordering)return;preloadCatalog().then(catalog=>{if(modal.open)return;mockups.configure(catalog);}).catch(()=>{});}
   launch.addEventListener('pointerenter',warmCatalog,{once:true});launch.addEventListener('focus',warmCatalog,{once:true});
   let previewCount=0;
-  const catalogTimer=setInterval(()=>{if(!modal.open||!livePricing||receipt)return;preloadCatalog().then(catalog=>{styles=catalog.styles;mockups.configure(catalog);if(previewCount!==(catalog.previews?.length||0)){previewCount=catalog.previews?.length||0;customizer?.refresh(styles);if(step==='review')warmSelected();}}).catch(()=>{});},30000);
+  const catalogTimer=setInterval(()=>{if(!modal.open||!livePricing||receipt)return;preloadCatalog().then(catalog=>{const choices=selectableMugStyles(catalog.styles);if(!choices.length)return;styles=choices;mockups.configure(catalog);if(previewCount!==(catalog.previews?.length||0)){previewCount=catalog.previews?.length||0;customizer?.refresh(styles);if(step==='review')warmSelected();}}).catch(()=>{});},30000);
   launch.onclick=async()=>{
     if(modal.open||busy||opening)return;opening=true;contextReady=false;returnFocus=document.activeElement;
     root.querySelector('.pb-gift-launch-error')?.remove();
@@ -176,7 +174,11 @@ export function mountPixelGift(journal,root){
       const displayedReceipt=receipt,displayedStep=step;
       const result=await request('status');receipt=result.claim||null;
       livePricing=result.livePricing===true;
-      if(livePricing&&!receipt){const catalog=await preloadCatalog();styles=catalog.styles;mockups.configure(catalog);configuration=preferredMugOptions(styles);}
+      if(livePricing&&!receipt){
+        const catalog=await preloadCatalog(),choices=selectableMugStyles(catalog.styles);
+        if(!choices.length)throw new Error('No mug styles are available right now.');
+        styles=choices;mockups.configure(catalog);configuration=preferredMugOptions(styles);
+      }
       if(!modal.isConnected)return;
       if(receipt)selectReceipt();else{step='pick';selected=selected||previewDesign;requestKey=crypto.randomUUID();launch.textContent='pick your mugshot';}
       if(!modal.open)return;contextReady=true;

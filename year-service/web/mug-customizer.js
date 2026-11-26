@@ -1,11 +1,11 @@
 import {openDialog,closeDialog} from './dialog-motion.js';
-import {mugStyles,mugFonts,preferredMugOptions} from './mug-options.js';
+import {mugFonts,preferredMugOptions,selectableMugStyles} from './mug-options.js';
 import {mugPreview} from './mug-preview.js';
 import {customSelectMarkup,bindCustomSelect} from './custom-select.js';
 import {esc} from './pixelbook.js';
 
 // Done and backdrop dismissal keep the current choices; Restore uses Pixel’s defaults.
-export function openMugCustomizer(design,current,finish,styles=mugStyles,preview=()=>{},previewMarkup=mugPreview,available=()=>true){
+export function openMugCustomizer(design,current,finish,styles=selectableMugStyles(),preview=()=>{},previewMarkup=mugPreview,available=()=>true){
  const dialog=document.createElement('dialog');dialog.className='pb-gift-dialog pb-mug-customizer';dialog.setAttribute('aria-label','Customize your mug');
  let configuration={...current},selectBinding=null,completing=false,destroyed=false;
  function fields(){const style=styles.find(s=>s.id===configuration.style);return [{key:'style',label:'Mug style',values:styles},{key:'size',label:'Size',values:style.sizes},{key:'color',label:'Color',values:style.colors.filter(c=>!style.variants||style.variants.some(v=>v.size===configuration.size&&v.color===c))},{key:'font',label:'Caption font',values:mugFonts}];}

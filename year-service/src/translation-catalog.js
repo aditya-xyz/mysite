@@ -206,7 +206,6 @@ const existingUiDrafts=[
 ["Photo viewer", "फोटो पाहा", "照片檢視器"],
 ["Pixelbook — back to the top", "Pixelbook — वर जा", "Pixelbook — 回到頂端"],
 ["Back of card", "मागची बाजू", "背面"],
-["seriously, one per household. couch surfing only pays so much.", "खरंच, प्रत्येक घराला एकच. सोफ्यावर लोळून कितीसं कमावणार?", "說真的，每個家只能送一個。沙發客的收入畢竟有限。"],
 ["Switch to dark mode", "गडद रंगसंगती वापरा", "切換至深色模式"],
 ["Switch to light mode", "फिकट रंगसंगती वापरा", "切換至淺色模式"],
 ["my humans’ friends are my friends", "माझ्या माणसांचे मित्र म्हणजे माझेही मित्र", "我的人類的朋友，也是我的朋友"],

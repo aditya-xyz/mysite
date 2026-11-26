@@ -2,7 +2,7 @@
 // These static choices also support receipts and offline design previews.
 export const mugStyles=[
  {id:'classic',label:'Classic ceramic',sizes:['11oz','15oz','20oz'],colors:['white']},
- {id:'color-inside',label:'Color inside',sizes:['11oz','15oz'],colors:['black','red','blue','dark blue']},
+ {id:'color-inside',label:'Color inside',sizes:['11oz','15oz'],colors:['black','red','blue','dark blue','dark green']},
  {id:'black-glossy',label:'Black glossy mug',sizes:['11oz','15oz'],colors:['black']},
 ];
 export const mugFonts=[{id:'clean',label:'Clean',family:'Asap, sans-serif'},{id:'serif',label:'Bookish',family:'Georgia, serif'},{id:'handwritten',label:'Handwritten',family:'Caveat, cursive'}];
@@ -25,6 +25,18 @@ export function validMugOptions(value,styles=mugStyles){
 export function mugOptionsLabel(value,styles=mugStyles){
  const o=mugConfiguration(value)||legacyMugOptions();
  return `${styles.find(s=>s.id===o.style)?.label||(o.style==='enamel'?'Enamel mug':o.style==='latte'?'Latte':'Photo mug')} · ${o.size} · ${o.color} · ${mugFonts.find(f=>f.id===o.font).label}`;
+}
+
+const colorInsideChoices=new Set(['black','dark blue','dark green']);
+// Keep the full catalog for saved previews and receipts.
+export function selectableMugStyles(styles=mugStyles){
+ return styles.flatMap(style=>{
+  if(style.id!=='color-inside')return [style];
+  const variants=style.variants?.filter(variant=>colorInsideChoices.has(variant.color));
+  const colors=style.colors.filter(color=>colorInsideChoices.has(color)&&(!variants||variants.some(variant=>variant.color===color)));
+  const sizes=style.sizes.filter(size=>!variants||variants.some(variant=>variant.size===size));
+  return colors.length&&sizes.length?[{...style,colors,sizes,...(variants?{variants}:{})}]:[];
+ });
 }
 
 // Apply retirement to saved catalogs/manifests as well as fresh supplier data.

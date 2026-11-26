@@ -57,7 +57,7 @@ test('new mugshot selections open directly without a household gift loading scre
  let resolve!:(value:Response)=>void;
  const fetch=mock.method(globalThis,'fetch',async()=>new Promise<Response>(r=>resolve=r));t.after(()=>fetch.mock.restore());
  const opening=launch.onclick();assert.equal(modal.open,true);assert.match(modal.innerHTML,/data-gift-next\b[^>]*\bdisabled/);assert.equal(launch.disabled,false);
- assert.doesNotMatch(modal.innerHTML,/Loading your gift|your household’s gift/);
+ assert.doesNotMatch(modal.innerHTML,/Loading your gift|your household’s gift|couch surfing/);
  resolve(Response.json({claim:null}));await opening;assert.equal(modal.open,true);assert.match(modal.innerHTML,/data-design=/);assert.equal(next.disabled,false);assert.equal(launch.disabled,false);
 });
 

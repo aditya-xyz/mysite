@@ -6,6 +6,11 @@
   --pb-light-button: #285a46;
   --pb-light-body: #403d37;
   --pb-light-cream: #fff8ed;
+  --pb-light-control-paper: #fbfdf7;
+  --pb-light-control-track: #dae7d8;
+  --pb-light-control-hover: #c6dac7;
+  --pb-light-control-edge: #68846d;
+  --pb-light-control-ink: #274335;
   --paper: var(--pb-light-page);
   --ink: var(--pb-light-body);
   --accent: var(--pb-light-heading);
@@ -89,8 +94,48 @@
   --pb-action-border: #204d3b;
 }
 :root[data-palette=moss] .ks-gift :is(svg, small) {color: inherit}
-:root[data-palette=moss] :is(body, #keepsake, #photo) .pb-mockup-views.pb-segments {
-  border-color: #987d69;
+/* Give light gift controls their own surface, separate from the gift sheet. */
+:root[data-palette=moss] :is(body, #keepsake, #photo) .pb-mug-customizer .pb-select-trigger:enabled {
+  --pb-control-fill: linear-gradient(180deg, var(--pb-light-control-paper), #e5eee1);
+  border-color: var(--pb-light-control-edge);
+  color: var(--pb-light-control-ink);
+}
+:root[data-palette=moss] :is(body, #keepsake, #photo) .pb-mug-customizer .pb-select-trigger[aria-expanded=true] {
+  border-color: var(--pb-light-button);
+  box-shadow: 0 0 0 1px var(--pb-light-button);
+}
+:root[data-palette=moss] :is(.pb-gift-dialog, #keepsake, .ks-print-dialog) .address-autocomplete,
+:root[data-palette=moss] .pb-mug-customizer .pb-select-list {
+  background: var(--pb-light-control-paper);
+  border-color: var(--pb-light-control-edge);
+}
+:root[data-palette=moss] :is(.pb-gift-dialog, #keepsake, .ks-print-dialog) .address-autocomplete [aria-selected=true] {
+  background: var(--pb-light-control-track);
+  box-shadow: inset 3px 0 var(--pb-light-button);
+}
+:root[data-palette=moss] :is(.pb-gift-dialog, .pb-mug-customizer, #keepsake, .ks-print-dialog) .pb-segments {
+  background: var(--pb-light-control-track);
+  border-color: var(--pb-light-control-edge);
+}
+:root[data-palette=moss] :is(.pb-gift-dialog, .pb-mug-customizer, #keepsake, .ks-print-dialog) .pb-segments > button[aria-pressed=false] {
+  color: var(--pb-light-control-ink);
+}
+:root[data-palette=moss] :is(.pb-gift-dialog, .pb-mug-customizer, #keepsake, .ks-print-dialog)
+  :is(.pb-select-trigger, .pb-segments > button[aria-pressed]):focus-visible {
+  outline: 2px solid var(--pb-light-heading);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  :root[data-palette=moss] :is(body, #keepsake, #photo) .pb-mug-customizer .pb-select-trigger[aria-expanded=false]:enabled:hover {
+    border-color: var(--pb-light-button);
+  }
+  :root[data-palette=moss] .pb-mug-customizer .pb-select-list [aria-selected=false]:enabled:hover,
+  :root[data-palette=moss] :is(.pb-gift-dialog, #keepsake, .ks-print-dialog) .address-autocomplete [aria-selected=false]:enabled:hover {
+    background: var(--pb-light-control-track);
+  }
+  :root[data-palette=moss] :is(.pb-gift-dialog, .pb-mug-customizer, #keepsake, .ks-print-dialog) .pb-segments > button[aria-pressed=false]:enabled:hover {
+    background: var(--pb-light-control-hover);
+  }
 }
 :root[data-palette=moss] .pb-presents .pb-present-card {
   border-radius: 16px;
