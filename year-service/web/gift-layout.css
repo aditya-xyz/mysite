@@ -298,8 +298,18 @@
 }
 
 /* Shadows lift the picker images. Badges carry selection and outlines carry focus. */
-:root[data-palette=moss] { --pb-picker-shadow: 0 2px 3px #25372829, 0 5px 10px #25372833; }
-:root[data-palette=night] { --pb-picker-shadow: 0 2px 3px #0007, 0 5px 10px #0006; }
+:root[data-palette=moss] {
+  --pb-picker-shadow: 0 2px 3px #25372829, 0 5px 10px #25372833;
+  --pb-mugshot-glass: radial-gradient(ellipse at 12% 0%, #ffffffd9, transparent 68%),
+    linear-gradient(145deg, #dce9e7, #cfdfdc 65%, #b9cecf);
+  --pb-mugshot-rim: inset 0 1px 1px #ffffffce, inset 0 0 0 1px #7494905c;
+}
+:root[data-palette=night] {
+  --pb-picker-shadow: 0 2px 3px #0007, 0 5px 10px #0006;
+  --pb-mugshot-glass: radial-gradient(ellipse at 12% 0%, #cde7ff30, transparent 70%),
+    linear-gradient(145deg, #42596a, #344856 57%, #293b48);
+  --pb-mugshot-rim: inset 0 1px 1px #cde7ff57, inset 0 0 0 1px #a7c4da2e;
+}
 :root[data-palette] #keepsake .ks-select-body .ks-picks[data-photo-count] .ks-pick,
 :root[data-palette] .pb-gift-dialog .pb-design-image {
   border: 0;
@@ -307,6 +317,10 @@
 }
 :root[data-palette] #keepsake .ks-select-body .ks-picks[data-photo-count] .ks-pick {
   background: transparent;
+}
+:root[data-palette] .pb-gift-dialog .pb-design-image {
+  background: var(--pb-mugshot-glass);
+  box-shadow: var(--pb-mugshot-rim), var(--pb-picker-shadow);
 }
 #keepsake .ks-pick[aria-pressed=true]::after { content: none; }
 .pb-gift-dialog .pb-design[aria-pressed=true] .pb-design-image { outline: none; }

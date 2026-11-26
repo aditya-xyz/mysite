@@ -117,10 +117,6 @@
 :root[data-palette=night] #pb-gift .pb-mugshot-stack {
   --pb-blush: var(--pb-night-cutout);
 }
-:root[data-palette=night] .pb-gift-dialog .pb-design-image {
-  background: var(--pb-night-cutout);
-  border-color: var(--pb-night-cutout);
-}
 
 /* Confirmation colors; their layout is shared by both themes. */
 :root[data-palette=night] {
