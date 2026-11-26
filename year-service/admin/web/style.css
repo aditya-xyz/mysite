@@ -122,6 +122,8 @@ html:has(#modal[open]){overflow:hidden}
 
 .print-note-proof{display:block;width:100%;height:auto;background:#f8f6ec}
 
+.invitation-progress{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-top:14px;color:var(--muted);font-size:13px}
+.invitation-progress strong{color:var(--ink);font-size:16px;font-variant-numeric:tabular-nums}
 .invitation-entry{position:relative;border-bottom:1px solid var(--line)}
 .invitation-entry:last-child,.invitation-entry .invitation-row{border-bottom:0}
 .invitation-entry .invitation-summary{padding-right:72px}
