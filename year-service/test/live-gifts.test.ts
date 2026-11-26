@@ -203,6 +203,37 @@ test('scoped live gifts enforce identity, caps, exact artwork and one submission
   await t.test('lost confirmation response reconciles without another charge',async()=>{await reset();await seedMug();loseConfirm=true;await tickLiveMugFulfillment(env);await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'submitted');assert.equal(calls.filter(c=>c==='POST /orders/123/confirm').length,1);});
   await t.test('lost draft response is held and never automatically recreated',async()=>{await reset();await seedMug();loseCreate=true;await tickLiveMugFulfillment(env);await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'unknown');assert.equal((await db.prepare("SELECT status FROM mug_orders WHERE id='mug-live'").first<any>()).status,'unknown');assert.equal(calls.filter(c=>c==='POST /orders').length,1);assert.equal(calls.some(c=>c.includes('/confirm')),false);});
   await t.test('asynchronous draft pricing waits without a second draft or premature payment',async()=>{await reset();await seedMug();costsPending=true;await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'draft');assert.equal(calls.some(c=>c.includes('/confirm')),false);costsPending=false;await db.prepare("UPDATE live_gift_orders SET lease_until=unixepoch()-1").run();await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'submitted');assert.equal(calls.filter(c=>c==='POST /orders').length,1);});
+  await t.test('a saved mug draft with generated previews resumes once, with the artwork check and $25 cap enforced',async()=>{
+   for(const {total,matching,expected} of [
+    {total:'25.00',matching:true,expected:'submitted'},
+    {total:'25.01',matching:true,expected:'review'},
+    {total:'25.00',matching:false,expected:'review'},
+   ]){
+    await reset();await seedMug();costsPending=true;mugCost=total;
+    await tickLiveMugFulfillment(env);
+    assert.equal(await liveState('mug-live'),'draft');
+    assert.equal(calls.filter(c=>c==='POST /orders').length,1);
+    const [printFile]=mug.items[0].files;
+    mug.items=[{...mug.items[0],files:[
+     {...printFile,status:'ok',url:matching?printFile.url:'https://wrong.test/artwork.png'},
+     {type:'preview',status:'pending',url:null},
+     {type:'preview',status:'failed',url:null},
+    ]}];
+    costsPending=false;calls.length=0;
+    await db.prepare("UPDATE live_gift_orders SET lease_until=unixepoch()-1 WHERE order_id='mug-live'").run();
+    await tickLiveMugFulfillment(env);
+    await tickLiveMugFulfillment(env);
+    assert.equal(await liveState('mug-live'),expected);
+    assert.equal(calls.filter(c=>c==='POST /orders/123/confirm').length,expected==='submitted'?1:0);
+    assert.ok(!calls.includes('POST /orders'));
+    if(expected==='submitted'){
+     const draft={...mug,status:'draft'};
+     for(const file of [printFile,{type:'back',status:'ok',url:printFile.url}]){
+      assert.throws(()=>checkedMugDraft({...draft,items:[{...draft.items[0],files:[...draft.items[0].files,file]}]},mugPayload),/print file does not match/);
+     }
+    }
+   }
+  });
   await t.test('mug over $25 is never confirmed',async()=>{await reset();await seedMug();mugCost='25.01';await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'review');assert.equal(calls.some(c=>c.includes('/confirm')),false);});
   await t.test('mug exact $25 cap is accepted; draft validation rejects changed files/address/quantity',async()=>{await reset();await seedMug();mugCost='25.00';await tickLiveMugFulfillment(env);assert.equal(await liveState('mug-live'),'submitted');const draft={...mug,status:'draft'};assert.equal(checkedMugDraft(draft,mugPayload).totalCents,2500);for(const changed of [{...draft,items:[{...draft.items[0],quantity:2}]},{...draft,recipient:{...draft.recipient,zip:'00000'}},{...draft,items:[{...draft.items[0],files:[{type:'default',url:'https://wrong.test/image.png'}]}]}])assert.throws(()=>checkedMugDraft(changed,mugPayload));});
   await t.test('old simulated postcard without explicit intent never reaches provider',async()=>{await reset();await seedPrint(false);await tickPrintFulfillment(env);assert.equal(calls.length,0);});

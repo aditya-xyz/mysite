@@ -26,8 +26,10 @@ export function checkedMugDraft(order:any,payload:any,maxCents=2500){
  for(const [key,value] of Object.entries(payload.recipient))if(String(order.recipient?.[key]??'')!==String(value))throw new PrintProblem(409,'The supplier address does not match the saved address.');
  const items=order.items,item=items?.[0],expected=payload.items[0];
  if(!Array.isArray(items)||items.length!==1||item.variant_id!==expected.variant_id||item.quantity!==1||item.options?.some((o:any)=>o.id==='embroidery_type'))throw new PrintProblem(409,'The supplier mug does not match the selected gift.');
- const files=item.files?.filter((f:any)=>f.type==='default');
- if(files?.length!==1||files[0].url!==expected.files[0].url||item.files.length!==1)throw new PrintProblem(409,'The supplier print file does not match the saved artwork.');
+ // Printful can attach generated previews alongside the one production file.
+ const files=Array.isArray(item.files)?item.files:null;
+ const productionFiles=files?.filter((file:any)=>file?.type!=='preview');
+ if(productionFiles?.length!==1||productionFiles[0]?.type!=='default'||productionFiles[0].url!==expected.files[0].url)throw new PrintProblem(409,'The supplier print file does not match the saved artwork.');
  if(order.costs?.currency!=='USD')throw new PrintProblem(409,'The mug must be priced in US dollars.');
  const total=cents(order.costs.total),subtotal=cents(order.costs.subtotal),shipping=cents(order.costs.shipping),tax=cents(order.costs.tax),vat=cents(order.costs.vat),discount=cents(order.costs.discount);
  const other=['digitization','additional_fee','fulfillment_fee','retail_delivery_fee'].reduce((sum,k)=>sum+(order.costs[k]===undefined?0:cents(order.costs[k])),0);
@@ -78,11 +80,11 @@ export async function tickLiveMugFulfillment(env:PrintEnv,preferredId?:string){
   remote=await provider(env,job.order_id,'/orders/'+Number(job.provider_id));
   // Printful can calculate draft costs and process the image asynchronously.
   // Poll this known unconfirmed draft; never create another or pay without costs.
-  if(remote.id==Number(job.provider_id)&&remote.external_id===job.order_id&&remote.status==='draft'&&(!remote.costs||remote.costs.total==null||remote.items?.some((i:any)=>i.files?.some((f:any)=>['waiting','pending'].includes(f.status))))){
+  if(remote.id==Number(job.provider_id)&&remote.external_id===job.order_id&&remote.status==='draft'&&(!remote.costs||remote.costs.total==null||remote.items?.some((i:any)=>i.files?.some((f:any)=>f.type!=='preview'&&['waiting','pending'].includes(f.status))))){
    if(job.created_at<now()-86400)throw new PrintProblem(409,'The supplier draft is still incomplete and needs review.');
    await env.DB.prepare("UPDATE live_gift_orders SET lease_until=?1,updated_at=?2 WHERE order_id=?3 AND state='draft'").bind(now()+10,now(),job.order_id).run();return;
   }
-  if(remote.items?.some((i:any)=>i.files?.some((f:any)=>f.status==='failed')))throw new PrintProblem(409,'The supplier could not process the print file. No order was submitted.');
+  if(remote.items?.some((i:any)=>i.files?.some((f:any)=>f.type!=='preview'&&f.status==='failed')))throw new PrintProblem(409,'The supplier could not process the print file. No order was submitted.');
   const quote=checkedMugDraft(remote,payload);
   // Freeze and fence before the non-idempotent confirmation. All subsequent
   // runs exclude 'submitting' even if a response or worker is lost.
