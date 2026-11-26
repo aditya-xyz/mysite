@@ -13,7 +13,7 @@ if(typeof document!=='undefined')document.addEventListener('pointerdown',event=>
 export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
   const input=root.querySelector('.picker-input'),menu=root.querySelector('.picker-menu'),options=root.querySelector('.picker-options'),chips=root.querySelector('.picker-chips'),addButton=root.querySelector('.picker-add'),summary=root.querySelector('.picker-summary');
   let active=-1,matches=[],selectedOnly=false;
-  function close(restoreFocus=false){if(summary)input.value='';menu.hidden=true;input.setAttribute('aria-expanded','false');summary?.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');active=-1;if(openPicker?.root===root)openPicker=null;if(restoreFocus)summary?.focus();}
+  function close(restoreFocus=false){if(summary)input.value='';menu.hidden=true;input.setAttribute('aria-expanded','false');summary?.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');active=-1;if(openPicker?.root===root)openPicker=null;if(restoreFocus)summary?.focus({preventScroll:true});}
   function renderChips(){
     if(summary){
       const ids=selected(),names=ids.map(id=>people().find(p=>p.id===id)?.name||'Unknown person');
@@ -47,7 +47,7 @@ export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
   function open(){if(summary){if(openPicker?.root!==root)openPicker?.close();openPicker={root,close};summary.setAttribute('aria-expanded','true');}menu.hidden=false;input.setAttribute('aria-expanded','true');paint();}
   function choose(index){
     const person=matches[index];if(!person)return;
-    const removing=selected().includes(person.id);toggle(person.id);input.value='';active=-1;renderChips();paint();input.focus();
+    const removing=selected().includes(person.id);toggle(person.id);input.value='';active=-1;renderChips();paint();input.focus({preventScroll:true});
     root.querySelector('.picker-announcement').textContent=person.name+(removing?' removed.':' selected.');
   }
   input.onfocus=open;input.onclick=open;input.oninput=()=>{active=-1;open();};
@@ -65,10 +65,29 @@ export function bindPeoplePicker(root,{people,selected,status,toggle,add}){
   addButton.onclick=()=>add(input.value.trim());
   root.onkeydown=event=>{if(event.key==='Escape'&&!menu.hidden){event.preventDefault();event.stopPropagation();if(!summary)input.focus();close(!!summary);}};
   if(summary){
-    summary.onclick=()=>{if(menu.hidden){open();input.focus();}else close();};
+    const inspector=root.closest('.photo-inspector');
+    summary.onclick=()=>{
+      if(!menu.hidden){close();return;}
+      open();input.focus({preventScroll:true});
+      if(inspector&&getComputedStyle(inspector).overflowY==='auto'){
+        const panel=menu.getBoundingClientRect(),viewport=inspector.getBoundingClientRect();
+        inspector.scrollTop+=Math.max(0,Math.min(panel.bottom-viewport.bottom+12,panel.top-viewport.top));
+      }
+    };
     root.querySelector('.picker-done').onclick=()=>close(true);
-    root.querySelectorAll('[data-picker-filter]').forEach(button=>button.onclick=()=>{selectedOnly=button.dataset.pickerFilter==='selected';active=-1;root.querySelectorAll('[data-picker-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));paint();});
+    const filters=root.querySelectorAll('[data-picker-filter]');
+    filters.forEach(button=>button.onclick=()=>{
+      const next=button.dataset.pickerFilter==='selected';
+      if(next!==selectedOnly)input.value='';
+      selectedOnly=next;active=-1;
+      filters.forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+      paint();options.scrollTop=0;button.focus({preventScroll:true});
+    });
   }
-  root.onfocusout=()=>setTimeout(()=>{if(!root.contains(document.activeElement))close();},0);
+  root.onfocusout=event=>{
+    if(summary){
+      if(event.relatedTarget&&!root.contains(event.relatedTarget))close();
+    }else setTimeout(()=>{if(!root.contains(document.activeElement))close();},0);
+  };
   renderChips();paint();
 }
