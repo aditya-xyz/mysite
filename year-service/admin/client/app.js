@@ -28,6 +28,7 @@ const app=document.querySelector('#app'),modal=document.querySelector('#modal'),
 let draftSelection=new Set(),librarySelection=new Set(),selectionYear=null;
 let invitationFilters={query:'',mugs:'all',postcards:'all',sent:'all'};
 const savingInvitationSent=new Set();
+let copyingInvitationLink=false;
 let selectedPhotoId='',photoFilter='all',photoPersonFilter='',photoEditorOpen=false;
 let reordering=null,reorderCleanup=null;
 let state,view=routeFromHash().view,editions=[],contacts=[],draftCache=new Map(),navigationGeneration=0,pendingRequests=0,dirty=false,busy=false,previewRecipient='',previewData=null,personalModes=new Set(),inviteData,editGeneration=0;
@@ -272,7 +273,10 @@ function sharingRows(){
   const invitations=filterInvitations(state.people,contacts,invitationFilters);
   return invitations.map(invite=>{
     const status=invitationStatus(invite),members=(invite.memberIds||[invite.person_id]).map(id=>contacts.find(p=>p.id===id)?.name||'Unknown person');
-    return `<div class="invitation-entry"><details class="person invitation-row" name="invitations-${state.year}" data-print-invitation="${esc(invite.id)}"><summary class="invitation-summary"><span class="person-avatar">${icon('people')}</span><span class="invitation-heading"><strong>${esc(invite.addressedTo)}</strong><span>${members.length} ${members.length===1?'person':'people'} · Code to ${esc(invite.name)}</span><span class="invitation-gifts"><span class="badge ${invite.allow_mug?'active-badge':''}">Mug: ${invite.allow_mug?'enabled':'off'}</span><span class="badge ${postcardPermission(invite)==='mail'?'active-badge':''}">Postcard: ${postcardPermission(invite)==='mail'?'mail':postcardPermission(invite)==='paperless'?'paperless':'off'}</span></span></span><span class="badge ${status==='Active'?'active-badge':''}">${status}</span><span class="invitation-expand"><span class="when-closed">More details</span><span class="when-open">Less details</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></span></summary><div class="invitation-options"><div class="invitation-meta"><p>Includes ${esc(members.join(' & '))}</p><p>Code to ${esc(invite.name)} · •••• ${esc(invite.phone.slice(-4))}</p><p>Language: ${esc(languages[invite.language||'en'])}</p>${invite.paperlessId?'<p>Postcard preference: Paperless</p>':''}<p>${invite.share_socials?'Instagram links shown':'Instagram links hidden'}</p></div><div class="actions">${invite.paperlessId?`<button class="quiet" data-reset-paperless="${esc(invite.id)}">Reset paperless preference</button>`:''}<button class="quiet" data-reset-downloads="${esc(invite.id)}">Reset download limits</button><button class="secondary" data-view-link="${esc(invite.id)}">${invite.has_link?'View link & QR':'Restore link & QR'}</button><button class="secondary" data-edit-invitation="${esc(invite.id)}">Edit invitation</button><button class="quiet" data-invite="${esc(invite.id)}">Create fresh link</button>${!invite.revoked_at?`<button class="quiet danger" data-revoke="${esc(invite.id)}">Revoke access</button>`:`<button class="quiet danger" data-delete-invitation="${esc(invite.id)}">Delete invitation</button>`}</div></div></details><label class="invitation-sent"><input type="checkbox" data-invitation-sent="${esc(invite.id)}" aria-label="Invitation sent to ${esc(invite.addressedTo)}" ${invite.link_sent?'checked':''} ${savingInvitationSent.has(invite.id)?'disabled':''}> Sent</label></div>`;
+    const copyButton=status==='Active'?invite.has_link
+      ?`<button type="button" class="secondary invitation-copy" data-copy-invitation="${esc(invite.id)}" aria-label="Copy invitation link for ${esc(invite.addressedTo)}">Copy link</button>`
+      :`<button type="button" class="secondary invitation-copy" data-view-link="${esc(invite.id)}" aria-label="Restore invitation link for ${esc(invite.addressedTo)}">Restore link</button>`:'';
+    return `<div class="invitation-entry${copyButton?' has-link-action':''}"><details class="person invitation-row" name="invitations-${state.year}" data-print-invitation="${esc(invite.id)}"><summary class="invitation-summary"><span class="person-avatar">${icon('people')}</span><span class="invitation-heading"><strong>${esc(invite.addressedTo)}</strong><span>${members.length} ${members.length===1?'person':'people'} · Code to ${esc(invite.name)}</span><span class="invitation-gifts"><span class="badge ${invite.allow_mug?'active-badge':''}">Mug: ${invite.allow_mug?'enabled':'off'}</span><span class="badge ${postcardPermission(invite)==='mail'?'active-badge':''}">Postcard: ${postcardPermission(invite)==='mail'?'mail':postcardPermission(invite)==='paperless'?'paperless':'off'}</span></span></span><span class="badge ${status==='Active'?'active-badge':''}">${status}</span><span class="invitation-expand"><span class="when-closed">More details</span><span class="when-open">Less details</span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></span></summary><div class="invitation-options"><div class="invitation-meta"><p>Includes ${esc(members.join(' & '))}</p><p>Code to ${esc(invite.name)} · •••• ${esc(invite.phone.slice(-4))}</p><p>Language: ${esc(languages[invite.language||'en'])}</p>${invite.paperlessId?'<p>Postcard preference: Paperless</p>':''}<p>${invite.share_socials?'Instagram links shown':'Instagram links hidden'}</p></div><div class="actions">${invite.paperlessId?`<button class="quiet" data-reset-paperless="${esc(invite.id)}">Reset paperless preference</button>`:''}<button class="quiet" data-reset-downloads="${esc(invite.id)}">Reset download limits</button><button class="secondary" data-view-link="${esc(invite.id)}">${invite.has_link?'View link & QR':'Restore link & QR'}</button><button class="secondary" data-edit-invitation="${esc(invite.id)}">Edit invitation</button><button class="quiet" data-invite="${esc(invite.id)}">Create fresh link</button>${!invite.revoked_at?`<button class="quiet danger" data-revoke="${esc(invite.id)}">Revoke access</button>`:`<button class="quiet danger" data-delete-invitation="${esc(invite.id)}">Delete invitation</button>`}</div></div></details><div class="invitation-link-actions">${copyButton}<label class="invitation-sent"><input type="checkbox" data-invitation-sent="${esc(invite.id)}" aria-label="Invitation sent to ${esc(invite.addressedTo)}" ${invite.link_sent?'checked':''} ${savingInvitationSent.has(invite.id)?'disabled':''}> Sent</label></div></div>`;
   }).join('')||'<div class="empty">No invitations found.<span>Try a different search or filter.</span></div>';
 }
 function sharing(){return `${head()}<div class="notice">One invitation, one QR code, one verification phone. Everyone included can view photos assigned to any person on that invitation. Creating or editing an invitation never sends a text.</div><section class="panel people-panel"><div class="row-head"><div><h2>Invitations <span class="badge">${state.people.length}</span></h2><a class="hint" href="#people" data-view="directory">Manage People directory</a> · <a class="hint" href="/sms-tests/">Test SMS delivery</a></div><button class="button" id="new-invitation">+ Create invitation</button></div>${giftBudgetMarkup(state.people)}<div class="invitation-filters"><label class="field invitation-search"><span>Search invitations</span><input id="sharing-search" type="search" value="${esc(invitationFilters.query)}" placeholder="Search invitations or people…" autocomplete="off"></label><label class="field"><span>Mugs</span><select id="sharing-mugs">${[['all','All mug settings'],['on','Mug enabled'],['off','Mug off']].map(([value,label])=>`<option value="${value}" ${invitationFilters.mugs===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="field"><span>Postcards</span><select id="sharing-postcards">${[['all','All postcard settings'],['mail','Mail enabled'],['paperless','Paperless chosen'],['off','Postcard off']].map(([value,label])=>`<option value="${value}" ${invitationFilters.postcards===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="field"><span>Link status</span><select id="sharing-sent">${[['all','All links'],['pending','Not yet sent'],['sent','Sent']].map(([value,label])=>`<option value="${value}" ${invitationFilters.sent===value?'selected':''}>${label}</option>`).join('')}</select></label></div><p class="hint" id="sharing-result-count" role="status">${filterInvitations(state.people,contacts,invitationFilters).length} of ${state.people.length} invitations</p><div class="people-list" id="sharing-list">${sharingRows()}</div></section><p class="hint">Twilio trial verification contacts must still be verified in Twilio before receiving login codes. Invitation settings apply immediately; photo and postcard-note edits require publishing.</p>${continueFlow('preview',false)}`;}
@@ -542,6 +546,7 @@ function bindSharingActions(){
   app.querySelectorAll('[data-delete-invitation]').forEach(button=>button.onclick=()=>confirmDeleteInvitation(button.dataset.deleteInvitation));
   app.querySelectorAll('.invitation-row').forEach(row=>row.ontoggle=()=>{if(row.open)app.querySelectorAll('.invitation-row[open]').forEach(other=>{if(other!==row)other.open=false;});});
   app.querySelectorAll('[data-view-link]').forEach(button=>button.onclick=()=>viewInvitationLink(button.dataset.viewLink));
+  app.querySelectorAll('[data-copy-invitation]').forEach(button=>button.onclick=()=>copyInvitationLink(button));
   app.querySelectorAll('[data-edit-invitation]').forEach(button=>button.onclick=()=>editInvitation(button.dataset.editInvitation));
   app.querySelectorAll('[data-invite]').forEach(button=>button.onclick=()=>confirmInvitation(button.dataset.invite));
   app.querySelectorAll('[data-reset-paperless]').forEach(button=>button.onclick=()=>resetPaperlessPreference(button.dataset.resetPaperless));
@@ -632,23 +637,51 @@ async function viewInvitationLink(id){
   showModal(`<p class="kicker">Invitation link</p><h2>Restore your original link</h2><p>Older invitation tokens were stored as hashes, so we can’t recreate them. Paste the original link once to store an encrypted copy and reopen its QR whenever you need. This keeps the same invitation and sessions.</p><form id="restore-link-form"><label class="field"><span>Original invitation link</span><input id="original-invitation-url" type="url" required autocomplete="off"></label><button class="button">Restore link & QR</button><p class="error" id="modal-error" role="alert"></p></form>`);
   byId('restore-link-form').onsubmit=async event=>{event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;try{const result=await api(`invitations/${id}/link`,{url:byId('original-invitation-url').value});await refreshPeople();await showInvitation(result.name,result.url);}catch(error){byId('modal-error').textContent=error.message;button.disabled=false;}};
 }
-async function showInvitation(name,url){
+async function copyInvitationLink(button){
+  if(copyingInvitationLink)return;
+  copyingInvitationLink=true;
+  button.setAttribute('aria-busy','true');
+  try{
+    const link=api(`invitations/${button.dataset.copyInvitation}/link`,{});
+    const copy=async()=>{
+      if(navigator.clipboard?.write&&typeof ClipboardItem==='function'){
+        const text=link.then(({url})=>new Blob([url],{type:'text/plain'}));
+        // Start writing during the click, while the server retrieves the link.
+        const write=async()=>navigator.clipboard.write([new ClipboardItem({'text/plain':text})]);
+        await Promise.all([text,write()]);
+      }else{
+        const {url}=await link;
+        await navigator.clipboard.writeText(url);
+      }
+    };
+    const [result,copied]=await Promise.all([link,copy().then(()=>true,()=>false)]);
+    if(copied)toast('Link copied.');
+    else if(button.isConnected&&!modal.open)await showInvitation(result.name,result.url,{selectLink:true});
+  }catch(error){toast(error.message);}
+  finally{
+    copyingInvitationLink=false;
+    button.removeAttribute('aria-busy');
+  }
+}
+async function showInvitation(name,url,{selectLink=false}={}){
   const qr=await QRCode.toDataURL(url,{width:700,margin:4,color:{dark:'#202529',light:'#f4eddf'}});
   inviteData={name,url,qr};
   showModal(`<p class="kicker">Just for ${esc(name)}</p><h2>A little invitation.</h2><img class="qr" src="${qr}" alt="Personalized invitation QR code"><label class="field"><span>Invitation link</span><input class="invitation-url" value="${esc(url)}" readonly></label><p class="hint">Reopen this link and QR from Sharing at any time. Your invitation token is stored encrypted.</p><div class="actions"><button class="button" id="copy-invite">Copy link</button><a class="secondary" href="${qr}" download="invitation.png">Save QR</a><button class="secondary" id="save-invite">Save link</button><span class="hint" id="copy-invite-status" role="status"></span></div>`);
   const status=byId('copy-invite-status'),link=modalContent.querySelector('.invitation-url');
+  function selectLinkForCopy(){
+    if(!link.isConnected||!modal.open)return;
+    link.focus();
+    link.select();
+    status.textContent='Copy the selected link.';
+  }
   byId('copy-invite').onclick=async()=>{
     status.textContent='';
     try{
       await navigator.clipboard.writeText(url);
       status.textContent='Link copied.';
-    }catch{
-      if(!link.isConnected||!modal.open)return;
-      link.focus();
-      link.select();
-      status.textContent='Copy the selected link.';
-    }
+    }catch{selectLinkForCopy();}
   };
+  if(selectLink)selectLinkForCopy();
   byId('save-invite').onclick=()=>download(new Blob([url+'\n'],{type:'text/plain'}),'invitation.txt');
 }
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}

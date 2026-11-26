@@ -125,10 +125,17 @@ html:has(#modal[open]){overflow:hidden}
 .invitation-entry{position:relative;border-bottom:1px solid var(--line)}
 .invitation-entry:last-child,.invitation-entry .invitation-row{border-bottom:0}
 .invitation-entry .invitation-summary{padding-right:72px}
-.invitation-sent{position:absolute;inset:16px 0 auto auto;display:flex;align-items:center;gap:7px;min-height:44px;padding:0 4px;cursor:pointer;font-size:12px;font-weight:650;white-space:nowrap}
+.invitation-entry.has-link-action .invitation-summary{padding-right:166px}
+.invitation-link-actions{position:absolute;inset:16px 0 auto auto;display:flex;align-items:center;gap:10px}
+.invitation-link-actions .invitation-copy{min-height:44px;padding:8px 10px;white-space:nowrap}
+.invitation-copy[aria-busy="true"]{cursor:wait}
+.invitation-sent{display:flex;align-items:center;gap:7px;min-height:44px;padding:0 4px;cursor:pointer;font-size:12px;font-weight:650;white-space:nowrap}
 .invitation-sent input{width:17px;height:17px;margin:0;accent-color:var(--accent);cursor:pointer}
 .invitation-sent input:disabled{cursor:wait}
-@media(max-width:540px){.invitation-sent{inset-block-start:13px}.invitation-entry .invitation-summary{padding-right:65px}}
+@media(max-width:700px){
+ .invitation-entry .invitation-summary,.invitation-entry.has-link-action .invitation-summary{padding-right:0}
+ .invitation-link-actions{position:static;justify-content:flex-end;padding-bottom:12px}
+}
 
 /* One compact invitation summary, with controls revealed on demand. */
 .invitation-row{display:block;padding:0}.invitation-row:last-child{padding-bottom:0}.invitation-summary{display:flex;align-items:center;gap:12px;padding:20px 0;cursor:pointer;list-style:none;min-height:76px}.invitation-summary::-webkit-details-marker{display:none}.invitation-summary::marker{content:''}.invitation-summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:5px}.invitation-heading{flex:1;min-width:0}.invitation-heading>span{display:block;font-size:11px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}.invitation-expand{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;white-space:nowrap}.invitation-expand .icon{width:18px;height:18px}.invitation-row:not([open]) .when-open,.invitation-row[open] .when-closed{display:none}.invitation-row[open] .invitation-expand .icon{transform:rotate(180deg)}.invitation-options{padding:0 0 22px 48px;min-width:0}.invitation-meta{margin-bottom:16px}.invitation-row .actions{justify-content:flex-start;padding-left:0}.invitation-row .print-permission{min-width:0;width:auto;margin-top:16px;padding-top:16px}.invitation-row .socials-toggle>span{min-width:0;overflow-wrap:anywhere}.invitation-row .print-permission .hint{margin-bottom:0}
